@@ -6,44 +6,51 @@ import os
 
 #venv/Scripts/activate
 
-def main():
-    # use a path relative to this script so running from another cwd still works
-    base_dir = os.path.dirname(__file__)
-    input_dir = os.path.join(base_dir, 'app', 'input')
+path = os.path.abspath(os.path.dirname(__file__))
 
-    if not os.path.isdir(input_dir):
-        print(f"Input directory not found: {input_dir}")
-        return
+for filename in os.listdir(path + '/app/input'):
+    excel = pd.read_excel(path + '/app/input/' + filename)
+    table = excel[['Pitcher', 'PitcherId', 'TaggedPitchType', 'EffectiveVelo', 'InducedVertBreak', 'HorzBreak', 'SpinRate', 'VertApprAngle', 'HorzApprAngle', 'RelHeight', 'RelSide']] 
 
-    files = os.listdir(input_dir)
-    if not files:
-        print(f"No files found in input directory: {input_dir}")
-        return
+    for pitcher in table['Pitcher'].unique():
+        pitcher_data = table[table['Pitcher'] == pitcher]
 
-    for filename in files:
-        full_path = os.path.join(input_dir, filename)
-        if not os.path.isfile(full_path):
-            # skip directories
-            continue
+        #Dictionary to hold data for each pitch type per game
+        game_report = {'PitchType': [],
+                       'Count': [],
+                       'PitchPercent': [],
+                       'Avg_Velocity': [],
+                       'Avg_Ivb': [],
+                       'Avg_Hb': [],
+                       'Avg_SpinRate': [],
+                       'Avg_Vaa': [],
+                       'Avg_Haa': [],
+                       'Avg_RelHeight': [],
+                       'Avg_RelSide': []}
+                        #Ext.,
+                        #Axis
 
-        name, ext = os.path.splitext(filename)
-        ext = ext.lower()
-
-        try:
-            if ext in ('.xlsx', '.xls', '.xlsm', '.xlsb'):
-                df = pd.read_excel(full_path)
-            elif ext == '.csv':
-                df = pd.read_csv(full_path)
-            else:
-                print(f"Skipping unsupported file type: {filename}")
-                continue
-
-            print(f"--- {filename} ---")
-            print(df.head())
-
-        except Exception as exc:
-            print(f"Failed to read {filename}: {exc}")
-
-
-if __name__ == '__main__':
-    main()
+        #Parse through each pitch type for the pitcher
+        for pitch_type in pitcher_data['TaggedPitchType'].unique():
+            pitch_type_data = pitcher_data[pitcher_data['TaggedPitchType'] == pitch_type]
+            #If type is defined
+            if (pitch_type != 'Undefined'):
+                #Add the stats of the pitch type to the report 
+                game_report['PitchType'].append(pitch_type)
+                game_report['Count'].append(len(pitch_type_data))
+                game_report['PitchPercent'].append(len(pitch_type_data) / len(pitcher_data) * 100)
+                game_report['Avg_Velocity'].append(pitch_type_data['EffectiveVelo'].mean())
+                game_report['Avg_Ivb'].append(pitch_type_data['InducedVertBreak'].mean())
+                game_report['Avg_Hb'].append(pitch_type_data['HorzBreak'].mean())
+                game_report['Avg_SpinRate'].append(pitch_type_data['SpinRate'].mean())
+                game_report['Avg_Vaa'].append(pitch_type_data['VertApprAngle'].mean())
+                game_report['Avg_Haa'].append(pitch_type_data['HorzApprAngle'].mean())
+                game_report['Avg_RelHeight'].append(pitch_type_data['RelHeight'].mean())
+                game_report['Avg_RelSide'].append(pitch_type_data['RelSide'].mean())
+        
+        #Build and print report dataframe
+        report_df = pd.DataFrame(game_report)
+        report_df.sort_values(by='Count', ascending=False, inplace=True)
+        print(pitcher)
+        print(report_df)
+        print()
