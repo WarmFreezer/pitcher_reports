@@ -12,8 +12,9 @@ for filename in os.listdir(path + '/app/input'):
     excel = pd.read_excel(path + '/app/input/' + filename)
     table = excel[['Pitcher', 'PitcherId', 'TaggedPitchType', 'EffectiveVelo', 'InducedVertBreak', 'HorzBreak', 'SpinRate', 'VertApprAngle', 'HorzApprAngle', 'RelHeight', 'RelSide']] 
 
-    for pitcher in table['Pitcher'].unique():
-        pitcher_data = table[table['Pitcher'] == pitcher]
+    for pitcherid in table['PitcherId'].unique():
+        pitcher_data = table[table['PitcherId'] == pitcherid]
+        pitcher = pitcher_data['Pitcher'].iloc[0]
 
         #Dictionary to hold data for each pitch type per game
         game_report = {'PitchType': [],
