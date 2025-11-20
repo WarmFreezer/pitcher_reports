@@ -58,7 +58,7 @@ for filename in os.listdir(path + '/app/input'):
                 chase_count = 0
                 for _, row in pitch_type_data.iterrows():
                     outside = (row['PlateLocHeight'] < 1.5) or (row['PlateLocHeight'] > 3.5)
-                    outside_height = abs(row['PlateLocSide']) > 0.708
+                    outside_height = abs(row['PlateLocSide']) > 0.83
                     batter_swung = row['PitchCall'] in ['StrikeSwinging', 'FoulBallNotFieldable', 'InPlay', 'HitByPitch']
                     
                     if (outside or outside_height) and batter_swung:
