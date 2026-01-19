@@ -1,0 +1,24 @@
+/* Global variables defined in :root */
+:root {
+  --msu-blue: #0033A0; 
+  --msu-gold: #FFCF00; 
+  --msu-dark: #343434; 
+  --msu-light: #ECECEC;
+  --msu-white: #FFFFFF;
+  --msu-accent-blue: #005EB8;
+  --msu-dark-blue: #001D39;
+}
+
+/* Using the variables 
+h1 {
+  color: var(--msu-gold); // The H1 text will be MSU Gold 
+  background-color: var(--msu-blue); // The H1 background will be MSU Dark
+  padding: 15px;
+}
+
+.note {
+  background-color: var(--msu-light); // Uses --msu-light, with 'orange' as a fallback
+  border: 1px solid var(--msu-dark-blue);
+  padding: 10px;
+}
+*/
