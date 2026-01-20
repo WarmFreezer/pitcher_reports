@@ -282,6 +282,7 @@ def pitch_heat_map_by_batter_side(path, pitcher_id, threshold=0.1):
     plt.tight_layout()
     plt.show()
 
+'''
 build_report("app/input/MSU CSV 1.xlsx")
 # Parse through each pitcher in the input file and generate heat maps
 excel = pd.read_excel('app/input/MSU CSV 1.xlsx')
@@ -290,3 +291,4 @@ for pitcherid in table['PitcherId'].unique():
     pitcher_data = table[table['PitcherId'] == pitcherid]
     #pitch_heat_map("app/input/MSU CSV 1.xlsx", pitcherid, threshold=0.75)
     pitch_heat_map_by_batter_side("app/input/MSU CSV 1.xlsx", pitcherid, threshold=0.75)
+'''

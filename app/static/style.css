@@ -1,0 +1,156 @@
+/* Global variables defined in :root */
+:root {
+  --msu-blue: #0033A0; 
+  --msu-gold: #FFCF00; 
+  --msu-dark: #343434; 
+  --msu-light: #ECECEC;
+  --msu-white: #FFFFFF;
+  --msu-accent-blue: #005EB8;
+  --msu-dark-blue: #001D39;
+}
+
+/* Reset */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background-color: var(--msu-white);
+    font-family: Arial, sans-serif;
+}
+
+/* Navigation Styles */
+.main-nav {
+    background-color: var(--msu-light);
+    border-bottom: 2px solid var(--msu-gold);
+}
+
+.nav-list {
+    list-style-type: none;
+    display: flex;
+    background-color: var(--msu-dark-blue);
+}
+
+.nav-list li {
+    position: relative;
+}
+
+.nav-link {
+    display: block;
+    color: var(--msu-white);
+    text-align: center;
+    padding: 14px 20px;
+    text-decoration: none;
+    font-family: 'Graduate', Arial, sans-serif;
+    transition: background-color 0.3s ease;
+}
+
+.nav-link:hover {
+    background-color: var(--msu-dark-blue);
+}
+
+/* Dropdown Styles */
+.dropdown-content {
+    display: none;
+    position: absolute;
+    background-color: #ffffff;
+    min-width: 160px;
+    box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    border: 1px solid #ddd;
+    top: 100%;
+    left: 0;
+}
+
+.dropdown:hover .dropdown-content {
+    display: block !important;
+}
+
+.dropdown-content a {
+    color: black;
+    padding: 12px 16px;
+    text-decoration: none;
+    display: block;
+    text-align: left;
+    transition: background-color 0.2s ease;
+}
+
+.dropdown-content a:hover {
+    background-color: var(--msu-light);
+}
+
+.dropdown-divider {
+    border-top: 1px solid #ddd;
+}
+
+/* Header Styles */
+.site-header {
+    margin: 0;
+    padding: 0;
+}
+
+.header-container {
+    background-color: var(--msu-blue);
+    width: 100%;
+    height: 150px;
+    display: flex;
+    align-items: center;
+}
+
+.header-left,
+.header-right {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.header-center {
+    flex: 2;
+    color: var(--msu-gold);
+    font-family: 'Graduate', serif;
+    text-align: center;
+}
+
+.header-center h1 {
+    margin: 0;
+}
+
+/* Main Content */
+.main-content {
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Footer */
+.site-footer {
+    background-color: var(--msu-blue);
+    color: var(--msu-white);
+    text-align: center;
+    padding: 20px;
+    margin-top: 40px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .nav-list {
+        flex-direction: column;
+    }
+    
+    .header-container {
+        height: auto;
+        flex-direction: column;
+        padding: 20px 0;
+    }
+    
+    .header-left,
+    .header-center,
+    .header-right {
+        flex: none;
+        width: 100%;
+        margin: 10px 0;
+    }
+}

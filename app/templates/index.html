@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pitcher Report</title>
+    <link rel="stylesheet" href="../static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Graduate&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Navigation Menu -->
+    <nav class="main-nav">
+        <ul class="nav-list">
+            <li><a href="index.html" class="nav-link">Home</a></li>
+            
+            <li class="dropdown">
+                <a href="javascript:void(0)" class="nav-link">File ▼</a>
+                <div class="dropdown-content">
+                    <a href="#" onclick="uploadFile(); return false;">📤 Upload</a>
+                    <a href="#download">📥 Download</a>
+                    <a href="#print">🖨️ Print</a>
+                    <a href="#save">💾 Save</a>
+                </div>
+            </li>
+            
+            <li class="dropdown">
+                <a href="javascript:void(0)" class="nav-link">View ▼</a>
+                <div class="dropdown-content">
+                    <a href="#report">📋 Full Report</a>
+                </div>
+            </li>
+            
+            <li class="dropdown">
+                <a href="javascript:void(0)" class="nav-link">Tools ▼</a>
+                <div class="dropdown-content">
+                    <a href="#settings">⚙️ Settings</a>
+                </div>
+            </li>
+            
+            <li><a href="#help" class="nav-link">Help</a></li>
+        </ul>
+    </nav>
+
+    <!-- Header -->
+    <header class="site-header">
+        <div class="header-container">
+            <div class="header-left">
+                <img src="../resources/favicon.ico" height="128" alt="MSU Logo">
+            </div>
+            
+            <div class="header-center">
+                <h1>Pitcher Report</h1>
+            </div>
+            
+            <div class="header-right">
+                <img src="../resources/strutting_eagle.png" height="128" alt="Strutting Eagle">
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <h2>Welcome to the Pitcher Report System</h2>
+        <p>Select an option from the menu above to get started.</p>
+        
+        <!-- ADD THIS: Hidden file input for upload -->
+        <input type="file" id="fileUpload" style="display: none;" accept=".csv,.xlsx,.json" onchange="handleFileSelect(event)">
+        
+        <!-- ADD THIS: Content area for displaying results -->
+        <div id="contentArea">
+            <!-- Dynamic content will be loaded here -->
+        </div>
+    </main>
+
+    <!-- Footer (optional) -->
+    <footer class="site-footer">
+        <p>&copy; 2024 MSU Baseball Analytics</p>
+    </footer>
+
+    <!-- Link to external JavaScript file -->
+    <script src="../static/scripts.js"></script>
+</body>
+</html>
+
