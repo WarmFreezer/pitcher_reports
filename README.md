@@ -23,7 +23,7 @@ A Flask-based web application that generates comprehensive pitcher performance r
 
 ### 1. Clone or Download the Repository
 ```bash
-git clone https://github.com/yourusername/pitcher-reports.git
+git clone https://github.com/WarmFreezer/pitcher_reports.git
 cd pitcher-reports
 ```
 
