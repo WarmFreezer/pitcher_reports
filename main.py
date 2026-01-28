@@ -1,3 +1,15 @@
+'''
+Copyright (c) 2026 Thomas Eubank
+Licensed for non-commercial use only. See LICENSE file.
+
+Author:
+Thomas Eubank
+606-303-4052
+thomas.eubank516@gmail.com
+
+Purpose: Generates pitcher performance reports from game datasets exported from TrackMan.
+'''
+
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import pandas as pd
