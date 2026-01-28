@@ -92,6 +92,7 @@ body {
 }
 
 .header-container {
+    /*border-bottom: 2px solid var(--msu-gold);*/
     background-color: var(--msu-blue);
     width: 100%;
     height: 150px;
@@ -132,6 +133,84 @@ body {
     text-align: center;
     padding: 20px;
     margin-top: 40px;
+}
+
+/* Pitcher Table */
+.pitcher-data-table {
+    margin: 20px 0;
+    overflow-x: auto;
+    width: 100%;
+}
+
+.pitcher-data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    table-layout: auto;  
+}
+
+.pitcher-data-table th,
+.pitcher-data-table td {
+    border: 1px solid #ddd;
+    padding: 8px 12px;  /* Added horizontal padding */
+    text-align: center;
+    white-space: nowrap;  /* Prevent wrapping */
+}
+
+.pitcher-data-table th {
+    background-color: var(--msu-accent-blue);
+    color: white;
+    font-weight: bold;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.pitcher-data-table tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+.pitcher-data-table tr:hover {
+    background-color: #f0f0f0;
+}
+
+.pitcher-data-table td {
+    text-align: center;
+    vertical-align: middle;
+}
+
+/* Download Button */
+.download-btn {
+    display: inline-block;
+    background-color: #28a745;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 16px;
+    margin: 10px 0;
+    transition: background-color 0.3s;
+    font-weight: bold;
+}
+
+.download-btn:hover {
+    background-color: #218838;
+    text-decoration: none;
+}
+
+.download-btn-small {
+    display: inline-block;
+    background-color: #007bff;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 14px;
+    transition: background-color 0.3s;
+}
+
+.download-btn-small:hover {
+    background-color: #0056b3;
+    text-decoration: none;
 }
 
 /* Responsive Design */

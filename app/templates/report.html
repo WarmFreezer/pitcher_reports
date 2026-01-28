@@ -3,31 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MSU Baseball Analytics - Home</title>
+    <title>Pitcher Report</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='../resources/favicon.ico') }}">
 </head>
-<body onload="loadHeader('MSU Baseball Analytics', '/static/resources/HomePlate.png'); loadNavbar(); loadFooter();">
+<body onload="loadHeader('Pitcher Reports', '/static/resources/HomePlate.png'); loadNavbar(); loadFooter();">
     <!-- Navbar Placeholder -->
     <div id="navbar-placeholder"></div>
 
     <!-- Header Placeholder -->
     <div id="header-placeholder"></div>
-    
+        
     <!-- Main Content -->
     <main class="main-content">
-        <h2>Welcome to MSU Baseball Analytics</h2>
-        <p>Upload your data file to generate pitcher reports.</p>
-        
-        <!-- Hidden file input -->
-        <input type="file" id="fileUpload" accept=".csv,.xlsx,.xls" onchange="handleFileSelect(event)" style="display: none;">
-        
-        <!-- Upload button -->
-        <button onclick="uploadFile()" class="upload-btn">Upload File</button>
-        
-        <!-- Upload data display area -->
-        <div id="uploadDataDisplay"></div>
-        
         <!-- Report Output Container -->
         <div id="report-output"></div>
     </main>
