@@ -1,6 +1,6 @@
 # MSU Baseball Pitcher Report Generator
 
-A Flask-based web application that generates comprehensive pitcher performance reports from baseball data files. The application creates visual heat maps and statistical tables for each pitcher, with options to view online or download as PDF.
+A Flask-based web application that generates comprehensive pitcher performance reports from TrackMan baseball data files. The application creates visual heat maps and statistical tables for each pitcher, with options to view online or download as PDF.
 
 ## Features
 
@@ -12,7 +12,7 @@ A Flask-based web application that generates comprehensive pitcher performance r
 
 ## Screenshots
 
-[Add screenshots of your application here]
+![Image of pitcher reports after a valid input file has been submitted](docs/PitcherReportsScreenshot.png)
 
 ## Prerequisites
 

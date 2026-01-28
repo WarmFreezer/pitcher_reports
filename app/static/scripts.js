@@ -190,7 +190,7 @@ function loadHeader(title = "Pitcher Report", pfp = "/static/resources/HomePlate
 function loadFooter() {
     const footerHTML = `
         <footer class="site-footer">
-            <p>&copy; 2024 MSU Baseball Analytics</p>
+            <p>&copy; 2026 Thomas Eubank</p>
         </footer>
     `;
     document.getElementById('footer-placeholder').innerHTML = footerHTML;
