@@ -146,9 +146,9 @@ Ensure the application has write permissions for:
 
 ### Images Not Loading
 
-Verify that image files exist in `app/resources/`:
+Verify that image files exist in `app/static/resources/`:
 - `favicon.ico`
-- `strutting_eagle.png`
+- `strutting_eagle.png` (Property of Morehead State University)
 
 ## Development
 
