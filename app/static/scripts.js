@@ -102,7 +102,7 @@ async function handleFileSelect(event) {
     // Show loading indicator
     const reportOutput = document.querySelector('#report-output');
     if (reportOutput) {
-        reportOutput.innerHTML = '<p>Processing file and generating reports...</p>';
+        reportOutput.innerHTML = '<p style="margin: 32px;">Processing file and generating reports...</p>';
     }
 
     const formData = new FormData();
@@ -142,14 +142,14 @@ async function handleFileSelect(event) {
             buildAllReports(result.reports);
         } else {
             if (reportOutput) {
-                reportOutput.innerHTML = '<p>No reports generated.</p>';
+                reportOutput.innerHTML = '<p style="margin: 32px;">No reports generated.</p>';
             }
         }
     } catch (error) {
         console.error('Error uploading file:', error);
         alert('Error uploading file: ' + error.message);
         if (reportOutput) {
-            reportOutput.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+            reportOutput.innerHTML = `<p style="color: red; margin: 32px;">Error: ${error.message}</p>`;
         }
     }
 

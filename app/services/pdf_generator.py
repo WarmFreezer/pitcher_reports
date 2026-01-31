@@ -101,7 +101,7 @@ def create_pitcher_pdf_from_html(pitcher_name, pitcher_id, table_html, image_pat
 
         <main>
             <div class="heatmap">
-                <img src="app/static/output/pitcher_{pitcher_id}_heat_map.png" alt="Heat Map" width="800">
+                <img src="{image_path}" alt="Heat Map" width="800">
             </div>
             {table_html}
         </main>

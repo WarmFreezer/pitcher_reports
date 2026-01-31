@@ -135,11 +135,11 @@ def build_table(path, pitcherid):
 
     return [str(pitcher), report_df]
 
-def pitch_heat_map_by_batter_side(path, pitcher_id, threshold=0.1):
-    if path.endswith('.csv'):
-        excel = pd.read_csv(path)
-    elif path.endswith('.xlsx') or path.endswith('.xls'):
-        excel = pd.read_excel(path)
+def pitch_heat_map_by_batter_side(input_path, output_path, pitcher_id, threshold=0.1):
+    if input_path.endswith('.csv'):
+        excel = pd.read_csv(input_path)
+    elif input_path.endswith('.xlsx') or input_path.endswith('.xls'):
+        excel = pd.read_excel(input_path)
     else: 
         raise ValueError("Unsupported file format. Please provide a .csv, .xlsx, or .xls file.")
     
@@ -240,5 +240,5 @@ def pitch_heat_map_by_batter_side(path, pitcher_id, threshold=0.1):
     plt.subplots_adjust(left=0.06, right=0.96, top=0.88, bottom=0.1, wspace=0.2)
 
     # Save the figure in the output folder for report building
-    plt.savefig(f'app/static/output/pitcher_{pitcher_id}_heat_map.png', pad_inches=0.3, dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(output_path, f'pitcher_{pitcher_id}_heat_map.png'), pad_inches=0.3, dpi=300, bbox_inches='tight')
     plt.close()

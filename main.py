@@ -10,12 +10,15 @@ thomas.eubank516@gmail.com
 Purpose: Generates pitcher performance reports from game datasets exported from TrackMan.
 '''
 
-from flask import Flask, request, jsonify, render_template
-from flask_cors import CORS
-import pandas as pd
 import os
+import uuid
 import magic
+import shutil
+import pandas as pd
+from flask_cors import CORS
 from werkzeug.utils import secure_filename
+from flask import Flask, request, jsonify, render_template, session
+
 import app.services.report as report
 import app.services.pdf_generator as pdf_generator
 import app.services.file_validator as file_validator
@@ -23,6 +26,7 @@ import app.services.file_validator as file_validator
 app = Flask(__name__,
             template_folder='app/templates',
             static_folder='app/static')
+app.secret_key = os.getenv('SECRET_KEY')
 CORS(app) 
 
 # Config
@@ -46,6 +50,8 @@ def index():
 
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
+    session_upload_folder, session_output_folder, session_pdf_folder = get_session_dir()
+
     if 'file' not in request.files:
         return jsonify({'error': 'No file part in the request'}), 400
 
@@ -56,7 +62,7 @@ def upload_file():
 
     # Delete old input files
     import glob
-    old_excels = glob.glob('app/input/*.xlsx ') + glob.glob('app/input/*.xls') + glob.glob('app/input/*.csv')
+    old_excels = glob.glob(os.path.join(session_upload_folder, '*.xlsx')) + glob.glob(os.path.join(session_upload_folder, '*.xls')) + glob.glob(os.path.join(session_upload_folder, '*.csv'))
     for old_excel in old_excels:
         try:
             os.remove(old_excel)
@@ -64,7 +70,7 @@ def upload_file():
             pass
 
     filename = secure_filename(file.filename)
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    filepath = os.path.join(session_upload_folder, filename)
     file.save(filepath)
 
     is_valid, result, df = file_validator.validate_uploaded_file(
@@ -89,7 +95,7 @@ def upload_file():
 
     try:
         # Delete old output images
-        old_images = glob.glob('app/static/output/*.png')
+        old_images = glob.glob(os.path.join(session_output_folder, '*.png'))
         for old_image in old_images:
             try:
                 os.remove(old_image)
@@ -97,7 +103,7 @@ def upload_file():
                 pass
 
         # Delete old pdfs
-        old_pdfs = glob.glob('app/static/pdfs/*.pdf')
+        old_pdfs = glob.glob(os.path.join(session_pdf_folder, '*.pdf'))
         for old_pdf in old_pdfs:
             try:
                 os.remove(old_pdf)
@@ -108,7 +114,7 @@ def upload_file():
         reports = []
         for pitcher_id in df['PitcherId'].unique():
             # Generate heat map
-            report.pitch_heat_map_by_batter_side(filepath, pitcher_id, 0.75)
+            report.pitch_heat_map_by_batter_side(filepath, session_output_folder, pitcher_id, 0.75)
             
             # Build table data
             table_data = report.build_table(filepath, pitcher_id)
@@ -119,8 +125,8 @@ def upload_file():
                 'pitcher_name': table_data[0],
                 'pitcher_id': str(pitcher_id),
                 'pitcher_table': report_html,
-                'image_url': f'/static/output/pitcher_{pitcher_id}_heat_map.png',
-                'pdf_url': f'/static/pdfs/pitcher_{pitcher_id}_report.pdf'
+                'image_url': os.path.join(session_output_folder.replace('app/', ''), f'pitcher_{pitcher_id}_heat_map.png'),
+                'pdf_url': os.path.join(session_pdf_folder.replace('app/', ''), f'pitcher_{pitcher_id}_report.pdf')
             })
 
             # Generate PDF report
@@ -128,19 +134,19 @@ def upload_file():
                 pitcher_name=table_data[0],
                 pitcher_id=pitcher_id,
                 table_html=report_html,
-                image_path=f'app/static/output/pitcher_{pitcher_id}_heat_map.png',
-                output_path=f'app/static/pdfs/pitcher_{pitcher_id}_report.pdf'
+                image_path=os.path.join(session_output_folder, f'pitcher_{pitcher_id}_heat_map.png'),
+                output_path=os.path.join(session_pdf_folder, f'pitcher_{pitcher_id}_report.pdf')
             )
 
         # Merge all PDFs into one
-        merged_pdf_path = 'app/static/pdfs/merged_pitcher_reports.pdf'
-        pdf_generator.merge_pdfs(app.config['PDF_FOLDER'], merged_pdf_path)
+        merged_pdf_path = os.path.join(session_pdf_folder, 'merged_pitcher_reports.pdf')
+        pdf_generator.merge_pdfs(session_pdf_folder, merged_pdf_path)
 
         return jsonify({
             'message': 'File processed successfully',
             'num_reports': len(reports),
             'reports': reports,
-            'merged_pdf_url': '/static/pdfs/merged_pitcher_reports.pdf'
+            'merged_pdf_url': os.path.join(session_pdf_folder.replace('app/', ''), 'merged_pitcher_reports.pdf')
         })
     
     except Exception as e:
@@ -149,9 +155,17 @@ def upload_file():
         traceback.print_exc()
         return jsonify({'error': f'Failed to process file: {str(e)}'}), 500
 
-@app.route('/health', methods=['GET'])
-def health_check():
-    return jsonify({'status': 'healthy'}), 200
+def get_session_dir():
+    if "sid" not in session:
+        session["sid"] = uuid.uuid4().hex
+
+    session_upload_dir = os.path.join(app.config['UPLOAD_FOLDER'], f"session_{session['sid']}")
+    session_output_dir = os.path.join(app.config['OUTPUT_FOLDER'], f"session_{session['sid']}")
+    session_pdf_dir = os.path.join(app.config['PDF_FOLDER'], f"session_{session['sid']}")
+    os.makedirs(session_upload_dir, exist_ok=True)
+    os.makedirs(session_output_dir, exist_ok=True)
+    os.makedirs(session_pdf_dir, exist_ok=True)
+    return session_upload_dir, session_output_dir, session_pdf_dir
 
 if __name__ == '__main__':
     app.run(debug=True)
