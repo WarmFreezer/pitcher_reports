@@ -14,9 +14,11 @@ from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import pandas as pd
 import os
+import magic
 from werkzeug.utils import secure_filename
 import app.services.report as report
 import app.services.pdf_generator as pdf_generator
+import app.services.file_validator as file_validator
 
 app = Flask(__name__,
             template_folder='app/templates',
@@ -27,11 +29,8 @@ CORS(app)
 UPLOAD_FOLDER = 'app/input'
 OUTPUT_FOLDER = 'app/static/output'
 PDF_FOLDER = 'app/static/pdfs'
-ALLOWED_EXTENSIONS = {'csv', 'xlsx', 'xls'}
-MAX_FILE_SIZE = 16 * 1024 * 1024  # 16 MB
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
 app.config['PDF_FOLDER'] = PDF_FOLDER        
 app.config['OUTPUT_FOLDER'] = OUTPUT_FOLDER
 
@@ -39,16 +38,11 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 os.makedirs(PDF_FOLDER, exist_ok=True)
 
+required_columns = report.required_columns
+
 @app.route("/")
 def index():
     return render_template("index.html")
-
-@app.route("/report")
-def report_page():
-    return render_template("report.html")
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route('/api/upload', methods=['POST'])
 def upload_file():
@@ -60,12 +54,9 @@ def upload_file():
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
 
-    if not allowed_file(file.filename):
-        return jsonify({'error': 'File type not allowed'}), 400
-
     # Delete old input files
     import glob
-    old_excels = glob.glob('app/input/*.xlsx')
+    old_excels = glob.glob('app/input/*.xlsx ') + glob.glob('app/input/*.xls') + glob.glob('app/input/*.csv')
     for old_excel in old_excels:
         try:
             os.remove(old_excel)
@@ -75,6 +66,26 @@ def upload_file():
     filename = secure_filename(file.filename)
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(filepath)
+
+    is_valid, result, df = file_validator.validate_uploaded_file(
+        file=file, 
+        filepath=filepath,
+        required_columns=list(required_columns.keys()),
+        column_types=required_columns
+        )
+    
+    if not is_valid:
+        try: 
+            os.remove(filepath)
+        except:
+            pass
+
+        app.logger.warning(f"File validation failed: {filename} - {result}")
+
+        return jsonify({'error': result}), 400
+    
+    checksum = result
+    app.logger.info(f"Valid file uploaded: {filename} - Checksum: {checksum}")
 
     try:
         # Delete old output images
@@ -92,14 +103,6 @@ def upload_file():
                 os.remove(old_pdf)
             except Exception as e:
                 pass
-
-        # Check for valid file types
-        if filename.endswith('.csv'):
-            df = pd.read_csv(filepath)
-        elif filename.endswith(('.xlsx', '.xls')):
-            df = pd.read_excel(filepath)
-        else:
-            return jsonify({'error': 'Unsupported file format'}), 400
 
         # Create list of report data
         reports = []

@@ -10,6 +10,28 @@ import matplotlib.patches as patches
 import seaborn as sns
 import os
 
+# Define required columns and their types
+required_columns = {
+    'Pitcher': 'string', 
+    'PitcherId': 'numeric', 
+    'TaggedPitchType': 'string', 
+    'PlateLocHeight': 'numeric', 
+    'PlateLocSide': 'numeric', 
+    'BatterSide': 'string',
+    'RelSpeed': 'numeric', 
+    'InducedVertBreak': 'numeric', 
+    'HorzBreak': 'numeric', 
+    'SpinRate': 'numeric', 
+    'VertApprAngle': 'numeric', 
+    'HorzApprAngle': 'numeric', 
+    'RelHeight': 'numeric', 
+    'RelSide': 'numeric', 
+    'Extension': 'numeric', 
+    'SpinAxis': 'numeric', 
+    'ZoneTime': 'numeric', 
+    'PitchCall': 'string',
+}
+
 # Define colors for each pitch type
 pitch_colors = {
         'Fastball': 'Reds',
@@ -30,7 +52,13 @@ pitch_point_colors = {
 }
 
 def build_table(path, pitcherid):
-    excel = pd.read_excel(path)
+    if path.endswith('.csv'):
+        excel = pd.read_csv(path)
+    elif path.endswith('.xlsx') or path.endswith('.xls'):
+        excel = pd.read_excel(path)
+    else: 
+        raise ValueError("Unsupported file format. Please provide a .csv, .xlsx, or .xls file.")
+    
     table = excel[['Pitcher', 'PitcherId', 'TaggedPitchType', 'RelSpeed', 'InducedVertBreak', 'HorzBreak', 'SpinRate', 'VertApprAngle', 'HorzApprAngle', 'RelHeight', 'RelSide', 'Extension', 'SpinAxis', 'ZoneTime', 'PlateLocHeight', 'PlateLocSide', 'PitchCall']] 
 
     pitcher_data = table[table['PitcherId'] == pitcherid]
@@ -108,7 +136,13 @@ def build_table(path, pitcherid):
     return [str(pitcher), report_df]
 
 def pitch_heat_map_by_batter_side(path, pitcher_id, threshold=0.1):
-    excel = pd.read_excel(path)
+    if path.endswith('.csv'):
+        excel = pd.read_csv(path)
+    elif path.endswith('.xlsx') or path.endswith('.xls'):
+        excel = pd.read_excel(path)
+    else: 
+        raise ValueError("Unsupported file format. Please provide a .csv, .xlsx, or .xls file.")
+    
     table = excel[['Pitcher', 'PitcherId', 'TaggedPitchType', 'PlateLocHeight', 'PlateLocSide', 'BatterSide']] 
     pitcher_data = table[table['PitcherId'] == pitcher_id]
     

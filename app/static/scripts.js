@@ -4,14 +4,13 @@ function displayUploadData(data) {
     if (!contentArea) return;
 
     const downloadButton = data.merged_pdf_url
-        ? `<a href="${data.merged_pdf_url}" download="all_pitcher_reports.pdf" class="download-button">Download All Reports (PDF)</a>`
+        ? `<a href="${data.merged_pdf_url}" download="all_pitcher_reports.pdf" class="download-btn" style="text-decoration: none;">Download Full PDF</a>`
         : '';
 
     contentArea.innerHTML = `
-        <div style="background: white; padding: 20px; border: 2px solid #FFCF00; margin: 20px; border-radius: 8px;">
+        <div style="background: white; padding: 32px; margin: 32px; border-radius: 32px; background-color: var(--msu-light);">
             <h2>File Upload Summary</h2>
-            <p><strong>Message:</strong> ${data.message}</p>
-            <p><strong>Reports Generated:</strong> ${data.num_reports}</p>
+            <p>${data.message}</p>
             ${downloadButton}
         </div>
     `;
@@ -132,8 +131,6 @@ async function handleFileSelect(event) {
             num_reports: result.num_reports,
             merged_pdf_url: result.merged_pdf_url
         });
-
-        alert(`File processed successfully!\nGenerating ${result.num_reports} pitcher report(s)...`);
 
         // Clear existing reports
         if (reportOutput) {

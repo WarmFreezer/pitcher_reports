@@ -66,7 +66,7 @@ def create_pitcher_pdf_from_html(pitcher_name, pitcher_id, table_html, image_pat
                 border: none;
                 width: 100%;
                 height: 100px;
-                background-color: #0033A0;
+                background-color: #004080;
             }}
             .header-table td {{
                 border: none;
