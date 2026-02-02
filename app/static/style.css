@@ -22,6 +22,10 @@ body {
     font-family: Arial, sans-serif;
     color: var(--msu-dark);
     border-radius: 32px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    flex-grow: 0;
 }
 
 /* Navigation Styles */
@@ -126,7 +130,7 @@ body {
 .main-content {
     padding: 20px;
     max-width: 1200px;
-    margin: 0 auto;
+    margin: 0;
 }
 
 /* Footer */
