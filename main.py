@@ -26,7 +26,7 @@ import app.services.file_validator as file_validator
 app = Flask(__name__,
             template_folder='app/templates',
             static_folder='app/static')
-app.secret_key = os.getenv('SECRET_KEY')
+app.secret_key = 'secret'
 CORS(app) 
 
 # Config
