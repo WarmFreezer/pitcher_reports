@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html style="height: 100%;">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - {{ current_user.school.name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    {% if branding %}
+    <style>
+        :root {
+            --primary: {{branding.colors.primary}};
+            --secondary: {{branding.colors.secondary}};
+            --tertiary: {{branding.colors.tertiary}};
+            --dark: {{branding.colors.dark}};
+            --light: {{branding.colors.light}};
+            --accent: {{branding.colors.accent}};
+        }
+    </style>
+    {% endif %}
+</head>
+<body onload="loadHeader('MSU Baseball Analytics', '/static/resources/HomePlate.png', '{{ logo_path }}'); loadFooter(); loadNavbar();">
+    <!-- Navbar Placeholder -->
+    <div id="navbar-placeholder"></div>
+    
+    <!-- Header Placeholder -->
+    <div id="header-placeholder"></div>
+    
+    <main class="main-content">
+        <div class="bubble">
+            <h2>Dashboard</h2>
+
+            <div>
+                <h1>{{ branding.name }}</h1>
+            </div>
+            
+            <p>
+                Welcome, {{ current_user.first_name }}!
+            </p>
+        
+            <div class="content">
+                <p>School: {{ current_user.school.name }}</p>
+                <p>Role: {{ current_user.role }}</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer Placeholder -->
+    <div id="footer-placeholder"></div>
+
+    <script src="{{ url_for('static', filename='scripts.js') }}"></script>
+</body>
+</html>

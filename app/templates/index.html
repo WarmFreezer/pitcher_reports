@@ -5,9 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MSU Baseball Analytics - Home</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='../resources/favicon.ico') }}">
+
+    {% if branding %}
+    <style>
+        :root {
+            --primary: {{branding.colors.primary}};
+            --secondary: {{branding.colors.secondary}};
+            --tertiary: {{branding.colors.tertiary}};
+            --dark: {{branding.colors.dark}};
+            --light: {{branding.colors.light}};
+            --accent: {{branding.colors.accent}};
+        }
+    </style>
+    {% endif %}
 </head>
-<body onload="loadHeader('MSU Baseball Analytics', '/static/resources/HomePlate.png');  loadNavbar(); loadFooter();">
+<body onload="loadHeader('MSU Baseball Analytics', '/static/resources/HomePlate.png', '/storage/schools/{{current_user.school.slug}}/assets/logo.png');  loadNavbar(); loadFooter();">
     <!-- Navbar Placeholder -->
     <div id="navbar-placeholder"></div>
 
@@ -15,8 +27,8 @@
     <div id="header-placeholder"></div>
     
     <!-- Main Content -->
-    <main class="main-content" style="padding: 0px; max-width: none; flex-grow: 1;">
-        <div style="background-color: var(--msu-light); border-radius: 32px; padding: 32px; margin: 32px;">
+    <main class="main-content">
+        <div class="bubble">
             <h2>Welcome to MSU Baseball Analytics</h2>
             <p>Upload your data file to generate pitcher reports.</p>
             
@@ -37,7 +49,7 @@
     <!-- Pitcher Report Template -->
     <template id="pitcher-report-template">
         <div class="pitcher-report">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; background-color: var(--msu-dark-blue);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; height: 100px; background-color: var(--tertiary); padding: 10px;">
                 <h2 class="user-name" style="margin: 0; color: white; height: 100px; padding-left: 20px; align-content: center;">Pitcher Name</h2>
                 <div class="download-container" style="padding-right: 20px;"></div>
             </div>

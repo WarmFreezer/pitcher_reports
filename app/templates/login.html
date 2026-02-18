@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en" style="height: 100%;">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Login - Pitcher Reports</title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    </head>
+    <body onload="loadHeader('MSU Baseball Analytics', '/static/resources/HomePlate.png');loadFooter();">
+        <!-- Header Placeholder -->
+        <div id="header-placeholder"></div>
+
+        <main class="main-content">
+            <div style="padding: 20px; background-color: var(--light); border-radius: 32px; margin: 32px;">
+                <h2>Login</h2>
+
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                        <div class="flash {{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+
+                <form method="POST">
+                    <input type="email" name="email" placeholder="Email" required>
+                    <input type="password" name="password" placeholder="Password" required>
+                    <label>
+                        <input type="checkbox" name="remember"> Remember Me
+                    </label>
+                    <button type="submit" class="upload-btn">Login</button>
+                </form>
+            </div>
+        </main>
+        <!-- Footer Placeholder -->
+        <div id="footer-placeholder"></div>
+
+        <script src="{{ url_for('static', filename='scripts.js') }}"></script>
+    </body>

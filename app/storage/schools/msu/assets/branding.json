@@ -1,0 +1,36 @@
+{
+    "school": {
+        "name": "Morehead State University",
+        "short_name": "Morehead State",
+        "mascot": "Eagle",
+        "slug": "msu"
+    },
+
+    "colors": {
+        "primary": "#0033A0",
+        "secondary": "#FFCF00",
+        "tertiary": "#001D39",
+        "dark": "#343434",
+        "light": "#ECECEC",
+        "accent": "#005EB8"
+    },
+
+    "logos": {
+        "primary": "assets/logo.png"
+    },
+
+    "typography": {
+        "font_family": "Graduate, sans-serif",
+        "font_weights": {
+            "light": 300,
+            "regular": 400,
+            "bold": 700
+        }        
+    },
+
+    "report_settings": {
+        "header_height_px": 120,
+        "show_logo": true,
+        "footer_text": "© 2024 Morehead State University. All rights reserved."
+    }
+}

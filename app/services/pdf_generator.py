@@ -1,13 +1,23 @@
 from xhtml2pdf import pisa
 import os
+import base64
 
-def create_pitcher_pdf_from_html(pitcher_name, pitcher_id, table_html, image_path, output_path):
+def create_pitcher_pdf_from_html(school_slug, pitcher_name, pitcher_id, table_html, output_path, branding):
     """
     Create PDF from HTML content
     """
-    # Make image path absolute or use file:// protocol
-    abs_image_path = os.path.abspath(image_path)
 
+    if os.path.exists(os.path.join('app', 'storage', 'schools', school_slug, 'players', str(pitcher_id), 'pfp.png')):
+        player_pfp = os.path.join('app', 'storage', 'schools', school_slug, 'players', str(pitcher_id), 'pfp.png')
+    else:
+        player_pfp = os.path.join('app', 'static', 'resources', 'favicon.ico')
+
+    primary_color = branding['colors']['primary']
+    secondary_color = branding['colors']['secondary']
+    tertiary_color = branding['colors']['tertiary']
+    accent_color = branding['colors']['accent']
+    light_color = branding['colors']['light']
+    dark_color = branding['colors']['dark']
     
     html_content = f"""
     <!DOCTYPE html>
@@ -27,7 +37,7 @@ def create_pitcher_pdf_from_html(pitcher_name, pitcher_id, table_html, image_pat
                 margin: 0.5in;
             }}
             h1 {{ 
-                color: #FFCF00; 
+                color: {secondary_color};
                 text-align: center;
                 margin-bottom: 20px;
             }}
@@ -47,7 +57,7 @@ def create_pitcher_pdf_from_html(pitcher_name, pitcher_id, table_html, image_pat
                 font-size: 10px;
             }}
             th {{
-                background-color: #004080;
+                background-color: {accent_color};
                 color: white;
                 padding: 8px;
                 text-align: center;
@@ -66,7 +76,7 @@ def create_pitcher_pdf_from_html(pitcher_name, pitcher_id, table_html, image_pat
                 border: none;
                 width: 100%;
                 height: 100px;
-                background-color: #004080;
+                background-color: {accent_color};
             }}
             .header-table td {{
                 border: none;
@@ -78,7 +88,7 @@ def create_pitcher_pdf_from_html(pitcher_name, pitcher_id, table_html, image_pat
                 border: none;
             }}
             .header-center {{
-                color: #FFCF00;
+                color: {secondary_color};
                 font-family: 'Graduate', serif;
                 font-size: 24px;
             }}
@@ -88,20 +98,20 @@ def create_pitcher_pdf_from_html(pitcher_name, pitcher_id, table_html, image_pat
         <table class="header-table">
             <tr>
                 <td class="header-left">
-                    <img src="app/static/resources/favicon.ico" height="128" alt="PFP">
+                    <img src="{player_pfp}" height="128" alt="PFP">
                 </td>
                 <td class="header-center">
                     <h1>Pitcher Report for {pitcher_name}</h1>
                 </td>
                 <td class="header-right">
-                    <img src="app/static/resources/strutting_eagle.png" height="128" alt="Strutting Eagle">
+                    <img src="app/storage/schools/{school_slug}/assets/logo.png" height="128" alt="{school_slug} Logo">
                 </td>
             </tr>
         </table>
 
         <main>
             <div class="heatmap">
-                <img src="{image_path}" alt="Heat Map" width="800">
+                <img src="app/storage/schools/{school_slug}/temp/pitcher_{pitcher_id}_heat_map.png" alt="Heat Map" width="800">
             </div>
             {table_html}
         </main>
@@ -114,10 +124,10 @@ def create_pitcher_pdf_from_html(pitcher_name, pitcher_id, table_html, image_pat
         pisa_status = pisa.CreatePDF(html_content, dest=pdf_file)
     
     if pisa_status.err:
-        print(f"Error creating PDF: {output_path}")
+        print(f"Error creating PDF: {os.path.basename(output_path)}")
         return False
     else:
-        print(f"PDF created successfully: {output_path}")
+        print(f"PDF created successfully: {os.path.basename(output_path)}")
         return True
 
 def merge_pdfs(pdf_folder, output_path):
@@ -138,4 +148,4 @@ def merge_pdfs(pdf_folder, output_path):
     
     merger.write(output_path)
     merger.close()
-    print(f"Merged PDF created: {output_path}")
+    print(f"Merged PDF created: {os.path.basename(output_path)}")
