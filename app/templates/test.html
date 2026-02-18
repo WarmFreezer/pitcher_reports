@@ -1,0 +1,214 @@
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                margin: 0;
+                padding: 20px;
+                background-color: #FFFFFF;
+            }
+
+            @page {
+                size: portrait;
+                margin: 0.5in;
+            }
+            h1 {
+                color: #FFCF00;
+                text-align: center;
+                margin-bottom: 20px;
+            }
+            .heatmap {
+                text-align: center;
+                margin: 20px 0;
+            }
+            .heatmap img {
+                max-width: 100%;
+                height: auto;
+            }
+
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 20px 0;
+                font-size: 10px;
+            }
+            th {
+                background-color: #004080;
+                color: white;
+                padding: 8px;
+                text-align: center;
+                font-weight: bold;
+            }
+            td {
+                border: 1px solid #ddd;
+                padding: 6px;
+                text-align: center;
+            }
+            tr:nth-child(even) {
+                background-color: #f9f9f9;
+            }
+
+            /* Specific styling for pandas-generated table */
+            .pitcher-data-table {
+                margin-bottom: 0 !important;
+            }
+            .pitcher-data-table thead tr {
+                text-align: center !important;
+            }
+            .pitcher-data-table tbody tr:last-child td {
+                border-bottom: 2px solid #004080;       
+            }
+
+            .header-table {
+                border: none;
+                width: 100%;
+                height: 100px;
+                background-color: #004080;
+            }
+            .header-table td {
+                border: none;
+                vertical-align: middle;
+                text-align: center;
+                padding: 10px;
+            }
+            .header-table tr {
+                border: none;
+            }
+            .header-center {
+                color: #FFCF00;
+                font-family: 'Graduate', serif;
+                font-size: 24px;
+            }
+        </style>
+    </head>
+    <body>
+        <table class="header-table">
+            <tr>
+                <td class="header-left">
+                    <img src="../static/resources/favicon.ico" height="128" alt="PFP">
+                </td>
+                <td class="header-center">
+                    <h1>Pitcher Report for Miller, Alex</h1>
+                </td>
+                <td class="header-right">
+                    <img src="../static/resources/strutting_eagle.png" height="128" alt="Strutting Eagle">
+                </td>
+            </tr>
+        </table>
+
+        <main>
+            <div class="heatmap">
+                <img src="../output/session_fbf1ec6292b646459969c589066a3dfe/pitcher_10284558_heat_map.png" alt="Heat Map" width="800">
+            </div>
+            <table class="dataframe pitcher-data-table">
+  <thead>
+    <tr style="text-align: left;">
+      <th>Pitch</th>
+      <th>Count</th>
+      <th>% Thrown</th>
+      <th>Vel.</th>
+      <th>IVB</th>
+      <th>HB</th>
+      <th>Spin</th>
+      <th>VAA</th>
+      <th>HAA</th>
+      <th>vRel</th>
+      <th>hRel</th>
+      <th>Ext.</th>
+      <th>Axis</th>
+      <th>Zone %</th>
+      <th>Chase %</th>
+      <th>Whiff %</th>
+      <th>CS%</th>
+      <th>SW%</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Fastball</td>
+      <td>23</td>
+      <td>79.31</td>
+      <td>91.91</td>
+      <td>16.04</td>
+      <td>11.56</td>
+      <td>2314.71</td>
+      <td>-4.77</td>
+      <td>-1.18</td>
+      <td>5.60</td>
+      <td>1.90</td>
+      <td>5.66</td>
+      <td>1:13</td>
+      <td>41.68</td>
+      <td>13.04</td>
+      <td>17.39</td>
+      <td>4.35</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <td>Slider</td>
+      <td>4</td>
+      <td>13.79</td>
+      <td>83.27</td>
+      <td>-3.79</td>
+      <td>-8.23</td>
+      <td>2524.81</td>
+      <td>-7.24</td>
+      <td>-2.52</td>
+      <td>5.80</td>
+      <td>1.48</td>
+      <td>5.06</td>
+      <td>0:29</td>
+      <td>46.33</td>
+      <td>25.00</td>
+      <td>25.00</td>
+      <td>50.00</td>
+      <td>25.00</td>
+    </tr>
+    <tr>
+      <td>ChangeUp</td>
+      <td>1</td>
+      <td>3.45</td>
+      <td>82.73</td>
+      <td>7.42</td>
+      <td>-6.59</td>
+      <td>2523.68</td>
+      <td>-7.24</td>
+      <td>-6.06</td>
+      <td>5.01</td>
+      <td>2.57</td>
+      <td>5.62</td>
+      <td>1:59</td>
+      <td>46.21</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+    </tr>
+    <tr>
+      <td>Undefined</td>
+      <td>1</td>
+      <td>3.45</td>
+      <td>84.15</td>
+      <td>-0.11</td>
+      <td>-5.80</td>
+      <td>2458.45</td>
+      <td>-8.07</td>
+      <td>-4.98</td>
+      <td>4.94</td>
+      <td>2.72</td>
+      <td>5.66</td>
+      <td>6:29</td>
+      <td>45.29</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+      <td>0.00</td>
+    </tr>
+  </tbody>
+</table>
+        </main>
+
+    </body>
+    </html>

@@ -83,7 +83,9 @@ def build_table(path, pitcherid):
                     'Axis': [],
                     'Zone %': [],
                     'Chase %': [],
-                    'Whiff %': []}
+                    'Whiff %': [],
+                    'CS%': [],
+                    'SW%': []}
                         
         # Parse through each pitch type for the pitcher
         for pitch_type in pitcher_data['TaggedPitchType'].unique():
@@ -103,9 +105,19 @@ def build_table(path, pitcherid):
                 game_report['vRel'].append(pitch_type_data['RelHeight'].mean())
                 game_report['hRel'].append(pitch_type_data['RelSide'].mean())
                 game_report['Ext.'].append(pitch_type_data['Extension'].mean())
-                game_report['Axis'].append(pitch_type_data['SpinAxis'].mean()) 
+
+                # Calculate Spin Axis in clock format
+                axis_mean = str(pitch_type_data['SpinAxis'].mean())
+                axis_front = axis_mean.split('.')[0]
+                axis_back = axis_mean.split('.')[-1]
+
+                axis_hours = int(axis_front) % 12
+                axis_minutes = int(axis_back) % 60
+
+                game_report['Axis'].append(f"{axis_hours}:{axis_minutes:02d}") 
                 game_report['Zone %'].append(pitch_type_data['ZoneTime'].mean() * 100)
 
+                # Calculate Chase %
                 chase_count = 0
                 for _, row in pitch_type_data.iterrows():
                     outside = (row['PlateLocHeight'] < 1.5) or (row['PlateLocHeight'] > 3.5)
@@ -117,6 +129,7 @@ def build_table(path, pitcherid):
                         
                 game_report['Chase %'].append(chase_count / len(pitch_type_data) * 100.00)
                 
+                # Calculate Whiff %
                 whiff_count = 0
                 for _, row in pitch_type_data.iterrows():
                     swing_and_miss = row['PitchCall'] in ['StrikeSwinging', 'FoulBallNotFieldable']
@@ -125,6 +138,23 @@ def build_table(path, pitcherid):
                         whiff_count += 1
                 
                 game_report['Whiff %'].append(whiff_count / len(pitch_type_data) * 100.00)
+
+                # Calculate Called Strikes %
+                called_strike_count = 0
+                for _, row in pitch_type_data.iterrows():
+                    if (row['PitchCall'] in ['StrikeCalled', 'StrikeSwinging']):
+                        called_strike_count += 1
+                
+                game_report['CS%'].append(called_strike_count / len(pitch_type_data) * 100.00)
+
+                # Calculate Swing and Miss %
+                swinging_strike_count = 0
+                for _, row in pitch_type_data.iterrows():
+                    if (row['PitchCall'] in ['StrikeSwinging']):
+                        swinging_strike_count += 1
+                
+                game_report['SW%'].append(swinging_strike_count / len(pitch_type_data) * 100.00)
+
         
         # Set panda options to show all rows/columns
         pd.set_option('display.max_columns', None)
@@ -252,17 +282,3 @@ def pitch_heat_map_by_batter_side(input_path, output_path, pitcher_id, threshold
 
     except Exception as e:
         print(f"Error generating heat map for pitcher ID {pitcher_id}: {e}")
-
-
-
-input_path = 'app/input/'
-output_path = 'app/static/output/'
-pitcher_id = 1000100866
-for file in os.listdir(input_path):
-    if file.endswith('.csv') or file.endswith('.xlsx') or file.endswith('.xls'):
-        file_path = os.path.join(input_path, file)
-        try:
-            print(build_table(file_path, pitcher_id))
-            pitch_heat_map_by_batter_side(file_path, output_path, pitcher_id, threshold=0.75)
-        except Exception as e:
-            print(f"Error processing file {file}: {e}")
