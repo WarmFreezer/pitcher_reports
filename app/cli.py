@@ -18,6 +18,15 @@ def register_cli_commands(app):
         """Initialize the database."""
         models.db.create_all()
         click.echo("Database initialized.")
+    
+    @app.cli.command("reset-db")
+    @with_appcontext
+    def reset_db():
+        """Drop all tables and reinitialize the database. WARNING: This deletes all data!"""
+        if click.confirm('This will delete all data. Are you sure?'):
+            models.db.drop_all()
+            models.db.create_all()
+            click.echo("Database reset complete.")
 
     @app.cli.command("create-user-func")
     @click.argument("email")
