@@ -40,9 +40,14 @@ CORS(app)
 from app import cli as cli_commands
 cli_commands.register_cli_commands(app)
 
+# Database URL Formatting Fix
+database_url = os.environ.get('DATABASE_URL', 'sqlite:///pitcher_reports.db')
+if database_url.startswith('postgres://'):
+    database_url = database_url.replace('postgres://', 'postgresql://', 1)
+
 # Config
 app.config['SECRET_KEY'] = app.secret_key
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///pitcher_reports.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['STORAGE'] = STORAGE_FOLDER
 
