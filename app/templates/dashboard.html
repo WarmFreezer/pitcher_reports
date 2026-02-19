@@ -19,7 +19,7 @@
     </style>
     {% endif %}
 </head>
-<body onload="loadHeader('MSU Baseball Analytics', '/static/resources/HomePlate.png', '{{ logo_path }}'); loadFooter(); loadNavbar();">
+<body onload="loadHeader('{{ current_user.school.slug|upper }} Baseball Analytics', '/static/resources/HomePlate.png', '{{ logo_path }}'); loadFooter(); loadNavbar();">
     <!-- Navbar Placeholder -->
     <div id="navbar-placeholder"></div>
     
@@ -40,7 +40,7 @@
         
             <div class="content">
                 <p>School: {{ current_user.school.name }}</p>
-                <p>Role: {{ current_user.role }}</p>
+                <p>Role: {{ current_user.role|capitalize }}</p>
             </div>
         </div>
     </main>

@@ -6,7 +6,7 @@
         <title>Login - Pitcher Reports</title>
         <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     </head>
-    <body onload="loadHeader('MSU Baseball Analytics', '/static/resources/HomePlate.png');loadFooter();">
+    <body onload="loadHeader('Pitcher Reports - Baseball Analytics', '/static/resources/HomePlate.png');loadFooter();">
         <!-- Header Placeholder -->
         <div id="header-placeholder"></div>
 
@@ -22,15 +22,15 @@
                     {% endif %}
                 {% endwith %}
 
-
                 <form method="POST">
                     <input type="email" name="email" placeholder="Email" required>
                     <input type="password" name="password" placeholder="Password" required>
                     <label>
-                        <input type="checkbox" name="remember"> Remember Me
+                        <input style="margin: 10px 0 10px 0; width: 5%" type="checkbox" name="remember"> Remember Me
                     </label>
                     <button type="submit" class="upload-btn">Login</button>
                 </form>
+
             </div>
         </main>
         <!-- Footer Placeholder -->

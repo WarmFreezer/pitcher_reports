@@ -1,11 +1,11 @@
 /* Global variables defined in :root */
 :root {
-  --primary: #011140; 
-  --secondary: #D9CDB8; 
-  --tertiary: #081226;
-  --dark: #343434; 
+  --primary: #92A6A6; 
+  --secondary: #E5463D; 
+  --tertiary: #BDF2F2;
+  --dark: #30312C; 
   --light: #ECECEC;
-  --accent: #D9A577;
+  --accent: #50594f;
 }
 
 /* Reset */
@@ -25,6 +25,28 @@ body {
     flex-direction: column;
     flex-grow: 0;
 }
+
+/* Input Styles */
+input {
+  border: none;
+  border-bottom: 2px solid var(--primary);
+  background: transparent;
+  padding: 10px 5px;
+  font-size: 12px;
+  color: var(--accent);
+  width: 30%;
+  transition: 0.3s;
+}
+
+input::placeholder {
+  color: var(--dark);
+}
+
+input:focus {
+  outline: none;
+  border-bottom: 2px solid #ffffff;
+}
+
 
 /* Navigation Styles */
 .main-nav {
