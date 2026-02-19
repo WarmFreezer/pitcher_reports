@@ -100,14 +100,14 @@ def register_cli_commands(app):
         db.session.add(school)
         db.session.commit()
 
-        branding_data = {
-            'name': name,
-            'primary_color': input("Enter primary color (hex code, e.g., #009999): "),
-            'secondary_color': input("Enter secondary color (hex code, e.g., #000000): "),
-            'logo': 'logo.png'
-        }
+        #branding_data = {
+        #    'name': name,
+        #    'primary_color': input("Enter primary color (hex code, e.g., #009999): "),
+        #    'secondary_color': input("Enter secondary color (hex code, e.g., #000000): "),
+        #    'logo': 'logo.png'
+        #}
 
-        Branding_Loader.create_school_dir(slug, branding_data)
+        #Branding_Loader.create_school_dir(slug, branding_data)
         print(f"School '{name}' created with slug '{slug}' and branding initialized. Add logo to the school's assets directory.")
 
     @app.cli.command()
