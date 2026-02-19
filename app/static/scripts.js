@@ -8,7 +8,7 @@ function displayUploadData(data) {
         : '';
 
     contentArea.innerHTML = `
-        <div style="background: white; padding: 32px; margin: 32px; border-radius: 32px; background-color: var(--msu-light);">
+        <div style="background: white; padding: 32px; margin: 32px; border-radius: 32px; background-color: var(--light);">
             <h2>File Upload Summary</h2>
             <p>${data.message}</p>
             ${downloadButton}
@@ -21,11 +21,11 @@ function loadNavbar() {
     const navbarHTML = `
         <nav class="main-nav">
             <ul class="nav-list">
-                <li><a href="/" class="nav-link">Home</a></li>
+                <li><a href="/upload" class="nav-link">Home</a></li>
                 <li class="dropdown">
                     <a href="javascript:void(0)" class="nav-link">File ▼</a>
                     <div class="dropdown-content">
-                        <a href="#" onclick="uploadFile(); return false;">📤 Upload</a>
+                        <a href="/upload" onclick="uploadFile(); return false;">📤 Upload</a>
                         <a href="#" id="nav-download-link" onclick="downloadPDFs(); return false;">📥 Download</a>
                         <a href="#print">🖨️ Print</a>
                         <a href="#save">💾 Save</a>
@@ -44,6 +44,11 @@ function loadNavbar() {
                     </div>
                 </li>
                 <li><a href="#help" class="nav-link">Help</a></li>
+                <li style="margin-left: auto;">
+                    <a href="/logout" class="nav-link">
+                        <button style="background: none; border: none; color: white; cursor: pointer; font-size: inherit; font-family: inherit; padding-right: 16px;">Logout</button>
+                    </a>
+                </li>
             </ul>
         </nav>
     `;
@@ -164,7 +169,7 @@ function buildAllReports(reports) {
 }
 
 // Load header
-function loadHeader(title = "Pitcher Report", pfp = "/static/resources/HomePlate.png") {
+function loadHeader(title = "Pitcher Report", pfp = "/static/resources/HomePlate.png", logo = "/static/resources/HomePlate.png") {
     const headerHTML = `
         <header class="site-header">
             <div class="header-container">
@@ -175,7 +180,7 @@ function loadHeader(title = "Pitcher Report", pfp = "/static/resources/HomePlate
                     <h1>${title}</h1>
                 </div>
                 <div class="header-right">
-                    <img src="/static/resources/strutting_eagle.png" height="128" alt="Strutting Eagle">
+                    <img src=${logo} height="128" alt="App Icon">
                 </div>
             </div>
         </header>

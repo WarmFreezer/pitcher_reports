@@ -171,7 +171,7 @@ def build_table(path, pitcherid):
     except Exception as e:
         print(f"Error building table for pitcher ID {pitcherid}: {e}")
 
-def pitch_heat_map_by_batter_side(input_path, output_path, pitcher_id, threshold=0.1):
+def pitch_heat_map_by_batter_side(id, input_path, output_path, pitcher_id, threshold=0.1):
     try:
         if input_path.endswith('.csv'):
             excel = pd.read_csv(input_path)
@@ -277,7 +277,7 @@ def pitch_heat_map_by_batter_side(input_path, output_path, pitcher_id, threshold
         plt.subplots_adjust(left=0.06, right=0.96, top=0.88, bottom=0.1, wspace=0.2)
 
         # Save the figure in the output folder for report building
-        plt.savefig(os.path.join(output_path, f'pitcher_{pitcher_id}_heat_map.png'), pad_inches=0.3, dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(output_path, f'{id}_pitcher_{pitcher_id}_heat_map.png'), pad_inches=0.3, dpi=300, bbox_inches='tight')
         plt.close()
 
     except Exception as e:

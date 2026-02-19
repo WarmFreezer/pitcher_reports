@@ -1,18 +1,16 @@
-# MSU Baseball Pitcher Report Generator
+# Baseball Pitcher Report Generator
 
-A Flask-based web application that generates comprehensive pitcher performance reports from TrackMan baseball data files. The application creates visual heat maps and statistical tables for each pitcher, with options to view online or download as PDF.
+A Flask-based web application that generates comprehensive pitcher performance reports from TrackMan baseball data files. Features multi-school support with custom branding, user authentication, and PDF report generation.
 
 ## Features
 
+- 🔐 **User Authentication**: Secure login system with role-based access
+- 🏫 **Multi-School Support**: Manage multiple schools with custom branding
 - 📊 **Interactive Heat Maps**: Visualize pitch locations by batter handedness
 - 📈 **Statistical Tables**: Detailed performance metrics for each pitcher
 - 📄 **PDF Export**: Download individual or merged PDF reports
-- 🎨 **Modern UI**: Clean, responsive interface with MSU branding
+- 🎨 **Custom Branding**: School-specific colors, logos, and styling
 - ⚡ **Batch Processing**: Process multiple pitchers from a single upload
-
-## Screenshots
-
-![Image of pitcher reports after a valid input file has been submitted](docs/PitcherReportsScreenshot.png)
 
 ## Prerequisites
 
@@ -24,10 +22,8 @@ A Flask-based web application that generates comprehensive pitcher performance r
 ### 1. Clone or Download the Repository
 ```bash
 git clone https://github.com/WarmFreezer/pitcher_reports.git
-cd pitcher-reports
+cd pitcher_reports
 ```
-
-Or download and extract the ZIP file.
 
 ### 2. Create a Virtual Environment (Recommended)
 
@@ -48,154 +44,230 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-If you don't have a `requirements.txt` file, install packages individually:
+### 4. Initialize the Database
 ```bash
-pip install flask flask-cors pandas openpyxl matplotlib seaborn xhtml2pdf PyPDF2 pillow
+flask --app app.main init-db
 ```
 
-### 4. Verify Directory Structure
+### 5. Create a School
 
-Ensure your project structure looks like this:
+Before creating users, you need at least one school:
+
+```bash
+flask --app app.main create-school "School Name" school_slug --primary-color "#0033A0" --secondary-color "#FFCF00"
 ```
-pitcher_reports/
-├── main.py
-├── app/
-│   ├── input/              (created automatically)
-│   ├── services/
-│   │   ├── report.py
-│   │   └── pdf_generator.py
-│   ├── static/
-│   │   ├── output/         (created automatically)
-│   │   ├── pdfs/           (created automatically)
-│   │   ├── scripts.js
-│   │   ├── style.css
-│   |   └── resources/
-|   │       ├── favicon.ico
-|   │       └── strutting_eagle.png
-│   └── templates/
-│       ├── index.html
-│       └── report.html
-├── requirements.txt
-└── README.md
+
+Example:
+```bash
+flask --app app.main create-school "Morehead State University" msu --primary-color "#0033A0" --secondary-color "#FFCF00"
+```
+
+**After creating a school, add a logo:**
+1. Place your school logo at: `app/storage/schools/school_slug/assets/logo.png`
+2. Update `app/storage/schools/school_slug/assets/branding.json` with additional branding settings
+
+### 6. Create a User
+
+```bash
+flask --app app.main create-user EMAIL PASSWORD --first-name "First" --last-name "Last" --school-id 1 --role admin
+```
+
+Example:
+```bash
+flask --app app.main create-user coach@example.com password123 --first-name "John" --last-name "Doe" --school-id 1 --role admin
+```
+
+**To find your school ID:**
+```bash
+flask --app app.main list-schools
 ```
 
 ## Usage
 
 ### 1. Start the Application
 ```bash
-python main.py
+flask --app app.main run
 ```
 
-You should see output like:
-```
- * Running on http://127.0.0.1:5000
- * Restarting with stat
+Or using Python:
+```bash
+python -m flask --app app.main run
 ```
 
 ### 2. Open in Browser
 
-Navigate to: `http://127.0.0.1:5000` or `http://localhost:5000`
+Navigate to: `http://127.0.0.1:5000`
 
-### 3. Upload Data File
+### 3. Login
+
+Use the credentials you created during setup.
+
+### 4. Upload Data File
 
 1. Click the **"Upload File"** button
-2. Select a CSV or Excel file (.csv, .xlsx, .xls) containing pitcher data (Have not tested on .csv or .xls file types yet!)
+2. Select an Excel file (.xlsx) containing TrackMan pitcher data
 3. Wait for processing to complete
 
-### 4. View and Download Reports
+### 5. View and Download Reports
 
 - **View Online**: Reports appear automatically after upload
 - **Download Individual PDFs**: Click the "Download PDF" button on each report
 - **Download All**: Use File → Download in the navbar to get all reports in one PDF
 
+## School Branding Configuration
+
+Each school's branding is stored in `app/storage/schools/{slug}/assets/branding.json`:
+
+```json
+{
+    "school": {
+        "name": "School Name",
+        "short_name": "Short Name",
+        "mascot": "Mascot",
+        "slug": "school_slug"
+    },
+    "colors": {
+        "primary": "#0033A0",
+        "secondary": "#FFCF00",
+        "tertiary": "#001D39",
+        "dark": "#343434",
+        "light": "#ECECEC",
+        "accent": "#005EB8"
+    },
+    "logos": {
+        "primary": "assets/logo.png"
+    },
+    "typography": {
+        "font_family": "Graduate, sans-serif",
+        "font_weights": {
+            "light": 300,
+            "regular": 400,
+            "bold": 700
+        }
+    },
+    "report_settings": {
+        "header_height_px": 120,
+        "show_logo": true,
+        "footer_text": "© 2024 School Name. All rights reserved."
+    }
+}
+```
+
+## CLI Commands
+
+### Database
+```bash
+flask --app app.main init-db              # Initialize database
+```
+
+### Schools
+```bash
+flask --app app.main create-school NAME SLUG [OPTIONS]
+flask --app app.main list-schools         # List all schools
+```
+
+### Users
+```bash
+flask --app app.main create-user EMAIL PASSWORD [OPTIONS]
+flask --app app.main list-users           # List all users
+```
+
 ## Required Data Format
 
-The application is configured to take as input a .xlsx file in the format of a TrackMan baseball report. Contact for additional details.
+The application accepts TrackMan baseball reports in Excel format (.xlsx). The file must include the following columns:
 
-### Example Data Structure
-```xlsx
-Pitcher,PitcherId,TaggedPitchType,PlateLocHeight,PlateLocSide,BatterSide,...
-John Doe,10072522,Fastball,2.5,0.2,Right,...
-John Doe,10072522,Curveball,1.8,-0.5,Left,...
-Jane Smith,10284558,Fastball,2.7,0.1,Right,...
-```
+- `Pitcher` - Pitcher name
+- `PitcherId` - Unique pitcher identifier
+- `TaggedPitchType` - Type of pitch thrown
+- `PlateLocHeight` - Vertical plate location
+- `PlateLocSide` - Horizontal plate location
+- `BatterSide` - Left/Right handed batter
+- Additional TrackMan metrics
 
 ## Troubleshooting
 
 ### Port Already in Use
 
-If port 5000 is already in use, modify `main.py`:
-```python
-if __name__ == '__main__':
-    app.run(debug=True, port=5001)  # Change to different port
+Change the port when starting the application:
+```bash
+flask --app app.main run --port 5001
 ```
 
 ### Module Not Found Errors
 
-Make sure you're in the virtual environment and all packages are installed:
+Ensure you're in the virtual environment and packages are installed:
 ```bash
 pip install --upgrade -r requirements.txt
 ```
 
-### Permission Errors
+### Database Errors
 
-Ensure the application has write permissions for:
-- `app/input/`
-- `app/static/output/`
-- `app/static/pdfs/`
+If you encounter database issues, reinitialize:
+```bash
+flask --app app.main init-db
+```
 
 ### Images Not Loading
 
-Verify that image files exist in `app/static/resources/`:
-- `favicon.ico`
-- `strutting_eagle.png` (Property of Morehead State University)
-
-## Development
-
-### Running in Debug Mode
-
-The application runs in debug mode by default. Changes to Python files will auto-reload the server.
-
-### Modifying Styling
-
-Edit `app/static/style.css` to customize the appearance.
-
-### Changing Heat Map Settings
-
-Modify parameters in `app/services/report.py`:
+Verify the absolute path configuration in `app/main.py` line 27:
 ```python
-def pitch_heat_map_by_batter_side(path, pitcher_id, threshold=0.1):
-    # Adjust threshold, colors, figure size, etc.
+STORAGE_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'storage')
 ```
 
-## File Structure Explained
+## File Structure
 
-- **`main.py`** - Flask application entry point
-- **`app/services/report.py`** - Data processing and heat map generation
-- **`app/services/pdf_generator.py`** - PDF creation and merging
-- **`app/static/scripts.js`** - Frontend JavaScript functionality
-- **`app/static/style.css`** - Application styling
-- **`app/templates/`** - HTML templates
+```
+pitcher_reports/
+├── app/
+│   ├── __init__.py
+│   ├── main.py              # Flask application
+│   ├── cli.py               # CLI commands
+│   ├── db/
+│   │   ├── models.py        # Database models
+│   │   └── session.py
+│   ├── services/
+│   │   ├── auth.py          # Authentication
+│   │   ├── branding_loader.py
+│   │   ├── file_validator.py
+│   │   ├── pdf_generator.py
+│   │   └── report.py        # Report generation
+│   ├── static/
+│   │   ├── scripts.js
+│   │   ├── style.css
+│   │   └── resources/
+│   ├── storage/
+│   │   └── schools/
+│   │       └── {slug}/
+│   │           ├── assets/
+│   │           │   ├── logo.png
+│   │           │   └── branding.json
+│   │           ├── players/
+│   │           ├── reports/
+│   │           └── temp/
+│   └── templates/
+│       ├── dashboard.html
+│       ├── index.html
+│       └── login.html
+├── instance/
+│   └── pitcher_reports.db   # SQLite database
+├── requirements.txt
+└── README.md
+```
 
 ## Dependencies
 
 - **Flask** - Web framework
 - **Flask-CORS** - Cross-origin resource sharing
+- **Flask-Login** - User session management
+- **Flask-Bcrypt** - Password hashing
+- **Flask-SQLAlchemy** - Database ORM
 - **pandas** - Data manipulation
 - **openpyxl** - Excel file support
 - **matplotlib** - Plotting library
 - **seaborn** - Statistical visualization
 - **xhtml2pdf** - HTML to PDF conversion
 - **PyPDF2** - PDF manipulation
-- **Pillow** - Image processing
-- May be others
-
-## Creating requirements.txt
-
-To generate a requirements file:
-```bash
-pip freeze > requirements.txt
-```
+- **python-magic-bin** - File type detection
 
 ## Contributing
 
@@ -207,10 +279,10 @@ pip freeze > requirements.txt
 
 ## License
 
-This project is source-available for non-commercial use.
+This project is source-available for non-commercial use only.
 Commercial licensing is available upon request.
 
-University logos, seals, and trademarks included in this repository are the property of Morehead State University and are not licensed for reuse or redistribution. They are included solely for use by Morehead State University and its constituents.
+University logos, seals, and trademarks are the property of their respective institutions and are not licensed for reuse or redistribution.
 
 ## Contact
 
@@ -223,14 +295,6 @@ Project Link: [https://github.com/WarmFreezer/pitcher_reports](https://github.co
 - MSU Baseball Analytics Team
 - Prof. Asim Chaudhry
 
-## Support
-
-For issues and questions:
-1. Check the [Troubleshooting](#troubleshooting) section
-2. Open an issue on GitHub
-3. Contact the development team (me)
-
 ---
 
-**Version:** 1.0.0  
-**Last Updated:** January 2026
+**Last Updated:** February 2026
