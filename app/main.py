@@ -221,7 +221,7 @@ def upload_file():
 
             # Generate PDF report
             pdf_file = pdf_generator.create_pitcher_pdf_from_html(
-                school_slug=current_user.school.slug,
+                current_user=current_user,
                 pitcher_name=table_data[0],
                 pitcher_id=pitcher_id,
                 table_html=report_html,
