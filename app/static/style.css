@@ -1,11 +1,11 @@
 /* Global variables defined in :root */
 :root {
-  --primary: #92A6A6; 
-  --secondary: #E5463D; 
-  --tertiary: #BDF2F2;
+  --primary: #042026; 
+  --secondary: #a67f5d; 
+  --tertiary: #d9d2bf;
   --dark: #30312C; 
-  --light: #ECECEC;
-  --accent: #50594f;
+  --light: #ececec;
+  --accent: #401d09;
 }
 
 /* Reset */
@@ -29,7 +29,7 @@ body {
 /* Input Styles */
 input {
   border: none;
-  border-bottom: 2px solid var(--primary);
+  border-bottom: 2px solid var(--accent);
   background: transparent;
   padding: 10px 5px;
   font-size: 12px;
