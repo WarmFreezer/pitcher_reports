@@ -37,7 +37,7 @@ class CloudinaryService:
     @staticmethod
     def img_exists(public_id, extensions=None):
         if extensions is None:
-            extensions = ['jpg', 'jpeg', 'png', 'gif']
+            extensions = ['png', 'jpg', 'jpeg', 'gif']
 
         cloud_name = os.environ.get('CLOUDINARY_CLOUD_NAME')
         for ext in extensions:
