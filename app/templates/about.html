@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en" style="height: 100%;">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Baseball Analytics - About</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body onload="loadNavbar(); loadHeader('About - Baseball Analytics', '/static/resources/HomePlate.png');loadFooter();">
+    <!-- Navbar Placeholder -->
+    <div id="navbar-placeholder" style="background-color: var(--accent);"></div>
+
+    <!-- Header Placeholder -->
+    <div id="header-placeholder"></div>
+
+    <main class="main-content">
+        <div class="bubble about-bubble">
+            <h2 class="about-lead">
+                Pitcher Reports makes verbose TrackMan data easy to interpret. Build professional, coach-ready reports in minutes.
+                <br>Including quick view on the website, downloadable PDFs, and custom branding options.
+            </h2>
+
+            <div class="about-comparison" aria-label="Before and after report comparison">
+                <article class="comparison-card comparison-card--before" aria-labelledby="before-heading">
+                    <h2 id="before-heading">Before</h2>
+                    <p class="comparison-subtitle">Raw TrackMan output</p>
+                    <div class="comparison-scroll" aria-label="Scrollable TrackMan report image">
+                        <img src="{{ url_for('static', filename='resources/TrackMan.png') }}" alt="TrackMan report example" class="comparison-image comparison-image--before" style="max-height: 653px;">
+                    </div>
+                </article>
+
+                <div class="comparison-dialogue" role="note" aria-label="Transformation dialogue">
+                    <p>Go from this</p>
+                    <span class="comparison-arrow" aria-hidden="true">→</span>
+                    <p>to this</p>
+                </div>
+
+                <article class="comparison-card" aria-labelledby="after-heading">
+                    <h2 id="after-heading">After</h2>
+                    <p class="comparison-subtitle">Readable pitcher report with school branding</p>
+                    <img src="{{ url_for('static', filename='resources/PitcherReport.png') }}" alt="Pitcher report example, Used with permission" class="comparison-image comparison-image--after" style="max-height: 655px;">
+                </article>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer Placeholder -->
+    <div id="footer-placeholder"></div>
+
+    <script src="{{ url_for('static', filename='scripts.js') }}"></script>
+</body>
+</html>

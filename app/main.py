@@ -135,6 +135,10 @@ def index():
 def upload():
     return render_template('index.html')
 
+@app.route("/about")
+def about():
+    return render_template('about.html')
+
 # ****** API Endpoints ******
 @app.route('/api/upload', methods=['POST'])
 @login_required
