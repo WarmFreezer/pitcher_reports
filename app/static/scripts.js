@@ -43,7 +43,7 @@ function loadNavbar() {
                         <a href="#settings">⚙️ Settings</a>
                     </div>
                 </li>
-                <li><a href="#help" class="nav-link">Help</a></li>
+                <li><a href="/about" class="nav-link">About</a></li>
                 <li style="margin-left: auto;">
                     <a href="/logout" class="nav-link">
                         <button style="background: none; border: none; color: white; cursor: pointer; font-size: inherit; font-family: inherit; padding-right: 16px;">Logout</button>
