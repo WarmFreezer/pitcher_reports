@@ -4,4 +4,4 @@ __pycache__/
 .vscode/
 /app/storage/
 instance/pitcher_reports.db
-./.env
+.env
