@@ -2,6 +2,6 @@
 __pycache__/
 *.pyc
 .vscode/
-/app/storage/schools/*/reports/*
-/app/storage/schools/*/temp/*
+/app/storage/
 instance/pitcher_reports.db
+./.env

@@ -1,16 +1,15 @@
-from xhtml2pdf import pisa
-from io import BytesIO
 import os
-import base64
+from xhtml2pdf import pisa
+from .cloudinary_service import CloudinaryService
 
 def create_pitcher_pdf_from_html(current_user, pitcher_name, pitcher_id, table_html, output_path, branding):
     """
     Create PDF from HTML content
     """
 
-    if os.path.exists(os.path.join('app', 'storage', 'schools', current_user.school.slug, 'players', str(pitcher_id), 'pfp.png')):
-        player_pfp = os.path.join('app', 'storage', 'schools', current_user.school.slug, 'players', str(pitcher_id), 'pfp.png')
-    else:
+    cloudinary_public_id = f"schools/{current_user.school.slug}/players/{pitcher_id}/pfp"
+    player_pfp = CloudinaryService.img_exists(cloudinary_public_id)
+    if not player_pfp:
         player_pfp = os.path.join('app', 'static', 'resources', 'favicon.ico')
 
     primary_color = branding['colors']['primary']
@@ -171,3 +170,14 @@ def merge_pdfs(pdf_folder, output_path):
     merger.write(output_path)
     merger.close()
     print(f"Merged PDF created: {os.path.basename(output_path)}")
+
+def find_image_with_extensions(base_path, extensions=None):
+    """Find an image file with any of the given extensions"""
+    if extensions is None:
+        extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
+    
+    for ext in extensions:
+        path = base_path + ext
+        if os.path.exists(path):
+            return path
+    return None
