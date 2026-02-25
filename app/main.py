@@ -218,6 +218,8 @@ def upload_file():
 
             # Build table data
             table_data = report.build_table(filepath, pitcher_id)
+            if not table_data or len(table_data) < 2 or table_data[1] is None:
+                raise ValueError(f'Failed to build table data for pitcher ID {pitcher_id}')
             report_html = table_data[1].to_html(index=False, float_format='%.2f', border=0, classes='pitcher-data-table', escape=False, justify='left', na_rep='')
 
             # Add to reports list

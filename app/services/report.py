@@ -28,7 +28,7 @@ required_columns = {
     'RelHeight': 'numeric', 
     'RelSide': 'numeric', 
     'Extension': 'numeric', 
-    'Tilt': 'datetime',
+    'Tilt': 'string',
     'ZoneTime': 'numeric', 
     'PitchCall': 'string',
 }
@@ -106,9 +106,14 @@ def build_table(path, pitcherid):
                 game_report['hRel'].append(pitch_type_data['RelSide'].mean())
                 game_report['Ext.'].append(pitch_type_data['Extension'].mean())
 
-                # Format Datetime for Tilt 
-                axis_dir = pitch_type_data['Tilt'].mean()
-                axis_time = axis_dir.strftime("%H:%M")
+                # Parse Tilt values and report only hour:minute
+                tilt_text = pitch_type_data['Tilt'].astype(str).str.strip()
+                tilt_parsed = pd.to_datetime(tilt_text, format='%H:%M', errors='coerce')
+                tilt_parsed = tilt_parsed.fillna(pd.to_datetime(tilt_text, format='%H:%M:%S', errors='coerce'))
+                tilt_parsed = tilt_parsed.fillna(pd.to_datetime(tilt_text, format='%I:%M:%S %p', errors='coerce'))
+                tilt_parsed = tilt_parsed.fillna(pd.to_datetime(tilt_text, format='%I:%M %p', errors='coerce')).dropna()
+                axis_mean = tilt_parsed.mean()
+                axis_time = axis_mean.strftime('%H:%M') if not pd.isna(axis_mean) else 'N/A'
 
                 game_report['Axis'].append(axis_time) 
                 game_report['Zone %'].append(pitch_type_data['ZoneTime'].mean() * 100)
@@ -169,6 +174,7 @@ def build_table(path, pitcherid):
         
     except Exception as e:
         print(f"Error building table for pitcher ID {pitcherid}: {e}")
+        return None
 
 def pitch_heat_map_by_batter_side(id, input_path, output_path, pitcher_id, threshold=0.1):
     try:

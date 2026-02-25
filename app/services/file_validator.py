@@ -1,6 +1,7 @@
 import os
 import magic
 import hashlib
+import re
 import numpy as np
 import pandas as pd
 from werkzeug.utils import secure_filename
@@ -28,13 +29,32 @@ MAX_COLUMNS = 200  # Maximum number of columns allowed in the file
 
 class file_validator:
     @staticmethod
+    def _is_valid_timestamp_value(value):
+        if pd.isna(value):
+            return True
+
+        text = str(value).strip()
+        if text.lower() in {'', 'nan', 'none', 'nat'}:
+            return True
+
+        formats = ('%I:%M:%S %p', '%I:%M %p', '%H:%M:%S', '%H:%M')
+        for timestamp_format in formats:
+            try:
+                parsed = pd.to_datetime(text, format=timestamp_format, errors='raise')
+                return isinstance(parsed, pd.Timestamp)
+            except Exception:
+                continue
+
+        return False
+
+    @staticmethod
     def check_extension(filename):
         if '.' not in filename:
-            return False
+            return False, 'Filename has no extension'
         
         ext = filename.rsplit('.', 1)[1].lower()
         if ext not in ALLOWED_EXTENSIONS:
-            return False
+            return False, 'Unsupported file extension: {}'.format(ext)
         
         print('Extension:', ext)
         return True, ext
@@ -44,10 +64,10 @@ class file_validator:
         dangerous_patterns = ['..', '/', '\\', '%00', '\x00']
         for pattern in dangerous_patterns:
             if pattern in filename:
-                return False
+                return False, 'Filename contains invalid pattern: {}'.format(pattern)
             
         if len(filename) > 255:
-            return False
+            return False, 'Filename is too long'
         
         return True, None
     
@@ -58,7 +78,7 @@ class file_validator:
         file.seek(0)
         
         if size == 0:
-            return False
+            return False, 'File is empty'
 
         if size > MAX_FILE_SIZE:
             return False, 'File too large. Max Size: {} bytes'.format(MAX_FILE_SIZE)
@@ -135,6 +155,8 @@ class file_validator:
         try: 
             for col in column_types:
                 expected_type = column_types[col]
+                if col not in df.columns:
+                    return False, 'Column not found for type check: {}'.format(col)
                 
                 if expected_type == 'numeric':
                     cleaned = (
@@ -145,8 +167,10 @@ class file_validator:
                     )
                      
                     pd.to_numeric(cleaned, errors='raise')  
-                elif expected_type == 'datetime':
-                    pd.to_datetime(df[col], errors='raise')
+                elif expected_type == 'timestamp':
+                    for value in df[col]:
+                        if not file_validator._is_valid_timestamp_value(value):
+                            return False, 'Invalid timestamp value in column {}: {}'.format(col, value)
                 elif expected_type == 'string':
                     df[col] = df[col].astype(str)
                 else:
