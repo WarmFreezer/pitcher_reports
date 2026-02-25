@@ -28,7 +28,7 @@ required_columns = {
     'RelHeight': 'numeric', 
     'RelSide': 'numeric', 
     'Extension': 'numeric', 
-    'SpinAxis': 'numeric', 
+    'Tilt': 'datetime',
     'ZoneTime': 'numeric', 
     'PitchCall': 'string',
 }
@@ -64,7 +64,7 @@ def build_table(path, pitcherid):
         else: 
             raise ValueError("Unsupported file format. Please provide a .csv, .xlsx, or .xls file.")
         
-        table = excel[['Pitcher', 'PitcherId', 'TaggedPitchType', 'RelSpeed', 'InducedVertBreak', 'HorzBreak', 'SpinRate', 'VertApprAngle', 'HorzApprAngle', 'RelHeight', 'RelSide', 'Extension', 'SpinAxis', 'ZoneTime', 'PlateLocHeight', 'PlateLocSide', 'PitchCall']] 
+        table = excel[['Pitcher', 'PitcherId', 'TaggedPitchType', 'RelSpeed', 'InducedVertBreak', 'HorzBreak', 'SpinRate', 'VertApprAngle', 'HorzApprAngle', 'RelHeight', 'RelSide', 'Extension', 'Tilt', 'ZoneTime', 'PlateLocHeight', 'PlateLocSide', 'PitchCall']] 
 
         pitcher_data = table[table['PitcherId'] == pitcherid]
         pitcher = pitcher_data['Pitcher'].iloc[0]
@@ -85,9 +85,7 @@ def build_table(path, pitcherid):
                     'Axis': [],
                     'Zone %': [],
                     'Chase %': [],
-                    'Whiff %': [],
-                    'CS%': [],
-                    'SW%': []}
+                    'CSW %': []}
                         
         # Parse through each pitch type for the pitcher
         for pitch_type in pitcher_data['TaggedPitchType'].unique():
@@ -108,15 +106,11 @@ def build_table(path, pitcherid):
                 game_report['hRel'].append(pitch_type_data['RelSide'].mean())
                 game_report['Ext.'].append(pitch_type_data['Extension'].mean())
 
-                # Calculate Spin Axis in clock format
-                axis_mean = str(pitch_type_data['SpinAxis'].mean())
-                axis_front = axis_mean.split('.')[0]
-                axis_back = axis_mean.split('.')[-1]
+                # Format Datetime for Tilt 
+                axis_dir = pitch_type_data['Tilt'].mean()
+                axis_time = axis_dir.strftime("%H:%M")
 
-                axis_hours = int(axis_front) % 12
-                axis_minutes = int(axis_back) % 60
-
-                game_report['Axis'].append(f"{axis_hours}:{axis_minutes:02d}") 
+                game_report['Axis'].append(axis_time) 
                 game_report['Zone %'].append(pitch_type_data['ZoneTime'].mean() * 100)
 
                 # Calculate Chase %
@@ -139,15 +133,15 @@ def build_table(path, pitcherid):
                     if swing_and_miss:
                         whiff_count += 1
                 
-                game_report['Whiff %'].append(whiff_count / len(pitch_type_data) * 100.00)
+                #game_report['Whiff %'].append(whiff_count / len(pitch_type_data) * 100.00)
 
                 # Calculate Called Strikes %
                 called_strike_count = 0
                 for _, row in pitch_type_data.iterrows():
-                    if (row['PitchCall'] in ['StrikeCalled', 'StrikeSwinging']):
+                    if (row['PitchCall'] in ['StrikeCalled']):
                         called_strike_count += 1
                 
-                game_report['CS%'].append(called_strike_count / len(pitch_type_data) * 100.00)
+                #game_report['CS%'].append(called_strike_count / len(pitch_type_data) * 100.00)
 
                 # Calculate Swing and Miss %
                 swinging_strike_count = 0
@@ -155,7 +149,10 @@ def build_table(path, pitcherid):
                     if (row['PitchCall'] in ['StrikeSwinging']):
                         swinging_strike_count += 1
                 
-                game_report['SW%'].append(swinging_strike_count / len(pitch_type_data) * 100.00)
+                #game_report['SW%'].append(swinging_strike_count / len(pitch_type_data) * 100.00)
+
+                csw_percent = (called_strike_count + swinging_strike_count) / len(pitch_type_data) * 100.00
+                game_report['CSW %'].append(csw_percent)
 
         
         # Set panda options to show all rows/columns

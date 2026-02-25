@@ -1,10 +1,9 @@
-import magic
-import pandas as pd
-import hashlib
 import os
-from werkzeug.utils import secure_filename
-from flask import request, jsonify
+import magic
+import hashlib
 import numpy as np
+import pandas as pd
+from werkzeug.utils import secure_filename
 
 ALLOWED_EXTENSIONS = {'csv', 'xlsx', 'xls'}
 ALLOWED_MIME_TYPES = {

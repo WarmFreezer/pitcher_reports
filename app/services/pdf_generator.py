@@ -1,17 +1,30 @@
-from xhtml2pdf import pisa
-from io import BytesIO
 import os
 import base64
+import requests
+from PIL import Image
+from io import BytesIO
+from xhtml2pdf import pisa
+from .cloudinary_service import CloudinaryService
 
 def create_pitcher_pdf_from_html(current_user, pitcher_name, pitcher_id, table_html, output_path, branding):
     """
     Create PDF from HTML content
     """
 
-    if os.path.exists(os.path.join('app', 'storage', 'schools', current_user.school.slug, 'players', str(pitcher_id), 'pfp.png')):
-        player_pfp = os.path.join('app', 'storage', 'schools', current_user.school.slug, 'players', str(pitcher_id), 'pfp.png')
-    else:
+    cloudinary_public_id = f"schools/{current_user.school.slug}/players/{pitcher_id}/pfp"
+    player_pfp = CloudinaryService.img_exists(cloudinary_public_id)
+    if not player_pfp:
         player_pfp = os.path.join('app', 'static', 'resources', 'favicon.ico')
+
+    cloudinary_public_id = f"schools/{current_user.school.slug}/assets/logo"
+    school_logo = CloudinaryService.img_exists(cloudinary_public_id)
+    if not school_logo:
+        school_logo = os.path.join('app', 'static', 'resources', 'homeplate.png')
+    else:
+        response = requests.get(school_logo)
+        img = Image.open(BytesIO(response.content))
+        school_logo = img.convert("RGBA")
+    school_logo = image_to_base64(school_logo)
 
     primary_color = branding['colors']['primary']
     secondary_color = branding['colors']['secondary']
@@ -136,7 +149,7 @@ def create_pitcher_pdf_from_html(current_user, pitcher_name, pitcher_id, table_h
                     <h1>Pitcher Report for {pitcher_name}</h1>
                 </td>
                 <td class="header-right">
-                    <img src="app/storage/schools/{current_user.school.slug}/assets/logo.png" height="128" alt="{current_user.school.slug} Logo">
+                    <img src="{school_logo}" height="128" alt="{current_user.school.slug} Logo">
                 </td>
             </tr>
         </table>
@@ -184,3 +197,21 @@ def merge_pdfs(pdf_folder, output_path):
     merger.write(output_path)
     merger.close()
     print(f"Merged PDF created: {os.path.basename(output_path)}")
+
+def find_image_with_extensions(base_path, extensions=None):
+    """Find an image file with any of the given extensions"""
+    if extensions is None:
+        extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
+    
+    for ext in extensions:
+        path = base_path + ext
+        if os.path.exists(path):
+            return path
+    return None
+
+def image_to_base64(img):
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    buffer.seek(0)
+    b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+    return f"data:image/png;base64,{b64}"
