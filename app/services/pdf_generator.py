@@ -65,6 +65,16 @@ def create_pitcher_pdf_from_html(current_user, pitcher_name, pitcher_id, table_h
                 height: auto;
             }}
 
+            .breakmap {{
+                text-align: center;
+                margin: 15px 0;
+                padding: 0;
+            }}
+            .breakmap img {{ 
+                width: 90%;
+                height: auto;
+            }}
+
             /* Table styling optimized for xhtml2pdf */
             table.dataframe {{ 
                 width: 100%; 
@@ -133,7 +143,10 @@ def create_pitcher_pdf_from_html(current_user, pitcher_name, pitcher_id, table_h
 
         <main>
             <div class="heatmap">
-                <img src="app/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_heat_map.png" alt="Heat Map" width="800">
+                <img src="app/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_heat_map.png" alt="Heat Map" width="600">
+            </div>
+            <div class="breakmap">
+                <img src="app/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_break_map.png" alt="Break Map" width="300">
             </div>
             {table_html}
         </main>

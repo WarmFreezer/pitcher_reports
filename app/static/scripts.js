@@ -235,7 +235,7 @@ function generateReport(data) {
     const heatmapContainer = clone.querySelector('.pitcher-heatmap');
     if (heatmapContainer) {
         const img = document.createElement('img');
-        img.src = data.image_url;
+        img.src = data.heatmap_url;
         img.alt = `${data.pitcher_name} Heat Map`;
         img.width = 800;
         img.onerror = function() {
@@ -243,6 +243,20 @@ function generateReport(data) {
             this.alt = 'Image not available';
         };
         heatmapContainer.appendChild(img);
+    }
+
+    // Add breakmap image
+    const breakmapContainer = clone.querySelector('.pitcher-breakmap');
+    if (breakmapContainer) {
+        const img = document.createElement('img');
+        img.src = data.breakmap_url;
+        img.alt = `${data.pitcher_name} Break Map`;
+        img.width = 400;
+        img.onerror = function() {
+            console.error('Failed to load image:', this.src);
+            this.alt = 'Image not available';
+        };
+        breakmapContainer.appendChild(img);
     }
 
     // Add pitcher table

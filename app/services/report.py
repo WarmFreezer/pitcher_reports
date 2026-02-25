@@ -5,6 +5,7 @@ import matplotlib
 # Use a non-interactive backend for matplotlib
 matplotlib.use('Agg') 
 
+from matplotlib.patches import Rectangle
 from matplotlib import pyplot as plt
 import matplotlib.patches as patches
 import seaborn as sns
@@ -50,6 +51,7 @@ pitch_point_colors = {
     'Changeup': '#FF8800',
     'Splitter': '#AA00AA',
     'Knuckleball': '#CC8800',
+    'Sinker': '#0088FF',
     'Undefined': '#888888'
 }
 
@@ -224,30 +226,30 @@ def pitch_heat_map_by_batter_side(id, input_path, output_path, pitcher_id, thres
                         ax=ax,
                         levels=2
                     )
-                
-                # Plot individual points
-                '''ax.scatter(
-                    pitch_data['PlateLocSide'],
-                    pitch_data['PlateLocHeight'],
-                    color=point_color,
-                    alpha=0.6,
-                    s=50,
-                    edgecolors='black',
-                    linewidth=0.5,
-                    label=f'{pitch_type} (n={len(pitch_data)})'
-                )'''
 
-                # Plot average pitch location for pitich type
-                avg_side = pitch_data['PlateLocSide'].mean()
-                avg_height = pitch_data['PlateLocHeight'].mean()
-                ax.scatter(
-                    avg_side, 
-                    avg_height,
-                    color=point_color,
-                    marker='.',
-                    s=100,
-                    label=f'{pitch_type} Avg: {len(pitch_data)} pitches'
-                )
+                    # Plot average pitch location for pitch type
+                    avg_side = pitch_data['PlateLocSide'].mean()
+                    avg_height = pitch_data['PlateLocHeight'].mean()
+                    ax.scatter(
+                        avg_side, 
+                        avg_height,
+                        color=point_color,
+                        marker='.',
+                        s=100,
+                        label=f'{pitch_type} Avg: {len(pitch_data)} pitches'
+                    )
+                else:
+                    # Plot individual points
+                    ax.scatter(
+                        pitch_data['PlateLocSide'],
+                        pitch_data['PlateLocHeight'],
+                        color=point_color,
+                        alpha=0.6,
+                        s=50,
+                        edgecolors='black',
+                        linewidth=0.5,
+                        label=f'{pitch_type} (n={len(pitch_data)})'
+                    )
             
             # Set plot properties
             ax.set_title(f'vs {batter_side}-Handed Batters (n={len(batter_data)})', fontsize=14, fontweight='bold', pad=10)
@@ -258,11 +260,20 @@ def pitch_heat_map_by_batter_side(id, input_path, output_path, pitcher_id, thres
             ax.set_aspect('equal', adjustable='box')
             
             # Add strike zone rectangle (approximate)
-            from matplotlib.patches import Rectangle
             strike_zone = Rectangle((-0.83, 1.5), 1.66, 2.0, 
                                 linewidth=2, edgecolor='black', 
                                 facecolor='none', linestyle='--')
             ax.add_patch(strike_zone)
+
+            # Add shadow zone rectangle (approximate)
+            baseball_width = 0.24  # Approximate width of a baseball in feet
+            shadow_zone = Rectangle(
+                (-0.83 - baseball_width, 1.5 - baseball_width), 
+                1.66 + 2 *baseball_width, 
+                2.0 + 2 * baseball_width, 
+                                linewidth=1, edgecolor='gray', 
+                                facecolor='none', linestyle=(0, (1, 10)))
+            ax.add_patch(shadow_zone)
             
             # Add legend
             handles, labels = ax.get_legend_handles_labels()
@@ -282,3 +293,108 @@ def pitch_heat_map_by_batter_side(id, input_path, output_path, pitcher_id, thres
 
     except Exception as e:
         print(f"Error generating heat map for pitcher ID {pitcher_id}: {e}")
+
+def pitch_break_map(id, input_path, output_path, pitcher_id, threshold=0.1):
+    try:
+        if input_path.endswith('.csv'):
+            excel = pd.read_csv(input_path)
+        elif input_path.endswith('.xlsx') or input_path.endswith('.xls'):
+            excel = pd.read_excel(input_path)
+        else: 
+            raise ValueError("Unsupported file format. Please provide a .csv, .xlsx, or .xls file.")
+
+        table = excel[['Pitcher', 'PitcherId', 'TaggedPitchType', 'InducedVertBreak', 'HorzBreak']] 
+        pitcher_data = table[table['PitcherId'] == pitcher_id]
+
+        # Create subplot for pitch break
+        fig, ax = plt.subplots(figsize=(9, 8))
+        
+        if len(pitcher_data) == 0:
+            ax.text(0, 2.5, f'No data for pitcher ID {pitcher_id}', 
+                ha='center', va='center', fontsize=14)
+            ax.set_xlim(-3, 3)
+            ax.set_ylim(0, 5)
+            plt.savefig(os.path.join(output_path, f'{id}_pitcher_{pitcher_id}_break_map.png'), pad_inches=0.3, dpi=300, bbox_inches='tight')
+            plt.close()
+            return
+        
+        # Get unique pitch types for this pitcher
+        pitch_types = pitcher_data['TaggedPitchType'].unique()
+        pitch_types = [pt for pt in pitch_types if pt != 'n/a']
+        
+        # Plot each pitch type
+        for pitch_type in pitch_types:
+            pitch_data = pitcher_data[pitcher_data['TaggedPitchType'] == pitch_type]
+            cmap = pitch_colors.get(pitch_type, 'viridis')
+            point_color = pitch_point_colors.get(pitch_type, '#000000')
+            
+            # Use KDE for pitch types with 5 or more pitches
+            if len(pitch_data) >= 5:
+                # Adjust bandwidth for better smoothing with sparse data
+                bw_adjust = 1.5 if len(pitch_data) < 20 else 1.0
+                
+                point_color = pitch_point_colors.get(pitch_type, '#000000')
+                sns.kdeplot(
+                    x=pitch_data['HorzBreak'],
+                    y=pitch_data['InducedVertBreak'],
+                    fill=True,
+                    thresh=threshold,       
+                    color=point_color,
+                    alpha=0.6,
+                    bw_adjust=bw_adjust,
+                    ax=ax,
+                    levels=2
+                )
+
+                # Plot average pitch location for pitch type
+                avg_side = pitch_data['HorzBreak'].mean()
+                avg_height = pitch_data['InducedVertBreak'].mean()
+                ax.scatter(
+                    avg_side, 
+                    avg_height,
+                    color=point_color,
+                    marker='.',
+                    s=100,
+                    label=f'{pitch_type} Avg: {len(pitch_data)} pitches'
+                )
+            else:
+                # Plot individual points
+                ax.scatter(
+                    pitch_data['HorzBreak'],
+                    pitch_data['InducedVertBreak'],
+                    color=point_color,
+                    alpha=0.6,
+                    s=50,
+                    edgecolors='black',
+                    linewidth=0.5,
+                    label=f'{pitch_type} (n={len(pitch_data)})'
+                )
+            
+        # Set plot properties
+        ax.set_title(f'Pitch Break (n={len(pitcher_data)})', fontsize=14, fontweight='bold', pad=10)
+        ax.set_xlabel('Horizontal Break (ft)', fontsize=12, labelpad=8)
+        ax.set_ylabel('Induced Vertical Break (ft)', fontsize=12, labelpad=8)
+        ax.set_xlim(-25, 25)
+        ax.set_ylim(-25, 25)
+        ax.grid(True, linestyle='--', alpha=0.5)
+        ax.set_aspect('equal', adjustable='box')
+        
+        # Add legend
+        handles, labels = ax.get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        ax.legend(by_label.values(), by_label.keys(), loc='upper right', fontsize=12)
+        
+        # Overall title
+        fig.suptitle(f'Pitch Break Heat Map for Pitcher ID: {pitcher_id}', 
+                    fontsize=16, fontweight='bold', y=0.99)
+        
+        # Adjust spacing to make room for title
+        plt.subplots_adjust(left=0.06, right=0.96, top=0.88, bottom=0.1, wspace=0.2)
+
+        # Save the figure in the output folder for report building
+        plt.savefig(os.path.join(output_path, f'{id}_pitcher_{pitcher_id}_break_map.png'), pad_inches=0.3, dpi=300, bbox_inches='tight')
+        plt.close()
+
+    except Exception as e:
+        print(f"Error reading file for pitcher ID {pitcher_id}: {e}")
+        return

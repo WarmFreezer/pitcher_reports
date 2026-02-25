@@ -214,7 +214,8 @@ def upload_file():
         for pitcher_id in df['PitcherId'].unique():
             # Generate heat map
             report.pitch_heat_map_by_batter_side(current_user.id, filepath, school_temp_folder, pitcher_id, 0.75)
-            
+            report.pitch_break_map(current_user.id, filepath, school_temp_folder, pitcher_id, 0.75)
+
             # Build table data
             table_data = report.build_table(filepath, pitcher_id)
             report_html = table_data[1].to_html(index=False, float_format='%.2f', border=0, classes='pitcher-data-table', escape=False, justify='left', na_rep='')
@@ -224,7 +225,8 @@ def upload_file():
                 'pitcher_name': table_data[0],
                 'pitcher_id': str(pitcher_id),
                 'pitcher_table': report_html,
-                'image_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_heat_map.png',
+                'heatmap_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_heat_map.png',
+                'breakmap_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_break_map.png',
                 'pdf_url': f'/storage/schools/{current_user.school.slug}/reports/{current_user.id}_pitcher_{pitcher_id}_report.pdf'
             })
 
