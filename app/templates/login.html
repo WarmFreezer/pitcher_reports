@@ -5,8 +5,18 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Login - Pitcher Reports</title>
         <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+        <style>
+        .upload-btn:hover {
+            background-color: var(--accent);
+            text-decoration: none;
+        }
+        </style>
     </head>
-    <body onload="loadHeader('Pitcher Reports - Baseball Analytics', '/static/resources/HomePlate.png');loadFooter();">
+    <body onload="loadNavbar(); loadHeader('Pitcher Reports - Baseball Analytics', '/static/resources/HomePlate.png'); loadFooter();">
+        <!-- Navbar Placeholder -->
+        <div id="navbar-placeholder"></div>
+
         <!-- Header Placeholder -->
         <div id="header-placeholder"></div>
 
@@ -23,11 +33,11 @@
                 {% endwith %}
 
                 <form method="POST">
-                    <input type="email" name="email" placeholder="Email" required>
-                    <input type="password" name="password" placeholder="Password" required>
+                    <input class="bubble" type="email" name="email" placeholder="Email" required style="color: var(--tertiary); margin: 8px; background-color: white; border: 2px solid var(--accent);"><br>
+                    <input class="bubble" type="password" name="password" placeholder="Password" required style="color: var(--tertiary); margin: 8px; background-color: white; border: 2px solid var(--accent);"><br>
                     <label>
-                        <input style="margin: 10px 0 10px 0; width: 5%" type="checkbox" name="remember"> Remember Me
-                    </label>
+                        <input style="margin: 0 0 10px 0; width: 5%; accent-color: var(--tertiary);" type="checkbox" name="remember"> Remember Me
+                    </label><br>
                     <button type="submit" class="upload-btn">Login</button>
                 </form>
 

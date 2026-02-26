@@ -21,7 +21,7 @@ function loadNavbar() {
     const navbarHTML = `
         <nav class="main-nav">
             <ul class="nav-list">
-                <li><a href="/upload" class="nav-link">Home</a></li>
+                <li><a href="/" class="nav-link">Home</a></li>
                 <li class="dropdown">
                     <a href="javascript:void(0)" class="nav-link">File ▼</a>
                     <div class="dropdown-content">
