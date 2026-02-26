@@ -193,6 +193,7 @@ function loadFooter() {
     const footerHTML = `
         <footer class="site-footer">
             <p>&copy; 2026 Thomas Eubank</p>
+            <a href=/about style="color: white;">About</a>
         </footer>
     `;
     document.getElementById('footer-placeholder').innerHTML = footerHTML;

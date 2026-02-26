@@ -13,17 +13,14 @@
         }
         </style>
     </head>
-    <body onload="loadNavbar(); loadHeader('Pitcher Reports - Baseball Analytics', '/static/resources/HomePlate.png'); loadFooter();">
-        <!-- Navbar Placeholder -->
-        <div id="navbar-placeholder"></div>
-
+    <body onload="loadHeader('Pitcher Reports - Baseball Analytics', '/static/resources/HomePlate.png'); loadFooter();">
         <!-- Header Placeholder -->
         <div id="header-placeholder"></div>
 
-        <main class="auth-page">
+        <main class="auth-page main-content">
             <section class="auth-card">
                 <div class="auth-form-panel">
-                    <h2>Login</h2>
+                    <h2 style="color: var(--tertiary);">Login</h2>
 
                     {% with messages = get_flashed_messages(with_categories=true) %}
                         {% if messages %}
@@ -34,14 +31,18 @@
                     {% endwith %}
 
                     <form method="POST" class="auth-form">
-                        <input class="bubble" type="email" name="email" placeholder="Email" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent);"><br>
-                        <input class="bubble" type="password" name="password" placeholder="Password" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent);"><br>
+                        <input class="bubble" type="email" name="email" placeholder="Email" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
+                        <input class="bubble" type="password" name="password" placeholder="Password" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
                         <label class="switch-field" for="remember-me" style="margin: 8px 0;">
                             <input id="remember-me" class="switch-input" type="checkbox" name="remember">
                             <span class="switch-slider" aria-hidden="true"></span>
                             <span class="switch-text">Remember Me</span>
                         </label><br>
                         <button type="submit" class="upload-btn" style="max-width: 750px; width: 100%;">Login</button>
+                        <div style="display: flex;">
+                            <a href="/create-account" style="color: var(--tertiary); font-size: 16px; text-align: left;">Create Account</a>
+                            <a href="/reset-password" style="color: var(--tertiary); font-size: 16px; text-align: right; flex-grow: 1;">Reset Password</a>
+                        </div>
                     </form>
                 </div>
                 <div class="auth-visual-panel">
@@ -49,6 +50,7 @@
                 </div>
             </section>
         </main>
+
         <!-- Footer Placeholder -->
         <div id="footer-placeholder"></div>
 

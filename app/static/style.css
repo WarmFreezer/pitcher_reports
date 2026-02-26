@@ -50,20 +50,21 @@ input:focus {
 
 /* Auth Panel */
 .auth-page { 
-    min-height: calc(100vh - 220px); 
-    display: grid; 
-    place-items: center; 
-    padding: 24px; 
+    display: flex; 
+    align-items: flex-start;
+    justify-content: center; 
 }
 
 .auth-card { 
-    width: min(1100px, 100%); 
-    min-height: 620px; 
+    margin: 32px 0;
+    width: 75%;
+    min-height: 300px;
     display: grid; 
     grid-template-columns: 1fr 1fr; 
     border-radius: 24px; 
     overflow: hidden; 
     background: var(--light); 
+    height: 75%;
 }
 
 .auth-form-panel { 
@@ -72,10 +73,12 @@ input:focus {
     flex-direction: column; 
     justify-content: center; 
     gap: 12px; 
+    overflow-y: auto;
 }
 
 .auth-visual-panel { 
     position: relative; 
+    min-height: 100%;
 }
 
 .auth-visual-panel img { 
@@ -92,14 +95,27 @@ input:focus {
 }
 
 @media (max-width: 900px) { 
+    .auth-page {
+        align-items: flex-start;
+        padding: 16px;
+        margin: 32px;
+    }
+
     .auth-card { 
         grid-template-columns: 1fr; 
+        max-height: 100%;
+        min-width: fit-content;
     } 
     
     .auth-visual-panel 
     { 
-        min-height: 220px; 
+        height: 100%;
     } 
+
+    .auth-form-panel 
+    { 
+        padding: 24px;
+    }
 }
 
 /* Switch Styles */
@@ -124,6 +140,7 @@ input:focus {
 }
 
 .switch-slider {
+    margin:0;
     position: relative;
     width: 48px;
     height: 26px;
@@ -146,7 +163,7 @@ input:focus {
 }
 
 .switch-input:checked + .switch-slider {
-    background-color: var(--secondary);
+    background-color: var(--tertiary);
 }
 
 .switch-input:checked + .switch-slider::after {
@@ -160,6 +177,7 @@ input:focus {
 
 .switch-text {
     color: var(--tertiary);
+    font-size: 16px;
 }
 
 /* Change autofill background color in WebKit/Chromium browsers */
@@ -203,6 +221,46 @@ input:-webkit-autofill:active {
 
 .nav-link:hover {
     background-color: var(--tertiary);
+}
+
+@media (max-width: 900px) {
+    /* Add Hamburger menu or similar */
+    .main-nav {
+        position: fixed;
+        bottom: -100%;
+        left: 0;
+        right: 0;
+        z-index: 999;
+        border-bottom: none;
+        border-top: 2px solid var(--secondary);
+        transition: bottom 0.3s ease;
+        max-height: 70vh;
+        overflow-y: auto;
+    }
+
+    .main-nav.mobile-open {
+        bottom: 0;
+    }
+
+    .nav-list {
+        flex-direction: column;
+        padding: 20px;
+    }
+
+    .nav-list li {
+        width: 100%;
+        border-bottom: 1px solid var(--secondary);
+    }
+
+    .nav-list li:last-child {
+        margin-left:0;
+    }
+
+    .nav-link {
+        padding: 16px 20px;
+        text-align: left;
+    }
+
 }
 
 /* Dropdown Styles */
@@ -271,6 +329,18 @@ input:-webkit-autofill:active {
 
 .header-center h1 {
     margin: 0;
+}
+
+@media (max-width: 900px) {
+    .header-container {
+        height: auto;
+        flex-direction: column;
+        padding: 20px 0;
+    }
+    
+    .header-right {
+        display: none;
+    }
 }
 
 /* Main Content */
@@ -403,7 +473,6 @@ input:-webkit-autofill:active {
     color: white;
     text-align: center;
     padding: 20px;
-    margin-top: 40px;
 }
 
 /* Pitcher Table */
