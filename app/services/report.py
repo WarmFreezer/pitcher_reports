@@ -239,7 +239,7 @@ def pitch_heat_map_by_batter_side(id, input_path, output_path, pitcher_id, thres
                         color=point_color,
                         marker='.',
                         s=100,
-                        label=f'{pitch_type} Avg: {len(pitch_data)} pitches'
+                        label=f'{pitch_type}: {len(pitch_data)} pitches'
                     )
                 else:
                     # Plot individual points
@@ -251,7 +251,7 @@ def pitch_heat_map_by_batter_side(id, input_path, output_path, pitcher_id, thres
                         s=50,
                         edgecolors='black',
                         linewidth=0.5,
-                        label=f'{pitch_type} (n={len(pitch_data)})'
+                        label=f'{pitch_type}: {len(pitch_data)} pitches'
                     )
             
             # Set plot properties
@@ -306,7 +306,7 @@ def pitch_break_map(id, input_path, output_path, pitcher_id, threshold=0.1):
         else: 
             raise ValueError("Unsupported file format. Please provide a .csv, .xlsx, or .xls file.")
 
-        table = excel[['Pitcher', 'PitcherId', 'TaggedPitchType', 'InducedVertBreak', 'HorzBreak']] 
+        table = excel[['Pitcher', 'PitcherId', 'TaggedPitchType', 'InducedVertBreak', 'HorzBreak', ]] 
         pitcher_data = table[table['PitcherId'] == pitcher_id]
 
         # Create subplot for pitch break
@@ -358,7 +358,7 @@ def pitch_break_map(id, input_path, output_path, pitcher_id, threshold=0.1):
                     color=point_color,
                     marker='.',
                     s=100,
-                    label=f'{pitch_type} Avg: {len(pitch_data)} pitches'
+                    label=f'{pitch_type}: {len(pitch_data)} pitches'
                 )
             else:
                 # Plot individual points
@@ -370,11 +370,16 @@ def pitch_break_map(id, input_path, output_path, pitcher_id, threshold=0.1):
                     s=50,
                     edgecolors='black',
                     linewidth=0.5,
-                    label=f'{pitch_type} (n={len(pitch_data)})'
+                    label=f'{pitch_type}: {len(pitch_data)} pitches'
                 )
-            
+
+        # Plot overall average movement vector for the pitcher
+        movement_angle = np.degrees(np.arctan2(pitcher_data['InducedVertBreak'].mean(), pitcher_data['HorzBreak'].mean()))
+        movement_magnitude = np.sqrt(pitcher_data['HorzBreak']**2 + pitcher_data['InducedVertBreak']**2)
+        ax.quiver(0, 0, pitcher_data['HorzBreak'].mean(), pitcher_data['InducedVertBreak'].mean(), angles='xy', scale_units='xy', scale=1, color='gray', width=0.005)
+
         # Set plot properties
-        ax.set_title(f'Pitch Break (n={len(pitcher_data)})', fontsize=14, fontweight='bold', pad=10)
+        ax.set_title(f'Pitch Break (n={len(pitcher_data)}), Movement Angle: {movement_angle:.1f}°', fontsize=14, fontweight='bold', pad=10)
         ax.set_xlabel('Horizontal Break (ft)', fontsize=12, labelpad=8)
         ax.set_ylabel('Induced Vertical Break (ft)', fontsize=12, labelpad=8)
         ax.set_xlim(-25, 25)
