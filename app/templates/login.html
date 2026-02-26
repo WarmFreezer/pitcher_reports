@@ -20,28 +20,34 @@
         <!-- Header Placeholder -->
         <div id="header-placeholder"></div>
 
-        <main class="main-content">
-            <div style="padding: 20px; background-color: var(--light); border-radius: 32px; margin: 32px;">
-                <h2>Login</h2>
+        <main class="auth-page">
+            <section class="auth-card">
+                <div class="auth-form-panel">
+                    <h2>Login</h2>
 
-                {% with messages = get_flashed_messages(with_categories=true) %}
-                    {% if messages %}
-                        {% for category, message in messages %}
-                        <div class="flash {{ category }}">{{ message }}</div>
-                        {% endfor %}
-                    {% endif %}
-                {% endwith %}
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                            <div class="flash {{ category }}">{{ message }}</div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
 
-                <form method="POST">
-                    <input class="bubble" type="email" name="email" placeholder="Email" required style="color: var(--tertiary); margin: 8px; background-color: white; border: 2px solid var(--accent);"><br>
-                    <input class="bubble" type="password" name="password" placeholder="Password" required style="color: var(--tertiary); margin: 8px; background-color: white; border: 2px solid var(--accent);"><br>
-                    <label>
-                        <input style="margin: 0 0 10px 0; width: 5%; accent-color: var(--tertiary);" type="checkbox" name="remember"> Remember Me
-                    </label><br>
-                    <button type="submit" class="upload-btn">Login</button>
-                </form>
-
-            </div>
+                    <form method="POST" class="auth-form">
+                        <input class="bubble" type="email" name="email" placeholder="Email" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent);"><br>
+                        <input class="bubble" type="password" name="password" placeholder="Password" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent);"><br>
+                        <label class="switch-field" for="remember-me" style="margin: 8px 0;">
+                            <input id="remember-me" class="switch-input" type="checkbox" name="remember">
+                            <span class="switch-slider" aria-hidden="true"></span>
+                            <span class="switch-text">Remember Me</span>
+                        </label><br>
+                        <button type="submit" class="upload-btn" style="max-width: 750px; width: 100%;">Login</button>
+                    </form>
+                </div>
+                <div class="auth-visual-panel">
+                    <img src="{{ url_for('static', filename='resources/LoginImage.png') }}" alt="Login Image" style="max-width: 100%; height: 100%;">
+                </div>
+            </section>
         </main>
         <!-- Footer Placeholder -->
         <div id="footer-placeholder"></div>

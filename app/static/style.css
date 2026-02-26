@@ -48,25 +48,118 @@ input:focus {
   border-bottom: 2px solid #ffffff;
 }
 
-/* Toggler for input */
-.toggler {
-  width: 72px;
-  margin: 40px auto;
+/* Auth Panel */
+.auth-page { 
+    min-height: calc(100vh - 220px); 
+    display: grid; 
+    place-items: center; 
+    padding: 24px; 
 }
 
-.toggler input {
-  display: none;
+.auth-card { 
+    width: min(1100px, 100%); 
+    min-height: 620px; 
+    display: grid; 
+    grid-template-columns: 1fr 1fr; 
+    border-radius: 24px; 
+    overflow: hidden; 
+    background: var(--light); 
 }
 
-.toggler label {
-  display: block;
-  position: relative;
-  width: 72px;
-  height: 36px;
-  border: 1px solid #d6d6d6;
-  border-radius: 36px;
-  background: #e4e8e8;
-  cursor: pointer;
+.auth-form-panel { 
+    padding: 32px; 
+    display: flex; 
+    flex-direction: column; 
+    justify-content: center; 
+    gap: 12px; 
+}
+
+.auth-visual-panel { 
+    position: relative; 
+}
+
+.auth-visual-panel img { 
+    width: 100%; 
+    height: 100%; 
+    object-fit: cover; 
+}
+
+.auth-visual-panel::before { 
+    content: ""; 
+    position: absolute; 
+    inset: 0; 
+    background: linear-gradient(135deg, rgba(4,32,38,.65), rgba(166,127,93,.35)); 
+}
+
+@media (max-width: 900px) { 
+    .auth-card { 
+        grid-template-columns: 1fr; 
+    } 
+    
+    .auth-visual-panel 
+    { 
+        min-height: 220px; 
+    } 
+}
+
+/* Switch Styles */
+.switch-field {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    margin: 4px 8px 14px 8px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.switch-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    border: 0;
+    padding: 0;
+    clip: rect(0 0 0 0);
+    overflow: hidden;
+}
+
+.switch-slider {
+    position: relative;
+    width: 48px;
+    height: 26px;
+    border-radius: 999px;
+    background-color: var(--accent);
+    transition: background-color 0.2s ease;
+}
+
+.switch-slider::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: white;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s ease;
+}
+
+.switch-input:checked + .switch-slider {
+    background-color: var(--secondary);
+}
+
+.switch-input:checked + .switch-slider::after {
+    transform: translateX(22px);
+}
+
+.switch-input:focus-visible + .switch-slider {
+    outline: 2px solid var(--tertiary);
+    outline-offset: 2px;
+}
+
+.switch-text {
+    color: var(--tertiary);
 }
 
 /* Change autofill background color in WebKit/Chromium browsers */
@@ -452,7 +545,6 @@ input:-webkit-autofill:active {
         height: 100%;
         width: auto;
     }
-
 
     .comparison-dialogue {
         flex-direction: row;
