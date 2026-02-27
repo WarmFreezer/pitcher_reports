@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en" style="height: 100%;">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MSU Baseball Analytics - Home</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body onload="loadHeader('Create Account', '/static/resources/HomePlate.png', '/storage/schools/{{current_user.school.slug}}/assets/logo.png');  loadNavbar(); loadFooter();">
+    <!-- Navbar Placeholder -->
+    <div id="navbar-placeholder"></div>
+
+    <!-- Header Placeholder -->
+    <div id="header-placeholder"></div>
+    
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="bubble">
+            <h2>Create an Account</h2>
+            <p>To access the full features of MSU Baseball Analytics, please create an account.</p>
+            
+            <!-- Create Account Form -->
+            <form action="/create_account" method="post" class="account-form">
+                <label for="username">Username:</label>
+                <input type="text" id="username" name="username" required>
+
+                <label for="email">Email:</label>
+                <input type="email" id="email" name="email" required>
+
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" required>
+
+                <button type="submit" class="submit-btn">Create Account</button>
+            </form>
+        </div>
+    </main>
+    
+    <!-- Footer Placeholder -->
+    <div id="footer-placeholder"></div>
+</body>
+</html>

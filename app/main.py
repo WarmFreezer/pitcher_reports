@@ -92,6 +92,45 @@ def school_temp_files(school_slug, filename):
 def school_report_files(school_slug, filename):
     return send_from_directory(os.path.join(app.config['STORAGE'], 'schools', school_slug, 'reports'), filename)
 
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        first_name = request.form.get('first_name')
+        last_name = request.form.get('last_name')
+        email = request.form.get('email')
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+        school_name = request.form.get('school')
+
+        if password != confirm_password:
+            flash('Passwords do not match.', 'danger')
+            return redirect(url_for('register'))
+
+        if User.query.filter_by(email=email).first():
+            flash('Email already registered. Please log in.', 'warning')
+            return redirect(url_for('login'))
+
+        school = School.query.filter_by(name=school_name).first()
+        if not school:
+            flash('School not found. Please enter a valid school.', 'danger')
+            return redirect(url_for('register'))
+
+        new_user = User(
+            first_name=first_name,
+            last_name=last_name,
+            email=email,
+            password_hash=bcrypt.generate_password_hash(password).decode('utf-8'),
+            school_id=school.id
+        )
+        db.session.add(new_user)
+        db.session.commit()
+
+        flash('Account created successfully! Please log in.', 'success')
+        return redirect(url_for('login'))
+
+    return render_template('create_account.html')
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login(): 
     if current_user.is_authenticated:
