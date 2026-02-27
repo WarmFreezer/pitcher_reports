@@ -95,8 +95,8 @@ def school_report_files(school_slug, filename):
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
-        first_name = request.form.get('first_name')
-        last_name = request.form.get('last_name')
+        name = request.form.get('name')
+        first_name, last_name = name.split(' ', 1) if ' ' in name else (name, '')
         email = request.form.get('email')
         password = request.form.get('password')
         confirm_password = request.form.get('confirm_password')

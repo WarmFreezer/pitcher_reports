@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MSU Baseball Analytics - Home</title>
+    <title>Create Account</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body onload="loadHeader('Create Account', '/static/resources/HomePlate.png', '/storage/schools/{{current_user.school.slug}}/assets/logo.png');  loadNavbar(); loadFooter();">
+<body onload="loadNavbar(); loadHeader('Create Account'); loadFooter();">
     <!-- Navbar Placeholder -->
     <div id="navbar-placeholder"></div>
 
@@ -14,28 +14,29 @@
     <div id="header-placeholder"></div>
     
     <!-- Main Content -->
-    <main class="main-content">
-        <div class="bubble">
-            <h2>Create an Account</h2>
-            <p>To access the full features of MSU Baseball Analytics, please create an account.</p>
-            
-            <!-- Create Account Form -->
-            <form action="/create_account" method="post" class="account-form">
-                <label for="username">Username:</label>
-                <input type="text" id="username" name="username" required>
-
-                <label for="email">Email:</label>
-                <input type="email" id="email" name="email" required>
-
-                <label for="password">Password:</label>
-                <input type="password" id="password" name="password" required>
-
-                <button type="submit" class="submit-btn">Create Account</button>
-            </form>
-        </div>
+    <main class="auth-page main-content">
+        <section class="auth-card">
+            <div class="auth-form-panel">    
+                <h2>Create an Account</h2>
+                <p>To access the full features of MSU Baseball Analytics, please create an account.</p>
+                <form method="POST" class="auth-form">
+                    <input class="bubble" type="name" name="name" placeholder="Name" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
+                    <input class="bubble" type="email" name="email" placeholder="Email" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
+                    <input class="bubble" type="password" name="password" placeholder="Password" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
+                    <input class="bubble" type="password" name="confirm_password" placeholder="Confirm Password" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
+                    <input class="bubble" type="school" name="school" placeholder="School" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
+                    <button type="submit" class="upload-btn" style="max-width: 750px; width: 100%;">Create Account</button>
+                </form>
+            </div>
+            <div class="auth-visual-panel">
+                <img src="{{ url_for('static', filename='resources/LoginImage.png') }}" alt="Login Image" style="max-width: 100%; height: 100%;">
+            </div>
+        </section>
     </main>
     
     <!-- Footer Placeholder -->
     <div id="footer-placeholder"></div>
+
+    <script src="{{ url_for('static', filename='scripts.js') }}"></script>
 </body>
 </html>

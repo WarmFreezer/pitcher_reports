@@ -380,8 +380,8 @@ def pitch_break_map(id, input_path, output_path, pitcher_id, threshold=0.1):
 
         # Set plot properties
         ax.set_title(f'Pitch Break (n={len(pitcher_data)}), Movement Angle: {movement_angle:.1f}°', fontsize=14, fontweight='bold', pad=10)
-        ax.set_xlabel('Horizontal Break (ft)', fontsize=12, labelpad=8)
-        ax.set_ylabel('Induced Vertical Break (ft)', fontsize=12, labelpad=8)
+        ax.set_xlabel('Horizontal Break (in)', fontsize=12, labelpad=8)
+        ax.set_ylabel('Induced Vertical Break (in)', fontsize=12, labelpad=8)
         ax.set_xlim(-25, 25)
         ax.set_ylim(-25, 25)
         ax.grid(True, linestyle='--', alpha=0.5)
