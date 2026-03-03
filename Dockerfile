@@ -20,7 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN cp -r /app/app/storage /app/app/storage/defaults
+RUN cp -r /app/storage /app/storage_defaults
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
