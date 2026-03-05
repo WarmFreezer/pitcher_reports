@@ -278,7 +278,7 @@ def pitch_heat_map_by_batter_side(source, id, output_path, pitcher_id, threshold
 
         # Save the figure in the output folder for report building
         plt.savefig(os.path.join(output_path, f'{id}_pitcher_{pitcher_id}_heat_map.png'), pad_inches=0.3, dpi=300, bbox_inches='tight')
-        plt.close()
+        plt.close(fig)
 
     except Exception as e:
         print(f"Error generating heat map for pitcher ID {pitcher_id}: {e}")
@@ -297,7 +297,7 @@ def pitch_break_map(source, id, output_path, pitcher_id, threshold=0.1):
             ax.set_xlim(-3, 3)
             ax.set_ylim(0, 5)
             plt.savefig(os.path.join(output_path, f'{id}_pitcher_{pitcher_id}_break_map.png'), pad_inches=0.3, dpi=300, bbox_inches='tight')
-            plt.close()
+            plt.close(fig)
             return
         
         # Get unique pitch types for this pitcher
@@ -373,14 +373,14 @@ def pitch_break_map(source, id, output_path, pitcher_id, threshold=0.1):
         
         # Overall title
         fig.suptitle(f'Pitch Break Heat Map for Pitcher ID: {pitcher_id}', 
-                    fontsize=16, fontweight='bold', y=0.99)
+            fontsize=16, fontweight='bold', y=0.99)
         
         # Adjust spacing to make room for title
         plt.subplots_adjust(left=0.06, right=0.96, top=0.88, bottom=0.1, wspace=0.2)
 
         # Save the figure in the output folder for report building
         plt.savefig(os.path.join(output_path, f'{id}_pitcher_{pitcher_id}_break_map.png'), pad_inches=0.3, dpi=300, bbox_inches='tight')
-        plt.close()
+        plt.close(fig)
 
     except Exception as e:
         print(f"Error reading file for pitcher ID {pitcher_id}: {e}")

@@ -126,7 +126,7 @@ class file_validator:
             if len(df) > MAX_ROWS:
                 return False, 'File has too many rows: {}. Max allowed is {}'.format(len(df), MAX_ROWS)
             
-            return True, df
+            return True, None
         
         except pd.errors.ParserError as e:
             return False, 'File is malformed: {}'.format(str(e))
