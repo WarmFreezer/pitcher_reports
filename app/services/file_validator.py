@@ -115,15 +115,8 @@ class file_validator:
             return False, 'File signature check error: {}'.format(str(e))
         
     @staticmethod
-    def validate_content_structure(filepath, ext):
-        try:
-            if ext in ['xlsx', 'xls']:
-                df = pd.read_excel(filepath)
-            elif ext == 'csv':
-                df = pd.read_csv(filepath)
-            else:
-                return False, 'Unsupported file extension for content validation'
-            
+    def validate_content_structure(df):
+        try:            
             if df.empty:
                 return False, 'File contains no data'
             
@@ -189,43 +182,41 @@ class file_validator:
                 sha256_hash.update(byte_block)
         return sha256_hash.hexdigest()
     
-def validate_uploaded_file(file, filepath, required_columns, column_types):
+def validate_uploaded_file(source_df, file, filepath, required_columns, column_types):
     filename = secure_filename(file.filename)
     
     is_valid, ext_or_msg = file_validator.check_extension(filename)
     if not is_valid:
-        return False, ext_or_msg, None
+        return False, ext_or_msg
 
     is_valid, msg = file_validator.check_filename(filename)
     if not is_valid:
-        return False, msg, None
+        return False, msg
 
     is_valid, msg = file_validator.check_file_size(file)
     if not is_valid:
-        return False, msg, None
+        return False, msg
 
     is_valid, msg = file_validator.check_mime_type(filepath)
     if not is_valid:
-        return False, msg, None
+        return False, msg
 
     is_valid, msg = file_validator.check_file_signature(filepath)
     if not is_valid:
-        return False, msg, None
+        return False, msg
 
-    is_valid, df_or_msg = file_validator.validate_content_structure(filepath, ext_or_msg)
+    is_valid, msg = file_validator.validate_content_structure(source_df)
     if not is_valid:
-        return False, df_or_msg, None
+        return False, msg
 
-    df = df_or_msg
-    
-    is_valid, msg = file_validator.validate_required_columns(df, required_columns)
+    is_valid, msg = file_validator.validate_required_columns(source_df, required_columns)
     if not is_valid:
-        return False, msg, None
+        return False, msg
 
-    is_valid, msg = file_validator.check_data_types(df, column_types)
+    is_valid, msg = file_validator.check_data_types(source_df, column_types)
     if not is_valid:
-        return False, msg, None
+        return False, msg
 
     checksum = file_validator.calculate_checksum(filepath)
     
-    return True, checksum, df
+    return True, checksum

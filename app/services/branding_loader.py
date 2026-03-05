@@ -10,7 +10,16 @@ class BrandingLoader:
         branding_path = os.path.join(BrandingLoader.SCHOOLS, school_slug, 'assets', 'branding.json')
         if not os.path.exists(branding_path):
             print(f"Branding file not found for school: {school_slug}")
-            return None
+            return {
+                'name': 'Unknown School',
+                "primary": "#0033A0",
+                "secondary": "#FFCF00",
+                "tertiary": "#001D39",
+                "dark": "#343434",
+                "light": "#ECECEC",
+                "accent": "#005EB8",
+                "logo": "app\\static\\resources\\HomePlate.png"
+            }
         
         try:
             with open(branding_path, 'r') as f:
@@ -26,7 +35,7 @@ class BrandingLoader:
                 "dark": "#343434",
                 "light": "#ECECEC",
                 "accent": "#005EB8",
-                'logo': None
+                'logo': "app\\static\\resources\\HomePlate.png"
             }
         
     @staticmethod

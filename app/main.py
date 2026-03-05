@@ -10,6 +10,7 @@ thomas.eubank516@gmail.com
 Purpose: Generates pitcher performance reports from game datasets exported from TrackMan.
 '''
 
+import gc
 import os
 import glob
 import pandas as pd
@@ -257,7 +258,15 @@ def upload_file():
     filepath = os.path.join(school_temp_folder, f'{current_user.id}_{filename}')
     file.save(filepath)
 
-    is_valid, result, df = file_validator.validate_uploaded_file(
+    if filepath.endswith('.csv'):
+        source_df = pd.read_csv(filepath)
+    elif filepath.endswith('.xlsx') or filepath.endswith('.xls'):
+        source_df = pd.read_excel(filepath)
+    else: 
+        raise ValueError("Unsupported file format. Please provide a .csv, .xlsx, or .xls file.")
+
+    is_valid, result = file_validator.validate_uploaded_file(
+        source_df=source_df,
         file=file, 
         filepath=filepath,
         required_columns=list(required_columns.keys()),
@@ -300,13 +309,13 @@ def upload_file():
 
         # Create list of report data
         reports = []
-        for pitcher_id in df['PitcherId'].unique():
+        for pitcher_id in source_df['PitcherId'].unique():
             # Generate heat map
-            report.pitch_heat_map_by_batter_side(current_user.id, filepath, school_temp_folder, pitcher_id, 0.75)
-            report.pitch_break_map(current_user.id, filepath, school_temp_folder, pitcher_id, 0.75)
+            report.pitch_heat_map_by_batter_side(source_df, current_user.id, school_temp_folder, pitcher_id, 0.75)
+            report.pitch_break_map(source_df, current_user.id, school_temp_folder, pitcher_id, 0.75)
 
             # Build table data
-            table_data = report.build_table(filepath, pitcher_id)
+            table_data = report.build_table(source_df, pitcher_id)
             if not table_data or len(table_data) < 2 or table_data[1] is None:
                 raise ValueError(f'Failed to build table data for pitcher ID {pitcher_id}')
             report_html = table_data[1].to_html(index=False, float_format='%.2f', border=0, classes='pitcher-data-table', escape=False, justify='left', na_rep='')
@@ -330,6 +339,10 @@ def upload_file():
                 output_path=os.path.abspath(os.path.join(school_output_folder, f'{current_user.id}_pitcher_{pitcher_id}_report.pdf')),
                 branding=branding
             )
+
+            del table_data
+            del report_html
+            gc.collect()
 
         # Merge all PDFs into one
         merged_pdf_path = os.path.join(school_output_folder, f'{current_user.id}_merged_pitcher_reports.pdf')

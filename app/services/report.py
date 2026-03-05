@@ -55,16 +55,9 @@ pitch_point_colors = {
     'Undefined': '#888888'
 }
 
-def build_table(path, pitcherid):
-    try:
-        if path.endswith('.csv'):
-            excel = pd.read_csv(path)
-        elif path.endswith('.xlsx') or path.endswith('.xls'):
-            excel = pd.read_excel(path)
-        else: 
-            raise ValueError("Unsupported file format. Please provide a .csv, .xlsx, or .xls file.")
-        
-        table = excel[['Pitcher', 'PitcherId', 'TaggedPitchType', 'RelSpeed', 'InducedVertBreak', 'HorzBreak', 'SpinRate', 'VertApprAngle', 'HorzApprAngle', 'RelHeight', 'RelSide', 'Extension', 'Tilt', 'ZoneTime', 'PlateLocHeight', 'PlateLocSide', 'PitchCall']] 
+def build_table(source, pitcherid):
+    try:        
+        table = source[['Pitcher', 'PitcherId', 'TaggedPitchType', 'RelSpeed', 'InducedVertBreak', 'HorzBreak', 'SpinRate', 'VertApprAngle', 'HorzApprAngle', 'RelHeight', 'RelSide', 'Extension', 'Tilt', 'ZoneTime', 'PlateLocHeight', 'PlateLocSide', 'PitchCall']] 
 
         pitcher_data = table[table['PitcherId'] == pitcherid]
         pitcher = pitcher_data['Pitcher'].iloc[0]
@@ -176,16 +169,9 @@ def build_table(path, pitcherid):
         print(f"Error building table for pitcher ID {pitcherid}: {e}")
         return None
 
-def pitch_heat_map_by_batter_side(id, input_path, output_path, pitcher_id, threshold=0.1):
-    try:
-        if input_path.endswith('.csv'):
-            excel = pd.read_csv(input_path)
-        elif input_path.endswith('.xlsx') or input_path.endswith('.xls'):
-            excel = pd.read_excel(input_path)
-        else: 
-            raise ValueError("Unsupported file format. Please provide a .csv, .xlsx, or .xls file.")
-        
-        table = excel[['Pitcher', 'PitcherId', 'TaggedPitchType', 'PlateLocHeight', 'PlateLocSide', 'BatterSide']] 
+def pitch_heat_map_by_batter_side(source, id, output_path, pitcher_id, threshold=0.1):
+    try:        
+        table = source[['Pitcher', 'PitcherId', 'TaggedPitchType', 'PlateLocHeight', 'PlateLocSide', 'BatterSide']] 
         pitcher_data = table[table['PitcherId'] == pitcher_id]
         
         # Create subplots for left and right handed batters
@@ -297,16 +283,9 @@ def pitch_heat_map_by_batter_side(id, input_path, output_path, pitcher_id, thres
     except Exception as e:
         print(f"Error generating heat map for pitcher ID {pitcher_id}: {e}")
 
-def pitch_break_map(id, input_path, output_path, pitcher_id, threshold=0.1):
+def pitch_break_map(source, id, output_path, pitcher_id, threshold=0.1):
     try:
-        if input_path.endswith('.csv'):
-            excel = pd.read_csv(input_path)
-        elif input_path.endswith('.xlsx') or input_path.endswith('.xls'):
-            excel = pd.read_excel(input_path)
-        else: 
-            raise ValueError("Unsupported file format. Please provide a .csv, .xlsx, or .xls file.")
-
-        table = excel[['Pitcher', 'PitcherId', 'TaggedPitchType', 'InducedVertBreak', 'HorzBreak', ]] 
+        table = source[['Pitcher', 'PitcherId', 'TaggedPitchType', 'InducedVertBreak', 'HorzBreak', ]] 
         pitcher_data = table[table['PitcherId'] == pitcher_id]
 
         # Create subplot for pitch break
