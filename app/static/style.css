@@ -48,6 +48,19 @@ input:focus {
   border-bottom: 2px solid #ffffff;
 }
 
+/* Select */
+select {
+    border: none;
+    border-bottom: 2px solid var(--accent);
+    background: transparent;
+    padding: 10px 10px;
+    font-size: 12px;
+    color: var(--tertiary);
+    width: stretch;
+    max-width: 750px;
+    transition: 0.3s;
+}
+
 /* Auth Panel */
 .auth-page { 
     display: flex; 
@@ -61,10 +74,10 @@ input:focus {
     min-height: 300px;
     display: grid; 
     grid-template-columns: 1fr 1fr; 
-    border-radius: 24px; 
+    border-radius: 32px; 
     overflow: hidden; 
     background: var(--light); 
-    height: 75%;
+    align-self: stretch;
 }
 
 .auth-form-panel { 
@@ -295,6 +308,39 @@ input:-webkit-autofill:active {
 
 .dropdown-divider {
     border-top: 1px solid #ddd;
+}
+
+/* School Dropdown Styles */
+.school-picker {
+    position: relative;
+    max-width: 750px;
+    margin: 8px 0;
+}
+
+.school-trigger {
+    width: 100%;
+    border: 2px solid var(--accent);
+    text-align: left;
+    background-color: var(--tertiary);
+}
+
+.school-picker.open .school-menu {
+    display: block !important;
+    width: 100%;
+}
+
+.school-option {
+    width: 100%;
+    border: 0px;
+    background-color: #fff;
+    color: var(--dark);
+    text-align: left;
+    padding: 12px 16px;
+    cursor: pointer;
+}
+
+.school-option:hover {
+    background-color: var(--light);
 }
 
 /* Header Styles */

@@ -194,6 +194,7 @@ function loadFooter() {
         <footer class="site-footer">
             <p>&copy; 2026 Thomas Eubank</p>
             <a href=/about style="color: white;">About</a>
+            <a href=/terms style="color: white; margin-left: 16px;">Terms</a>
         </footer>
     `;
     document.getElementById('footer-placeholder').innerHTML = footerHTML;
@@ -311,4 +312,29 @@ function buildTableFromString(table, tableString) {
         tbody.appendChild(row);
     }
     table.appendChild(tbody);
+}
+
+// Manage open/close dropdown
+function dropdownInit() {
+    const picker = document.querySelector('.school-picker');
+    const trigger = document.getElementById('school-trigger');
+    const hidden = document.getElementById('school-value');
+    const options = document.querySelectorAll('.school-option');
+
+    if (!picker || !trigger || !hidden || options.length === 0) return;
+
+    trigger.addEventListener('click', () => picker.classList.toggle('open'));
+
+    options.forEach(btn => {
+        btn.addEventListener('click', () => {
+        const name = btn.dataset.school;
+        hidden.value = name;
+        trigger.textContent = `${name} ▼`;
+        picker.classList.remove('open');
+        });
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!picker.contains(e.target)) picker.classList.remove('open');
+    });
 }

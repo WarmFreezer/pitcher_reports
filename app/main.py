@@ -94,6 +94,8 @@ def school_report_files(school_slug, filename):
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    schools = School.query.order_by(School.name).all()
+
     if request.method == 'POST':
         name = request.form.get('name')
         first_name, last_name = name.split(' ', 1) if ' ' in name else (name, '')
@@ -115,12 +117,23 @@ def register():
             flash('School not found. Please enter a valid school.', 'danger')
             return redirect(url_for('register'))
 
+        school_domain = school.admin_email.split('@')[-1]
+        if not email.endswith(f"@{school_domain}"):
+            flash('Email does not match school domain. Please use a valid school email.', 'danger')
+            return redirect(url_for('register'))
+
+        if email == school.admin_email:
+            role = 'admin'
+        else:
+            role = 'member'
+
         new_user = User(
             first_name=first_name,
             last_name=last_name,
             email=email,
             password_hash=bcrypt.generate_password_hash(password).decode('utf-8'),
-            school_id=school.id
+            school_id=school.id,
+            role=role
         )
         db.session.add(new_user)
         db.session.commit()
@@ -128,8 +141,41 @@ def register():
         flash('Account created successfully! Please log in.', 'success')
         return redirect(url_for('login'))
 
-    return render_template('create_account.html')
+    return render_template('create_account.html', schools=schools)
 
+@app.route('/schools', methods=['GET', 'POST'])
+def schools():
+    if request.method == 'POST':
+        school_name = request.form.get('name')
+        school_slug = request.form.get('slug')
+        admin_email = request.form.get('admin_email')
+        confirm_admin_email = request.form.get('confirm_admin_email')
+
+        if School.query.filter_by(name=school_name).first():
+            flash('School name already exists. Please choose a different name.', 'danger')
+            return redirect(url_for('schools'))
+        
+        if admin_email != confirm_admin_email:
+            flash('Admin email addresses do not match. Please confirm the admin email.', 'danger')
+            return redirect(url_for('schools'))
+
+        new_school = School(
+            name=school_name,
+            slug=school_slug,
+            admin_email=admin_email
+        )
+
+        db.session.add(new_school)
+        db.session.commit()
+
+        flash('School created successfully! Please create your user account.', 'success')
+        return redirect(url_for('register'))
+        
+        '''
+        TODO: Redirect to school management page where admin can upload branding assets and manage users for that school
+        '''
+
+    return render_template('schools.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login(): 
@@ -177,6 +223,10 @@ def upload():
 @app.route("/about")
 def about():
     return render_template('about.html')
+
+@app.route("/terms")
+def terms():
+    return render_template('terms.html')
 
 # ****** API Endpoints ******
 @app.route('/api/upload', methods=['POST'])

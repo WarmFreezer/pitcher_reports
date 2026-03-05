@@ -20,8 +20,6 @@
         <main class="auth-page main-content">
             <section class="auth-card">
                 <div class="auth-form-panel">
-                    <h2 style="color: var(--tertiary);">Login</h2>
-
                     {% with messages = get_flashed_messages(with_categories=true) %}
                         {% if messages %}
                             {% for category, message in messages %}
@@ -29,6 +27,8 @@
                             {% endfor %}
                         {% endif %}
                     {% endwith %}
+
+                    <h2 style="color: var(--tertiary);">Login</h2>
 
                     <form method="POST" class="auth-form">
                         <input class="bubble" type="email" name="email" placeholder="Email" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>

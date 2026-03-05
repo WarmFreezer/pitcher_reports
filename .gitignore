@@ -5,3 +5,5 @@ __pycache__/
 /app/storage/
 instance/pitcher_reports.db
 .env
+instance/pitcher_reports.db-shm
+instance/pitcher_reports.db-wal

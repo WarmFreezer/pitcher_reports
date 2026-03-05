@@ -11,6 +11,7 @@ class School(db.Model):
     name = db.Column(db.String(100), nullable=False)
     slug = db.Column(db.String(50), unique=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
+    admin_email = db.Column(db.String(100), unique=True, nullable=False)
 
     users = db.relationship('User', backref='school', lazy=True)
 
