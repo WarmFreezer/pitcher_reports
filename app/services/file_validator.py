@@ -25,7 +25,7 @@ DANGEROUS_SIGNATURES = {
 }
 MAX_FILE_SIZE = 16 * 1024 * 1024  # 16 MB
 MAX_ROWS = 50000  # Maximum number of rows allowed in the file
-MAX_COLUMNS = 200  # Maximum number of columns allowed in the file
+MAX_COLUMNS = 500  # Maximum number of columns allowed in the file
 
 class file_validator:
     @staticmethod

@@ -22,8 +22,8 @@ COPY . .
 
 RUN cp -r /app/app/storage /app/storage_defaults
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 
 EXPOSE 5000
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["flask", "--app", "app.main", "run", "--host=0.0.0.0"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--timeout", "300", "--max-requests", "20", "--max-requests-jitter", "5", "app.main:app"]
