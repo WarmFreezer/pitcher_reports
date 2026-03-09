@@ -178,7 +178,7 @@ def create_pitcher_pdf_from_html(current_user, pitcher_name, pitcher_id, table_h
         print(f"PDF created successfully: {os.path.basename(output_path)}")
         return True
 
-def merge_pdfs(pdf_folder, output_path):
+def merge_pdfs(id, pdf_folder, output_path):
     """
     Merge multiple PDFs into one
     """
@@ -191,7 +191,7 @@ def merge_pdfs(pdf_folder, output_path):
             continue
 
         pdf_path = os.path.join(pdf_folder, pdf)
-        if os.path.exists(pdf_path) and pdf_path.endswith('.pdf'):
+        if os.path.exists(pdf_path) and pdf_path.endswith('.pdf') and pdf.startswith(f"{id}_pitcher_"):
             merger.append(pdf_path)
     
     merger.write(output_path)
