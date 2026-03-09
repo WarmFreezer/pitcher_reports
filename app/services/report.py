@@ -385,3 +385,49 @@ def pitch_break_map(source, id, output_path, pitcher_id, threshold=0.1):
     except Exception as e:
         print(f"Error reading file for pitcher ID {pitcher_id}: {e}")
         return
+''' 
+def strikeout_map(source, id, output_path, pitcher_id):
+    try:
+        table = source[['Pitcher', 'PitcherId', 'TaggedPitchType', 'PlateLocHeight', 'PlateLocSide', 'PitchCall']] 
+        pitcher_data = table[table['PitcherId'] == pitcher_id]
+
+        # Filter for strikeout pitches
+        strikeout_data = pitcher_data[pitcher_data['PitchCall'] == 'StrikeSwinging']
+        
+        # Create subplot for strikeout map
+        fig, ax = plt.subplots(figsize=(9, 8))
+        
+        if len(strikeout_data) == 0:
+            ax.text(0, 2.5, f'No strikeout data for pitcher ID {pitcher_id}', 
+                ha='center', va='center', fontsize=14)
+            ax.set_xlim(-3, 3)
+            ax.set_ylim(0, 5)
+            plt.savefig(os.path.join(output_path, f'{id}_pitcher_{pitcher_id}_strikeout_map.png'), pad_inches=0.3, dpi=300, bbox_inches='tight')
+            plt.close()
+            return
+        
+        # Plot strikeout pitch locations
+        ax.scatter(
+            strikeout_data['PlateLocSide'],
+            strikeout_data['PlateLocHeight'],
+            color='red',
+            alpha=0.6,
+            s=50,
+            edgecolors='black',
+            linewidth=0.5,
+            label=f'Strikeouts: {len(strikeout_data)}'
+        )
+
+        # Set plot properties
+        ax.set_title(f'Strikeout Pitch Locations (n={len(strikeout_data)}) for Pitcher ID: {pitcher_id}', fontsize=14, fontweight='bold', pad=10)
+        ax.set_xlabel('Plate Location Side (ft)', fontsize=12, labelpad=8)
+        ax.set_ylabel('Plate Location Height (ft)', fontsize=12, labelpad=8)
+        ax.set_xlim(-3, 3)
+        ax.set_ylim(0, 5)
+        ax.set_aspect('equal', adjustable='box')
+        
+        # Add strike zone rectangle (approximate)
+        strike_zone = Rectangle((-0.83, 1.5), 1.66, 2.0, 
+                            linewidth=2, edgecolor='black', 
+                            facecolor='none', linestyle='--')
+        ax.add_patch(strike_zone'''
