@@ -252,13 +252,9 @@ function generateReport(data) {
         img.onerror = function() {
             console.error('Failed to load image:', this.src);
             this.alt = 'Image not available';
+            this.parentElement.innerHTML = '<p style="color: red;">Heatmap image not available. Update your subscription.</p>';
         };
-        if (img.src.fileExists) {
-            heatmapContainer.appendChild(img);
-        }
-        else {
-            heatmapContainer.innerHTML = '<p style="color: red;">Heatmap image not available. Update your subscription.</p>';
-        }
+        heatmapContainer.appendChild(img);
     }
 
     // Add breakmap image
@@ -271,13 +267,9 @@ function generateReport(data) {
         img.onerror = function() {
             console.error('Failed to load image:', this.src);
             this.alt = 'Image not available';
+            this.parentElement.innerHTML = '<p style="color: red;">Breakmap image not available. Update your subscription.</p>';
         };
-        if (img.src.fileExists) {
-            breakmapContainer.appendChild(img);
-        }
-        else {
-            breakmapContainer.innerHTML = '<p style="color: red;">Breakmap image not available. Update your subscription.</p>';
-        }
+        breakmapContainer.appendChild(img);
     }
 
     // Add pitcher table

@@ -24,7 +24,8 @@ class School(db.Model):
 
     @property
     def is_active(self):
-        return self.stripe_subscription_status in ['active', 'trialing']
+        return self.stripe_subscription_status in ('active', 'trialing')
+
     
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
