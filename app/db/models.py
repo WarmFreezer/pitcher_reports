@@ -14,7 +14,8 @@ class School(db.Model):
     admin_email = db.Column(db.String(100), unique=True, nullable=False)
     stripe_customer_id = db.Column(db.String(100), unique=True, nullable=True)
     stripe_subscription_id = db.Column(db.String(100), unique=True, nullable=True)
-    stripe_subscription_status = db.Column(db.String(50), default='inactive')
+    stripe_subscription_status = db.Column(db.String(20), default='inactive')
+    trackman_id = db.Column(db.String(20), unique=True, nullable=True)
 
     users = db.relationship('User', backref='school', lazy=True)
 

@@ -16,6 +16,24 @@ function displayUploadData(data) {
     `;
 }
 
+// Display uploaded data preview
+function displayGameData(data) {
+    const contentArea = document.getElementById('gameDataDisplay');
+    if (!contentArea) return;
+
+    const teamsTitle = `${data.game_data.away_team} @ ${data.game_data.home_team}`;
+    document.title = teamsTitle;
+
+    contentArea.innerHTML = `
+        <div style="padding: 30px; background-color: var(--secondary);">
+            <h2>Game Data</h2>
+            <p>Date: ${data.game_data.date}</p>
+            <p>Home Team: ${data.game_data.home_team}</p>
+            <p>Away Team: ${data.game_data.away_team}</p>
+        </div>
+    `;
+}
+
 // Load navbar
 function loadNavbar() {
     const navbarHTML = `
@@ -135,6 +153,10 @@ async function handleFileSelect(event) {
             message: result.message,
             num_reports: result.num_reports,
             merged_pdf_url: result.merged_pdf_url
+        });
+
+        displayGameData({
+            game_data: result.game_data
         });
 
         // Clear existing reports

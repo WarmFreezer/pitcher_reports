@@ -189,6 +189,7 @@ def schools():
             )
             return redirect(url_for('embedded_checkout', client_secret=checkout_session.client_secret))
         except Exception as e:
+            print(str(e))
             flash('Could not start checkout. Please try again.', 'danger')
             return redirect(url_for('schools'))
 
@@ -330,6 +331,9 @@ def upload_file():
         # Create list of report data
         reports = []
         for pitcher_id in source_df['PitcherId'].unique():
+            if source_df.loc[source_df['PitcherId'] == pitcher_id, 'PitcherTeam'].iloc[0] != current_user.school.trackman_id:
+                continue
+
             if current_user.school.is_active:
                 # Generate heat map
                 report.pitch_heat_map_by_batter_side(source_df, current_user.id, school_temp_folder, pitcher_id, 0.75)
@@ -339,12 +343,20 @@ def upload_file():
             table_data = report.build_table(source_df, pitcher_id)
             if not table_data or len(table_data) < 2 or table_data[1] is None:
                 raise ValueError(f'Failed to build table data for pitcher ID {pitcher_id}')
-            report_html = table_data[1].to_html(index=False, float_format='%.2f', border=0, classes='pitcher-data-table', escape=False, justify='left', na_rep='')
+            report_html = table_data[4].to_html(index=False, float_format='%.2f', border=0, classes='pitcher-data-table', escape=False, justify='left', na_rep='')
+
+            year = table_data[0].split('-')[0]
+            month = table_data[0].split('-')[1]
+            day = table_data[0].split('-')[2]
+
+            date = month + '/' + day + '/' + year
+            away_team = table_data[2]
+            home_team = table_data[1]
 
             # Add to reports list
             reports.append({
-                'pitcher_name': table_data[0],
                 'pitcher_id': str(pitcher_id),
+                'pitcher_name': table_data[3],
                 'pitcher_table': report_html,
                 'heatmap_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_heat_map.png',
                 'breakmap_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_break_map.png',
@@ -354,9 +366,8 @@ def upload_file():
             # Generate PDF report
             pdf_file = pdf_generator.create_pitcher_pdf_from_html(
                 current_user=current_user,
-                pitcher_name=table_data[0],
                 pitcher_id=pitcher_id,
-                table_html=report_html,
+                table_data=table_data,
                 output_path=os.path.abspath(os.path.join(school_output_folder, f'{current_user.id}_pitcher_{pitcher_id}_report.pdf')),
                 branding=branding
             )
@@ -374,6 +385,11 @@ def upload_file():
             'num_reports': len(reports),
             'reports': reports,
             'merged_pdf_url': f'/storage/schools/{current_user.school.slug}/reports/{current_user.id}_merged_pitcher_reports.pdf',
+            'game_data' : {
+                'date': date,
+                'home_team': home_team,
+                'away_team': away_team,
+            },
             'user': {
                 'name': f"{current_user.first_name} {current_user.last_name}",
                 'school': current_user.school.name

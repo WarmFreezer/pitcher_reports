@@ -8,7 +8,7 @@ from .cloudinary_service import CloudinaryService
 
 from .branding_loader import BrandingLoader
 
-def create_pitcher_pdf_from_html(current_user, pitcher_name, pitcher_id, table_html, output_path, branding):
+def create_pitcher_pdf_from_html(current_user, pitcher_id, table_data, output_path, branding):
     """
     Create PDF from HTML content
     """
@@ -27,6 +27,16 @@ def create_pitcher_pdf_from_html(current_user, pitcher_name, pitcher_id, table_h
         img = Image.open(BytesIO(response.content))
         school_logo = img.convert("RGBA")
         school_logo = image_to_base64(school_logo)
+
+    year = table_data[0].split('-')[0]
+    month = table_data[0].split('-')[1]
+    day = table_data[0].split('-')[2]
+
+    date = month + '/' + day + '/' + year
+    home_team = table_data[1]
+    away_team = table_data[2]
+    pitcher_name = table_data[3]
+    table_html = table_data[4].to_html(index=False, classes="dataframe", border=0, float_format="{:.2f}".format)
 
     primary_color = branding['colors']['primary']
     secondary_color = branding['colors']['secondary']
@@ -74,6 +84,13 @@ def create_pitcher_pdf_from_html(current_user, pitcher_name, pitcher_id, table_h
                 margin: 0;
                 padding: 0;
                 font-size: 24px;
+            }}
+            h2 {{
+                color: {secondary_color};
+                text-align: center;
+                margin: 0;
+                padding: 0;
+                font-size: 12px;
             }}
             .heatmap {{
                 text-align: center;
@@ -154,6 +171,8 @@ def create_pitcher_pdf_from_html(current_user, pitcher_name, pitcher_id, table_h
                 </td>
                 <td width="60%">
                     <h1>Pitcher Report for {pitcher_name}</h1>
+                    <h2>{date}</h2>
+                    <h2>{away_team} @ {home_team}</h2>
                 </td>
                 <td class="header-right">
                     <img src="{school_logo}" height="128" alt="{current_user.school.slug} Logo">

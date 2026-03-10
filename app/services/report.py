@@ -31,6 +31,9 @@ required_columns = {
     'Tilt': 'string',
     'ZoneTime': 'numeric', 
     'PitchCall': 'string',
+    'PitcherTeam': 'string',
+    'BatterTeam': 'string',
+    'Date': 'string',
 }
 
 # Define colors for each pitch type
@@ -41,7 +44,8 @@ pitch_colors = {
         'Changeup': 'Oranges',
         'Splitter': 'Purples',
         'Knuckleball': 'YlOrBr',
-        'Undefined': 'Greys'
+        'Undefined': 'Greys',
+        'Four-Seam': 'Yellows'
 }
     
 pitch_point_colors = {
@@ -52,11 +56,21 @@ pitch_point_colors = {
     'Splitter': '#AA00AA',
     'Knuckleball': '#CC8800',
     'Sinker': '#0088FF',
-    'Undefined': '#888888'
+    'Undefined': '#888888',
+    'Four-Seam': '#FFFF00'
 }
 
 def build_table(source, pitcherid):
-    try:        
+    try:
+        try:     
+            date = source['Date'].mode()[0] if 'Date' in source.columns else ''
+            away_team = source['BatterTeam'].iloc[0] if 'BatterTeam' in source.columns else ''
+            home_team = source['PitcherTeam'].iloc[0] if 'PitcherTeam' in source.columns else ''
+        except Exception as e:
+            date = ''
+            away_team = ''
+            home_team = ''
+
         table = source[['Pitcher', 'PitcherId', 'TaggedPitchType', 'RelSpeed', 'InducedVertBreak', 'HorzBreak', 'SpinRate', 'VertApprAngle', 'HorzApprAngle', 'RelHeight', 'RelSide', 'Extension', 'Tilt', 'ZoneTime', 'PlateLocHeight', 'PlateLocSide', 'PitchCall']] 
 
         pitcher_data = table[table['PitcherId'] == pitcherid]
@@ -72,8 +86,8 @@ def build_table(source, pitcherid):
                     'Spin': [],
                     'VAA': [],
                     'HAA': [],
-                    'vRel': [],
-                    'hRel': [],
+                    'RelH': [],
+                    'RelS': [],
                     'Ext.': [],
                     'Axis': [],
                     'Zone %': [],
@@ -95,8 +109,8 @@ def build_table(source, pitcherid):
                 game_report['Spin'].append(pitch_type_data['SpinRate'].mean())
                 game_report['VAA'].append(pitch_type_data['VertApprAngle'].mean())
                 game_report['HAA'].append(pitch_type_data['HorzApprAngle'].mean())
-                game_report['vRel'].append(pitch_type_data['RelHeight'].mean())
-                game_report['hRel'].append(pitch_type_data['RelSide'].mean())
+                game_report['RelH'].append(pitch_type_data['RelHeight'].mean())
+                game_report['RelS'].append(pitch_type_data['RelSide'].mean())
                 game_report['Ext.'].append(pitch_type_data['Extension'].mean())
 
                 # Parse Tilt values and report only hour:minute
@@ -163,7 +177,7 @@ def build_table(source, pitcherid):
         report_df = pd.DataFrame(game_report)
         report_df.sort_values(by='Count', ascending=False, inplace=True)
 
-        return [str(pitcher), report_df]
+        return [date, home_team, away_team, str(pitcher), report_df]
         
     except Exception as e:
         print(f"Error building table for pitcher ID {pitcherid}: {e}")
@@ -352,13 +366,15 @@ def pitch_break_map(source, id, output_path, pitcher_id, threshold=0.1):
                     label=f'{pitch_type}: {len(pitch_data)} pitches'
                 )
 
+            # Plot pitch type average movement vector for the pitcher
+            ax.quiver(0, 0, pitch_data['HorzBreak'].mean(), pitch_data['InducedVertBreak'].mean(), angles='xy', scale_units='xy', scale=1, color=pitch_point_colors.get(pitch_type, 'gray'), width=0.005)
+
         # Plot overall average movement vector for the pitcher
-        movement_angle = np.degrees(np.arctan2(pitcher_data['InducedVertBreak'].mean(), pitcher_data['HorzBreak'].mean()))
-        movement_magnitude = np.sqrt(pitcher_data['HorzBreak']**2 + pitcher_data['InducedVertBreak']**2)
-        ax.quiver(0, 0, pitcher_data['HorzBreak'].mean(), pitcher_data['InducedVertBreak'].mean(), angles='xy', scale_units='xy', scale=1, color='gray', width=0.005)
+        arm_angle = np.degrees(np.arctan2(pitcher_data['InducedVertBreak'].mean(), pitcher_data['HorzBreak'].mean()))
+        ax.quiver(0, 0, pitcher_data['HorzBreak'].mean(), pitcher_data['InducedVertBreak'].mean(), angles='xy', scale_units='xy', scale=1, color='gray', width=0.01)
 
         # Set plot properties
-        ax.set_title(f'Pitch Break (n={len(pitcher_data)}), Movement Angle: {movement_angle:.1f}°', fontsize=14, fontweight='bold', pad=10)
+        ax.set_title(f'Pitch Break (n={len(pitcher_data)}), Arm Angle: {arm_angle:.1f}°', fontsize=14, fontweight='bold', pad=10)
         ax.set_xlabel('Horizontal Break (in)', fontsize=12, labelpad=8)
         ax.set_ylabel('Induced Vertical Break (in)', fontsize=12, labelpad=8)
         ax.set_xlim(-25, 25)
