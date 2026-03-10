@@ -17,6 +17,7 @@ import stripe
 import pandas as pd
 from functools import wraps
 from flask_cors import CORS
+from flask_migrate import Migrate
 from werkzeug.utils import secure_filename
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, send_from_directory, session
@@ -65,6 +66,7 @@ app.config['STORAGE'] = STORAGE_FOLDER
 os.makedirs(STORAGE_FOLDER, exist_ok=True)
 
 db.init_app(app)
+migrate = Migrate(app, db)
 
 # Initialize Extensions
 login_manager = LoginManager(app)
@@ -365,7 +367,7 @@ def upload_file():
 
         # Merge all PDFs into one
         merged_pdf_path = os.path.join(school_output_folder, f'{current_user.id}_merged_pitcher_reports.pdf')
-        pdf_generator.merge_pdfs(school_output_folder, merged_pdf_path)
+        pdf_generator.merge_pdfs(current_user.id, school_output_folder, merged_pdf_path)
 
         return jsonify({
             'message': 'File processed successfully',
