@@ -10,33 +10,14 @@ class BrandingLoader:
         branding_path = os.path.join(BrandingLoader.SCHOOLS, school_slug, 'assets', 'branding.json')
         if not os.path.exists(branding_path):
             print(f"Branding file not found for school: {school_slug}")
-            return {
-                'name': 'Unknown School',
-                "primary": "#0033A0",
-                "secondary": "#FFCF00",
-                "tertiary": "#001D39",
-                "dark": "#343434",
-                "light": "#ECECEC",
-                "accent": "#005EB8",
-                "logo": "app\\static\\resources\\HomePlate.png"
-            }
-        
+            return json.load(open(os.path.join(BrandingLoader.SCHOOLS, 'default.json'), 'r'))
         try:
             with open(branding_path, 'r') as f:
                 branding_data = json.load(f)
             return branding_data
         except Exception as e:
             print(f"Error loading branding for {school_slug}: {e}")
-            return {
-                'name': 'Unknown School',
-                "primary": "#0033A0",
-                "secondary": "#FFCF00",
-                "tertiary": "#001D39",
-                "dark": "#343434",
-                "light": "#ECECEC",
-                "accent": "#005EB8",
-                'logo': "app\\static\\resources\\HomePlate.png"
-            }
+            return json.load(open(os.path.join(BrandingLoader.SCHOOLS, 'default.json'), 'r'))
         
     @staticmethod
     def get_logo_path(school_slug):
@@ -73,3 +54,10 @@ class BrandingLoader:
             json.dump(branding_data, f, indent=4)
 
         return True
+
+    @staticmethod
+    def is_dark(color_hex):
+        color_hex = color_hex.lstrip('#')
+        r, g, b = int(color_hex[0:2], 16), int(color_hex[2:4], 16), int(color_hex[4:6], 16)
+        brightness = (r * 299 + g * 587 + b * 114) / 1000
+        return brightness < 128

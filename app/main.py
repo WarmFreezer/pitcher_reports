@@ -13,14 +13,17 @@ Purpose: Generates pitcher performance reports from game datasets exported from 
 import gc
 import os
 import glob
+import stripe
 import pandas as pd
+from functools import wraps
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, send_from_directory
+from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, send_from_directory, session
 
 from app.services import report, auth, pdf_generator, file_validator, branding_loader
 from app.db import models
+import app.payment_routes as payment_routes
 
 STORAGE_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'storage')
 
@@ -40,6 +43,13 @@ CORS(app)
 # Flask CLI
 from app import cli as cli_commands
 cli_commands.register_cli_commands(app)
+
+# Payment Config
+stripe_secret_key = os.environ.get('STRIPE_SECRET_KEY')
+stripe_publishable_key = os.environ.get('STRIPE_PUBLISHABLE_KEY')
+stripe_price_id = os.environ.get('STRIPE_PRICE_ID')
+stripe.api_key = stripe_secret_key
+payment_routes.PaymentRoutes = payment_routes.PaymentRoutes(app, stripe_publishable_key)
 
 # Database URL Formatting Fix
 database_url = os.environ.get('DATABASE_URL', 'sqlite:///pitcher_reports.db')
@@ -160,20 +170,28 @@ def schools():
             flash('Admin email addresses do not match. Please confirm the admin email.', 'danger')
             return redirect(url_for('schools'))
 
-        new_school = School(
-            name=school_name,
-            slug=school_slug,
-            admin_email=admin_email
-        )
+        session['pending_school'] = {
+            'name': school_name,
+            'slug': school_slug,
+            'admin_email': admin_email
+        }
 
-        db.session.add(new_school)
-        db.session.commit()
+        try:
+            checkout_session = stripe.checkout.Session.create(
+                line_items=[{'price': stripe_price_id, 'quantity': 1}],
+                mode='subscription',
+                ui_mode='embedded',
+                return_url='http://localhost:5000/return?session_id={CHECKOUT_SESSION_ID}',
+                metadata=session['pending_school'],
+                customer_email=session['pending_school']['admin_email']
+            )
+            return redirect(url_for('embedded_checkout', client_secret=checkout_session.client_secret))
+        except Exception as e:
+            flash('Could not start checkout. Please try again.', 'danger')
+            return redirect(url_for('schools'))
 
-        flash('School created successfully! Please create your user account.', 'success')
-        return redirect(url_for('register'))
-        
         '''
-        TODO: Redirect to school management page where admin can upload branding assets and manage users for that school
+        TODO: Redirect to school management page with option to subscribe if payment fails, instead of redirecting back to school creation form. This will allow users to create their school and then subscribe at a later time if they want.
         '''
 
     return render_template('schools.html')
@@ -271,7 +289,7 @@ def upload_file():
         filepath=filepath,
         required_columns=list(required_columns.keys()),
         column_types=required_columns
-        )
+    )
     
     if not is_valid:
         try: 
@@ -310,9 +328,10 @@ def upload_file():
         # Create list of report data
         reports = []
         for pitcher_id in source_df['PitcherId'].unique():
-            # Generate heat map
-            report.pitch_heat_map_by_batter_side(source_df, current_user.id, school_temp_folder, pitcher_id, 0.75)
-            report.pitch_break_map(source_df, current_user.id, school_temp_folder, pitcher_id, 0.75)
+            if current_user.school.is_active:
+                # Generate heat map
+                report.pitch_heat_map_by_batter_side(source_df, current_user.id, school_temp_folder, pitcher_id, 0.75)
+                report.pitch_break_map(source_df, current_user.id, school_temp_folder, pitcher_id, 0.75)
 
             # Build table data
             table_data = report.build_table(source_df, pitcher_id)
@@ -379,6 +398,17 @@ def get_school_directories():
     os.makedirs(school_output_dir, exist_ok=True)
 
     return school_temp_dir, school_output_dir
+
+def active_subscription_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for('login'))
+        if not current_user.school.is_active:
+            flash('Your school does not have an active subscription. Please contact your administrator.', 'danger')
+            return redirect(url_for('dashboard'))
+        return f(*args, **kwargs)
+    return decorated
 
 if __name__ == '__main__':
     app.run()

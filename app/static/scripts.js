@@ -169,7 +169,16 @@ function buildAllReports(reports) {
 }
 
 // Load header
-function loadHeader(title = "Pitcher Report", pfp = "/static/resources/HomePlate.png", logo = "/static/resources/HomePlate.png") {
+async function loadHeader(title = "Pitcher Report", pfp = "/static/resources/HomePlate.png", logo = "/static/resources/HomePlate.png") {
+    if (!await fileExists(pfp)) {
+        console.warn('Profile picture not found at:', pfp);
+        pfp = "/static/resources/HomePlate.png";
+    }
+    if (!await fileExists(logo)) {
+        console.warn('Logo not found at:', logo);
+        logo = "/static/resources/HomePlate.png";
+    }
+
     const headerHTML = `
         <header class="site-header">
             <div class="header-container">
@@ -244,7 +253,12 @@ function generateReport(data) {
             console.error('Failed to load image:', this.src);
             this.alt = 'Image not available';
         };
-        heatmapContainer.appendChild(img);
+        if (img.src.fileExists) {
+            heatmapContainer.appendChild(img);
+        }
+        else {
+            heatmapContainer.innerHTML = '<p style="color: red;">Heatmap image not available. Update your subscription.</p>';
+        }
     }
 
     // Add breakmap image
@@ -258,7 +272,12 @@ function generateReport(data) {
             console.error('Failed to load image:', this.src);
             this.alt = 'Image not available';
         };
-        breakmapContainer.appendChild(img);
+        if (img.src.fileExists) {
+            breakmapContainer.appendChild(img);
+        }
+        else {
+            breakmapContainer.innerHTML = '<p style="color: red;">Breakmap image not available. Update your subscription.</p>';
+        }
     }
 
     // Add pitcher table
@@ -337,4 +356,14 @@ function dropdownInit() {
     document.addEventListener('click', (e) => {
         if (!picker.contains(e.target)) picker.classList.remove('open');
     });
+}
+
+// File Exists
+async function fileExists(url) {
+    try {
+        const response = await fetch(url, { method: 'HEAD' });
+        return response.ok; // true if 200-299
+    } catch {
+        return false;
+    }
 }

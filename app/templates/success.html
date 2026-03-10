@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en" style="height: 100%;">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Subscription Successful</title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+        <style>
+        .upload-btn:hover {
+            background-color: var(--accent);
+            text-decoration: none;
+        }
+        </style>
+    </head>
+<body>
+  <div class="bubble">
+  <h1>Thank you for your subscription!</h1>
+    <p>Your subscription is now {{ subscription.status }}.</p>
+    <p>Subscription ID: {{ subscription.id }}</p>
+    
+    {% if subscription.status == 'trialing' %}
+      <p>Your trial will end on {{ subscription.trial_end|timestamp_to_date }}.</p>
+    {% endif %}
+    
+    <p>You can manage your subscription in your account dashboard.</p>
+    <a href="/dashboard">Go to Dashboard</a>
+  </div>
+</body>
+</html>

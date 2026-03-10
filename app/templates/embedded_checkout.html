@@ -1,0 +1,45 @@
+<!-- templates/embedded-checkout.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Embedded Checkout</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    <script src="https://js.stripe.com/v3/"></script>
+    <style>
+    #checkout {
+        width: 100%;
+        min-height: 600px;
+        border: none;
+    }
+    </style>
+</head>
+<body onload="loadNavbar(); loadFooter();">
+    <!-- Navbar Placeholder -->
+    <div id="navbar-placeholder"></div>
+
+    <main class="main-content">
+        <div class="bubble" style="max-width: 1000px; flex-direction: column; display: flex; justify-content: center; justify-self: center; min-width: 500px; align-items: center;">
+            <h1>Complete your purchase</h1>
+            <div id="checkout"></div>
+        </div>
+    </main>
+
+    <!-- Footer Placeholder -->
+    <div id="footer-placeholder"></div>
+
+    <script>
+        const stripe = Stripe('{{ stripe_publishable_key }}');
+
+        stripe.initEmbeddedCheckout({
+            clientSecret: '{{ client_secret }}',
+        }).then(function(checkout) {
+            checkout.mount('#checkout');
+        });
+    </script>
+    <script src="{{ url_for('static', filename='scripts.js') }}"></script>
+</body>
+</html>

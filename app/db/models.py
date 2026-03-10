@@ -12,12 +12,19 @@ class School(db.Model):
     slug = db.Column(db.String(50), unique=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.now)
     admin_email = db.Column(db.String(100), unique=True, nullable=False)
+    stripe_customer_id = db.Column(db.String(100), unique=True, nullable=True)
+    stripe_subscription_id = db.Column(db.String(100), unique=True, nullable=True)
+    stripe_subscription_status = db.Column(db.String(50), default='inactive')
 
     users = db.relationship('User', backref='school', lazy=True)
 
     @property
     def branding_path(self):
         return f'storage/schools/{self.slug}/assets/branding.json'
+
+    @property
+    def is_active(self):
+        return self.stripe_subscription_status in ['active', 'trialing']
     
 class User(UserMixin, db.Model):
     __tablename__ = 'users'

@@ -6,6 +6,8 @@ from io import BytesIO
 from xhtml2pdf import pisa
 from .cloudinary_service import CloudinaryService
 
+from .branding_loader import BrandingLoader
+
 def create_pitcher_pdf_from_html(current_user, pitcher_name, pitcher_id, table_html, output_path, branding):
     """
     Create PDF from HTML content
@@ -19,12 +21,12 @@ def create_pitcher_pdf_from_html(current_user, pitcher_name, pitcher_id, table_h
     cloudinary_public_id = f"schools/{current_user.school.slug}/assets/logo"
     school_logo = CloudinaryService.img_exists(cloudinary_public_id)
     if not school_logo:
-        school_logo = os.path.join('app', 'static', 'resources', 'homeplate.png')
+        school_logo = os.path.join('app', 'static', 'resources', 'HomePlate.png')
     else:
         response = requests.get(school_logo)
         img = Image.open(BytesIO(response.content))
         school_logo = img.convert("RGBA")
-    school_logo = image_to_base64(school_logo)
+        school_logo = image_to_base64(school_logo)
 
     primary_color = branding['colors']['primary']
     secondary_color = branding['colors']['secondary']
@@ -33,6 +35,11 @@ def create_pitcher_pdf_from_html(current_user, pitcher_name, pitcher_id, table_h
     light_color = branding['colors']['light']
     dark_color = branding['colors']['dark']
     
+    if BrandingLoader.is_dark(accent_color):
+        text_color = light_color
+    else:
+        text_color = dark_color
+
     html_content = f"""
     <!DOCTYPE html>
     <html>
@@ -98,7 +105,7 @@ def create_pitcher_pdf_from_html(current_user, pitcher_name, pitcher_id, table_h
             }}
             th {{
                 background-color: {accent_color};
-                color: white;
+                color: {text_color};
                 padding: 6px 4px;
                 text-align: center;
                 font-weight: bold;
