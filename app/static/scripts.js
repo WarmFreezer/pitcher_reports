@@ -8,7 +8,7 @@ function displayUploadData(data) {
         : '';
 
     contentArea.innerHTML = `
-        <div style="background: white; padding: 32px; margin: 32px; border-radius: 32px; background-color: var(--light);">
+        <div class="bubble">
             <h2>File Upload Summary</h2>
             <p>${data.message}</p>
             ${downloadButton}
@@ -16,7 +16,7 @@ function displayUploadData(data) {
     `;
 }
 
-// Display uploaded data preview
+// Display game data preview
 function displayGameData(data) {
     const contentArea = document.getElementById('gameDataDisplay');
     if (!contentArea) return;
@@ -217,15 +217,22 @@ async function loadHeader(title = "Pitcher Report", pfp = "/static/resources/Hom
         </header>
     `;
     document.getElementById('header-placeholder').innerHTML = headerHTML;
+    // Trigger fade-in animation after content is added
+    setTimeout(() => {
+        const header = document.querySelector('.site-header');
+        if (header) {
+            header.classList.add('loaded');
+        }
+    }, 10);
 }
 
 // Load footer
 function loadFooter() {
     const footerHTML = `
         <footer class="site-footer">
-            <p>&copy; 2026 Thomas Eubank</p>
-            <a href=/about style="color: white;">About</a>
-            <a href=/terms style="color: white; margin-left: 16px;">Terms</a>
+            <p style="color: white; font-family: 'Arial', sans-serif;">&copy; 2026 Thomas Eubank</p>
+            <a href=/about style="color: white; font-family: 'Arial', sans-serif;">About</a>
+            <a href=/terms style="color: white; margin-left: 16px; font-family: 'Arial', sans-serif;">Terms</a>
         </footer>
     `;
     document.getElementById('footer-placeholder').innerHTML = footerHTML;
@@ -301,6 +308,21 @@ function generateReport(data) {
         tableContainer.style.fontSize = '12px';
     }
 
+    // Add pitch usage table
+    const leftUsageContainer = clone.querySelector('.left-usage');
+    if (leftUsageContainer && data.left_usage_table) {
+        leftUsageContainer.innerHTML = data.left_usage_table;
+        leftUsageContainer.style.fontSize = '12px';
+        leftUsageContainer.style.borderCollapse = 'collapse';
+    }
+
+    const rightUsageContainer = clone.querySelector('.right-usage');
+    if (rightUsageContainer && data.right_usage_table) {
+        rightUsageContainer.innerHTML = data.right_usage_table;
+        rightUsageContainer.style.fontSize = '12px';
+        rightUsageContainer.style.borderCollapse = 'collapse';
+    }
+
     const newLine = document.createElement('br');
     clone.appendChild(newLine);
     
@@ -308,43 +330,6 @@ function generateReport(data) {
     if (reportOutputElement) {
         reportOutputElement.appendChild(clone);
     }
-}
-
-// Build HTML table from string data
-function buildTableFromString(table, tableString) {
-    const lines = tableString.trim().split("\n");
-    
-    if (lines.length === 0) return;
-
-    // Create header row
-    const headers = lines[0].split(/\s+/);
-    const thead = document.createElement("thead");
-    const headerRow = document.createElement("tr");
-
-    headers.forEach(headerText => {
-        const th = document.createElement("th");
-        th.textContent = headerText;
-        headerRow.appendChild(th);
-    });
-
-    thead.appendChild(headerRow);
-    table.appendChild(thead);
-
-    // Create body rows
-    const tbody = document.createElement("tbody");
-    for (let i = 1; i < lines.length; i++) {
-        const row = document.createElement("tr");
-        const values = lines[i].split(/\s+/);
-
-        values.forEach(value => {
-            const td = document.createElement("td");
-            td.textContent = value;
-            row.appendChild(td);
-        });
-
-        tbody.appendChild(row);
-    }
-    table.appendChild(tbody);
 }
 
 // Manage open/close dropdown

@@ -34,33 +34,57 @@ required_columns = {
     'PitcherTeam': 'string',
     'BatterTeam': 'string',
     'Date': 'string',
+    'Inning': 'numeric',
+    'PAofInning': 'numeric',
+    'PitchofPA': 'numeric',
+    'BatterId': 'numeric',
+    'Balls': 'numeric',
+    'Strikes': 'numeric'
+}
+
+# Order to display pitch types in tables and plots
+pitch_order = {
+    'Fastball': 'FB',
+    'Curveball': 'CB',
+    'Slider': 'SL',
+    'ChangeUp': 'CH',
+    'Splitter': 'SP',
+    'Knuckleball': 'CT',
+    'Sinker': 'SK',
+    'Four-Seam': 'FF',
+    'Undefined': 'UN'
 }
 
 # Define colors for each pitch type
 pitch_colors = {
         'Fastball': 'Reds',
-        'Curveball': 'Blues',
-        'Slider': 'Greens',
-        'Changeup': 'Oranges',
-        'Splitter': 'Purples',
-        'Knuckleball': 'YlOrBr',
-        'Undefined': 'Greys',
-        'Four-Seam': 'Yellows'
+        'Curveball': 'Oranges',
+        'Slider': 'BrBG',
+        'ChangeUp': 'Greens',
+        'Splitter': 'Blues',
+        'Knuckleball': 'Purples',
+        'Sinker': 'BuGn',
+        'Four-Seam': 'PuRd',
+        'Undefined': 'Greys'
 }
     
 pitch_point_colors = {
     'Fastball': '#FF0000',
-    'Curveball': '#0000FF',
-    'Slider': '#00AA00',
-    'Changeup': '#FF8800',
-    'Splitter': '#AA00AA',
-    'Knuckleball': '#CC8800',
-    'Sinker': '#0088FF',
-    'Undefined': '#888888',
-    'Four-Seam': '#FFFF00'
+    'Curveball': '#FF8800',
+    'Slider': '#552200',
+    'ChangeUp': '#00FF00',
+    'Splitter': '#0000FF',
+    'Knuckleball': '#FF00FF',
+    'Sinker': '#00AAAA',
+    'Four-Seam': '#FF0088',
+    'Undefined': '#888888'
 }
 
-def build_table(source, pitcherid):
+STRIKES = ['StrikeCalled', 'StrikeSwinging', 'FoulBallNotFieldable']
+
+baseball_width = 0.24  # Approximate width of a baseball in feet
+
+def build_table(source, pitcher_id):
     try:
         try:     
             date = source['Date'].mode()[0] if 'Date' in source.columns else ''
@@ -73,14 +97,15 @@ def build_table(source, pitcherid):
 
         table = source[['Pitcher', 'PitcherId', 'TaggedPitchType', 'RelSpeed', 'InducedVertBreak', 'HorzBreak', 'SpinRate', 'VertApprAngle', 'HorzApprAngle', 'RelHeight', 'RelSide', 'Extension', 'Tilt', 'ZoneTime', 'PlateLocHeight', 'PlateLocSide', 'PitchCall']] 
 
-        pitcher_data = table[table['PitcherId'] == pitcherid]
+        pitcher_data = table[table['PitcherId'] == pitcher_id]
         pitcher = pitcher_data['Pitcher'].iloc[0]
 
         # Dictionary to hold data for each pitch type per game
         game_report = {'Pitch': [],
-                    'Count': [],
-                    '% Thrown': [],
+                    'Thrown': [],
+                    'Low' : [],
                     'Vel.': [],
+                    'High': [],
                     'IVB': [],
                     'HB': [],
                     'Spin': [],
@@ -90,9 +115,9 @@ def build_table(source, pitcherid):
                     'RelS': [],
                     'Ext.': [],
                     'Axis': [],
-                    'Zone %': [],
-                    'Chase %': [],
-                    'CSW %': []}
+                    'Zone': [],
+                    'Chase': [],
+                    'CSW': []}
                         
         # Parse through each pitch type for the pitcher
         for pitch_type in pitcher_data['TaggedPitchType'].unique():
@@ -101,9 +126,10 @@ def build_table(source, pitcherid):
             if (pitch_type != 'n/a'):
                 # Add the stats of the pitch type to the report 
                 game_report['Pitch'].append(pitch_type)
-                game_report['Count'].append(len(pitch_type_data))
-                game_report['% Thrown'].append(len(pitch_type_data) / len(pitcher_data) * 100)
+                game_report['Thrown'].append(len(pitch_type_data) / len(pitcher_data) * 100)
+                game_report['Low'].append(pitch_type_data['RelSpeed'].min())
                 game_report['Vel.'].append(pitch_type_data['RelSpeed'].mean())
+                game_report['High'].append(pitch_type_data['RelSpeed'].max())
                 game_report['IVB'].append(pitch_type_data['InducedVertBreak'].mean())
                 game_report['HB'].append(pitch_type_data['HorzBreak'].mean())
                 game_report['Spin'].append(pitch_type_data['SpinRate'].mean())
@@ -123,7 +149,7 @@ def build_table(source, pitcherid):
                 axis_time = axis_mean.strftime('%H:%M') if not pd.isna(axis_mean) else 'N/A'
 
                 game_report['Axis'].append(axis_time) 
-                game_report['Zone %'].append(pitch_type_data['ZoneTime'].mean() * 100)
+                game_report['Zone'].append(pitch_type_data['ZoneTime'].mean() * 100)
 
                 # Calculate Chase %
                 chase_count = 0
@@ -135,7 +161,7 @@ def build_table(source, pitcherid):
                     if (outside or outside_height) and batter_swung:
                         chase_count += 1
                         
-                game_report['Chase %'].append(chase_count / len(pitch_type_data) * 100.00)
+                game_report['Chase'].append(chase_count / len(pitch_type_data) * 100.00)
                 
                 # Calculate Whiff %
                 whiff_count = 0
@@ -144,16 +170,12 @@ def build_table(source, pitcherid):
                     
                     if swing_and_miss:
                         whiff_count += 1
-                
-                #game_report['Whiff %'].append(whiff_count / len(pitch_type_data) * 100.00)
-
+            
                 # Calculate Called Strikes %
                 called_strike_count = 0
                 for _, row in pitch_type_data.iterrows():
                     if (row['PitchCall'] in ['StrikeCalled']):
                         called_strike_count += 1
-                
-                #game_report['CS%'].append(called_strike_count / len(pitch_type_data) * 100.00)
 
                 # Calculate Swing and Miss %
                 swinging_strike_count = 0
@@ -161,10 +183,8 @@ def build_table(source, pitcherid):
                     if (row['PitchCall'] in ['StrikeSwinging']):
                         swinging_strike_count += 1
                 
-                #game_report['SW%'].append(swinging_strike_count / len(pitch_type_data) * 100.00)
-
                 csw_percent = (called_strike_count + swinging_strike_count) / len(pitch_type_data) * 100.00
-                game_report['CSW %'].append(csw_percent)
+                game_report['CSW'].append(csw_percent)
 
         
         # Set panda options to show all rows/columns
@@ -173,14 +193,26 @@ def build_table(source, pitcherid):
         pd.set_option('display.max_rows', None)
         pd.set_option('display.max_colwidth', None)
 
-        # Build and print report dataframe
+        # Build and map pitch abbreviations to report dataframe
         report_df = pd.DataFrame(game_report)
-        report_df.sort_values(by='Count', ascending=False, inplace=True)
+        report_df['Pitch'] = report_df['Pitch'].map(pitch_order)
+        report_df['Thrown'] = report_df['Thrown'].map(lambda x: f"{x:.1f}%")
+        report_df['Zone'] = report_df['Zone'].map(lambda x: f"{x:.1f}%")
+        report_df['Chase'] = report_df['Chase'].map(lambda x: f"{x:.1f}%")
+        report_df['CSW'] = report_df['CSW'].map(lambda x: f"{x:.1f}%")
+
+        # Take the top 4 most thrown pitches for the report
+        report_df = report_df.sort_values('Thrown', ascending=False).head(4)
+
+        # Sort by constant order
+        pitch_order_list = list(pitch_order.values())
+        report_df['Pitch'] = pd.Categorical(report_df['Pitch'], categories=pitch_order_list, ordered=True)
+        report_df.sort_values('Pitch', inplace=True)
 
         return [date, home_team, away_team, str(pitcher), report_df]
         
     except Exception as e:
-        print(f"Error building table for pitcher ID {pitcherid}: {e}")
+        print(f"Error building table for pitcher ID {pitcher_id}: {e}")
         return None
 
 def pitch_heat_map_by_batter_side(source, id, output_path, pitcher_id, threshold=0.1):
@@ -198,7 +230,7 @@ def pitch_heat_map_by_batter_side(source, id, output_path, pitcher_id, threshold
             if len(batter_data) == 0:
                 ax.text(0, 2.5, f'No data for {batter_side}-handed batters', 
                     ha='center', va='center', fontsize=14)
-                ax.set_xlim(-3, 3)
+                ax.set_xlim(-2.5, 2.5)
                 ax.set_ylim(0, 5)
                 continue
             
@@ -258,7 +290,7 @@ def pitch_heat_map_by_batter_side(source, id, output_path, pitcher_id, threshold
             ax.set_title(f'vs {batter_side}-Handed Batters (n={len(batter_data)})', fontsize=14, fontweight='bold', pad=10)
             ax.set_xlabel('Plate Location Side (ft)', fontsize=12, labelpad=8)
             ax.set_ylabel('Plate Location Height (ft)', fontsize=12, labelpad=8)
-            ax.set_xlim(-3, 3)
+            ax.set_xlim(-2.5, 2.5)
             ax.set_ylim(0, 5)
             ax.set_aspect('equal', adjustable='box')
             
@@ -269,7 +301,6 @@ def pitch_heat_map_by_batter_side(source, id, output_path, pitcher_id, threshold
             ax.add_patch(strike_zone)
 
             # Add shadow zone rectangle (approximate)
-            baseball_width = 0.24  # Approximate width of a baseball in feet
             shadow_zone = Rectangle(
                 (-0.83 - baseball_width, 1.5 - baseball_width), 
                 1.66 + 2 *baseball_width, 
@@ -282,10 +313,6 @@ def pitch_heat_map_by_batter_side(source, id, output_path, pitcher_id, threshold
             handles, labels = ax.get_legend_handles_labels()
             by_label = dict(zip(labels, handles))
             ax.legend(by_label.values(), by_label.keys(), loc='upper right', fontsize=12)
-        
-        # Overall title
-        fig.suptitle(f'Pitch Location Heat Map for Pitcher ID: {pitcher_id}', 
-                    fontsize=16, fontweight='bold', y=0.99)
         
         # Adjust spacing to make room for title
         plt.subplots_adjust(left=0.06, right=0.96, top=0.88, bottom=0.1, wspace=0.2)
@@ -308,7 +335,7 @@ def pitch_break_map(source, id, output_path, pitcher_id, threshold=0.1):
         if len(pitcher_data) == 0:
             ax.text(0, 2.5, f'No data for pitcher ID {pitcher_id}', 
                 ha='center', va='center', fontsize=14)
-            ax.set_xlim(-3, 3)
+            ax.set_xlim(-2.5, 2.5)
             ax.set_ylim(0, 5)
             plt.savefig(os.path.join(output_path, f'{id}_pitcher_{pitcher_id}_break_map.png'), pad_inches=0.3, dpi=300, bbox_inches='tight')
             plt.close(fig)
@@ -387,10 +414,6 @@ def pitch_break_map(source, id, output_path, pitcher_id, threshold=0.1):
         by_label = dict(zip(labels, handles))
         ax.legend(by_label.values(), by_label.keys(), loc='upper right', fontsize=12)
         
-        # Overall title
-        fig.suptitle(f'Pitch Break Heat Map for Pitcher ID: {pitcher_id}', 
-            fontsize=16, fontweight='bold', y=0.99)
-        
         # Adjust spacing to make room for title
         plt.subplots_adjust(left=0.06, right=0.96, top=0.88, bottom=0.1, wspace=0.2)
 
@@ -401,14 +424,90 @@ def pitch_break_map(source, id, output_path, pitcher_id, threshold=0.1):
     except Exception as e:
         print(f"Error reading file for pitcher ID {pitcher_id}: {e}")
         return
-''' 
+
+def usage_table(source, pitcher_id):
+    try:
+        table = source[['Pitcher', 'PitcherId', 'TaggedPitchType', 'PitchCall', 'BatterId', 'Inning', 'PAofInning', 'PitchofPA', 'BatterSide', 'Balls', 'Strikes']] 
+        pitcher_data = table[table['PitcherId'] == pitcher_id]
+
+        tables = []
+
+        for batter_side in ['Left', 'Right']:
+            side_data = pitcher_data[pitcher_data['BatterSide'] == batter_side]
+            # Dictionary to hold data for each pitch type per game
+            game_report = {'Pitch': [],
+                            'Count': [],
+                            'Strike': [],
+                            '0-0': [],
+                            "Hitter's" : [],
+                            "Pitcher's": [],
+                            '2k': [],
+                            'Whiff': []}
+
+            total_first_pitch_count = side_data[side_data['PitchofPA'] == 1].shape[0]
+            total_hitter_favorable_count = (side_data['Balls'] > side_data['Strikes']).sum()
+            total_pitcher_favorable_count = (side_data['Strikes'] > side_data['Balls']).sum()
+            total_two_strike_count = (side_data['Strikes'] == 2).sum()
+
+            for pitch_type in side_data['TaggedPitchType'].unique():
+                pitch_type_data = side_data[side_data['TaggedPitchType'] == pitch_type]
+
+                strike_count = pitch_type_data['PitchCall'].isin(STRIKES).sum()
+                first_pitch_count = pitch_type_data[pitch_type_data['PitchofPA'] == 1].shape[0]
+                hitter_favorable_count = (pitch_type_data['Balls'] > pitch_type_data['Strikes']).sum()
+                pitcher_favorable_count = (pitch_type_data['Strikes'] > pitch_type_data['Balls']).sum()
+                two_strike_count = (pitch_type_data['Strikes'] == 2).sum()
+                whiff_count = pitch_type_data[pitch_type_data['PitchCall'].isin(['StrikeSwinging', 'FoulBallNotFieldable'])].shape[0]
+
+                # Add the stats of the pitch type to the report 
+                game_report['Pitch'].append(pitch_type)
+                game_report['Strike'].append(strike_count / len(pitch_type_data) * 100)
+                game_report['Count'].append(len(pitch_type_data))
+                game_report['0-0'].append(first_pitch_count / total_first_pitch_count * 100)
+                game_report["Hitter's"].append(hitter_favorable_count / total_hitter_favorable_count * 100)
+                game_report["Pitcher's"].append(pitcher_favorable_count / total_pitcher_favorable_count * 100)
+                game_report['2k'].append(two_strike_count / total_two_strike_count * 100)
+                game_report['Whiff'].append(whiff_count / len(pitch_type_data) * 100)
+    
+            report = pd.DataFrame(game_report)
+            report['Pitch'] = report['Pitch'].map(pitch_order)
+            report['Strike'] = report['Strike'].map(lambda x: f"{x:.1f}%")
+            report['0-0'] = report['0-0'].map(lambda x: f"{x:.1f}%")
+            report["Hitter's"] = report["Hitter's"].map(lambda x: f"{x:.1f}%")
+            report["Pitcher's"] = report["Pitcher's"].map(lambda x: f"{x:.1f}%")
+            report['2k'] = report['2k'].map(lambda x: f"{x:.1f}%")
+            report['Whiff'] = report['Whiff'].map(lambda x: f"{x:.1f}%")
+
+            # Limit to top 4 most thrown pitches for the report
+            report = report.sort_values('Count', ascending=False).head(4)
+
+            # Sort by dictionary order
+            pitch_order_list = list(pitch_order.values())
+            report['Pitch'] = pd.Categorical(report['Pitch'], categories=pitch_order_list, ordered=True)
+            report.sort_values('Pitch', inplace=True)
+
+            tables.append(report)
+
+        # Set panda options to show all rows/columns
+        pd.set_option('display.max_columns', None)
+        pd.set_option('display.width', 1000)
+        pd.set_option('display.max_rows', None)
+        pd.set_option('display.max_colwidth', None)
+
+        return tables
+        
+    except Exception as e:
+        print(f"Error building table for pitcher ID {pitcher_id}: {e}")
+        return None
+
+'''
 def strikeout_map(source, id, output_path, pitcher_id):
     try:
-        table = source[['Pitcher', 'PitcherId', 'TaggedPitchType', 'PlateLocHeight', 'PlateLocSide', 'PitchCall']] 
+        table = source[['Pitcher', 'PitcherId', 'TaggedPitchType', 'PlateLocHeight', 'PlateLocSide', 'KorBB']] 
         pitcher_data = table[table['PitcherId'] == pitcher_id]
 
         # Filter for strikeout pitches
-        strikeout_data = pitcher_data[pitcher_data['PitchCall'] == 'StrikeSwinging']
+        strikeout_data = pitcher_data[pitcher_data['KorBB'] == 'Strikeout']
         
         # Create subplot for strikeout map
         fig, ax = plt.subplots(figsize=(9, 8))
@@ -446,4 +545,23 @@ def strikeout_map(source, id, output_path, pitcher_id):
         strike_zone = Rectangle((-0.83, 1.5), 1.66, 2.0, 
                             linewidth=2, edgecolor='black', 
                             facecolor='none', linestyle='--')
-        ax.add_patch(strike_zone'''
+        ax.add_patch(strike_zone)
+
+        shadow_zone = Rectangle(
+            (-0.83 - baseball_width, 1.5 - baseball_width), 
+            1.66 + 2 *baseball_width, 
+            2.0 + 2 * baseball_width, 
+                            linewidth=1, edgecolor='gray', 
+                            facecolor='none', linestyle=(0, (1, 10)))
+        ax.add_patch(shadow_zone)
+
+    except Exception as e:
+        print(f"Error generating strikeout map for pitcher ID {pitcher_id}: {e}")
+        return
+'''
+
+if __name__ == "__main__":
+    input_file = "C:\\Users\\thoma\\Downloads\\20260221-WinthropUniversity-1_unverified.csv"
+    source_df = pd.read_csv(input_file)
+
+    print(usage_table(source_df, 10106264))

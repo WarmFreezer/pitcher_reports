@@ -22,9 +22,9 @@ from werkzeug.utils import secure_filename
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, send_from_directory, session
 
-from app.services import report, auth, pdf_generator, file_validator, branding_loader
+from app.services import report, auth, report_lab_generator, file_validator, branding_loader
 from app.db import models
-import app.payment_routes as payment_routes
+import app.payment_routes as payment_routes            
 
 STORAGE_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'storage')
 
@@ -33,6 +33,7 @@ db = models.db
 User = models.User
 School = models.School
 Branding_Loader = branding_loader.BrandingLoader
+PDF_Generator = report_lab_generator.PDF_Generator
 bcrypt = auth.bcrypt
 
 app = Flask(__name__,
@@ -328,6 +329,10 @@ def upload_file():
         # Load Branding data per school
         branding = Branding_Loader.get_branding(current_user.school.slug)
 
+        gen = PDF_Generator(
+            current_user=current_user,
+            branding=branding)
+
         # Create list of report data
         reports = []
         for pitcher_id in source_df['PitcherId'].unique():
@@ -345,6 +350,13 @@ def upload_file():
                 raise ValueError(f'Failed to build table data for pitcher ID {pitcher_id}')
             report_html = table_data[4].to_html(index=False, float_format='%.2f', border=0, classes='pitcher-data-table', escape=False, justify='left', na_rep='')
 
+            # Pitch Usage table data
+            pitch_usage_data = report.usage_table(source_df, pitcher_id)
+            if not pitch_usage_data or len(pitch_usage_data) < 2 or pitch_usage_data[1] is None:
+                raise ValueError(f'Failed to build pitch usage table data for pitcher ID {pitcher_id}')
+            left_usage_html = pitch_usage_data[0].to_html(index=False, float_format='%.2f', border=0, classes='pitch-usage-table', escape=False, justify='left', na_rep='')
+            right_usage_html = pitch_usage_data[1].to_html(index=False, float_format='%.2f', border=0, classes='pitch-usage-table', escape=False, justify='left', na_rep='')
+
             year = table_data[0].split('-')[0]
             month = table_data[0].split('-')[1]
             day = table_data[0].split('-')[2]
@@ -358,19 +370,28 @@ def upload_file():
                 'pitcher_id': str(pitcher_id),
                 'pitcher_name': table_data[3],
                 'pitcher_table': report_html,
+                'left_usage_table': left_usage_html,
+                'right_usage_table': right_usage_html,
                 'heatmap_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_heat_map.png',
                 'breakmap_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_break_map.png',
                 'pdf_url': f'/storage/schools/{current_user.school.slug}/reports/{current_user.id}_pitcher_{pitcher_id}_report.pdf'
             })
 
             # Generate PDF report
-            pdf_file = pdf_generator.create_pitcher_pdf_from_html(
-                current_user=current_user,
-                pitcher_id=pitcher_id,
-                table_data=table_data,
-                output_path=os.path.abspath(os.path.join(school_output_folder, f'{current_user.id}_pitcher_{pitcher_id}_report.pdf')),
-                branding=branding
-            )
+            _report = {
+                'pitcher_name': table_data[3],
+                'pitcher_id': str(pitcher_id),
+                'date': date,
+                'home_team': home_team,
+                'away_team': away_team,
+                'pitch_stats': table_data[4],
+                'pitch_usage_left': pitch_usage_data[0],
+                'pitch_usage_right': pitch_usage_data[1],
+                'pitch_heat_map': os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_heat_map.png'),
+                'pitch_break_map': os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_break_map.png'),
+            }
+
+            gen.generate_pitcher_report(_report, os.path.abspath(os.path.join(school_output_folder, f'{current_user.id}_pitcher_{pitcher_id}_report.pdf')))
 
             del table_data
             del report_html
@@ -378,7 +399,7 @@ def upload_file():
 
         # Merge all PDFs into one
         merged_pdf_path = os.path.join(school_output_folder, f'{current_user.id}_merged_pitcher_reports.pdf')
-        pdf_generator.merge_pdfs(current_user.id, school_output_folder, merged_pdf_path)
+        report_lab_generator.merge_pdfs(current_user.id, school_output_folder, merged_pdf_path)
 
         return jsonify({
             'message': 'File processed successfully',
