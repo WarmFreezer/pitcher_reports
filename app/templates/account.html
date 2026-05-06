@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html style="height: 100%;">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account - {{ current_user.school.name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    {% if branding %}
+    <style>
+        :root {
+            --primary: {{branding.colors.primary}};
+            --secondary: {{branding.colors.secondary}};
+            --tertiary: {{branding.colors.tertiary}};
+            --dark: {{branding.colors.dark}};
+            --light: {{branding.colors.light}};
+            --accent: {{branding.colors.accent}};
+        }
+    </style>
+    {% endif %}
+</head>
+<body onload="loadHeader('{{ current_user.school.slug|upper }} Baseball Analytics', '/static/resources/HomePlate.png', '{{ logo_path }}'); loadFooter(); loadNavbar();">
+    <div id="navbar-placeholder"></div>
+    <div id="header-placeholder"></div>
+
+    <main class="main-content">
+
+        <!-- =====================================================================
+             PERSONAL INFORMATION
+             Displays the user's current name and email address and allows them
+             to update any of these fields. On submit, POST the updated values
+             to an API endpoint that validates input and writes to the User table.
+             current_user.first_name, current_user.last_name, current_user.email
+             are the pre-populated values. Flash success/error back to the page.
+             ===================================================================== -->
+        <div class="bubble" style="max-width: 33%;">
+            <h2>Personal Information</h2>
+            <input id="update-name-input" class="bubble" type="text" value="{% if current_user.first_name %}{{ current_user.first_name }}{% endif %} {{ current_user.last_name }}" placeholder="First Last" style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px">
+            <input id="update-email-input" class="bubble" type="email" value="{% if current_user.email %}{{ current_user.email }}{% endif %}" placeholder="email@domain.com" style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px">
+
+            <p>Created at: {{ current_user.created_at }}</p>
+            <button class="download-btn btn-warn" onclick="updateInformation()">Update Information</button>
+        </div>
+
+        <!-- =====================================================================
+             CHANGE PASSWORD
+             Requires the user to enter their current password for verification
+             before accepting a new password. Verify the current password against
+             the stored hash using Auth.verify_password(), hash the new password
+             with bcrypt, and update user.password_hash. Both fields should be
+             masked inputs. Enforce a minimum length on the new password.
+             POST to an API endpoint; flash success or a specific error message.
+             ===================================================================== -->
+        <div class="bubble" style="max-width: min-content; justify-items: center;">
+            <div id="change-password-btn-wrap">
+                <button class="download-btn btn-warn" onclick="showPasswordForm()">Change Password</button>
+            </div>
+            <div id="change-password-form" class="collapsible">
+                <input id="current-password" class="bubble" type="password" placeholder="Current password" style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px">
+                <input id="new-password" class="bubble" type="password" placeholder="New password (min 8 characters)" style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px">
+                <div style="display: flex; gap: 8px; margin-top: 8px;">
+                    <button class="download-btn" onclick="updatePassword()">Update</button>
+                    <button class="download-btn" onclick="hidePasswordForm()">Cancel</button>
+                </div>
+            </div>
+
+            <div id="delete-account-btn-wrap">
+                <button class="download-btn btn-danger" onclick="showDeleteForm()">Delete Account</button>
+            </div>
+            <div id="delete-account-form" class="collapsible">
+                <input id="confirm-delete" class="bubble" type="text" placeholder="Type DELETE to confirm" style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px">
+                <div style="display: flex; gap: 8px; margin-top: 8px;">
+                    <button class="download-btn btn-danger" onclick="deleteAccount()">Confirm Delete</button>
+                    <button class="download-btn" onclick="hideDeleteForm()">Cancel</button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <div id="footer-placeholder"></div>
+    <script src="{{ url_for('static', filename='scripts.js') }}"></script>
+</body>
+</html>

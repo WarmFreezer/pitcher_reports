@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html style="height: 100%;">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subscription - {{ current_user.school.name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    {% if branding %}
+    <style>
+        :root {
+            --primary: {{branding.colors.primary}};
+            --secondary: {{branding.colors.secondary}};
+            --tertiary: {{branding.colors.tertiary}};
+            --dark: {{branding.colors.dark}};
+            --light: {{branding.colors.light}};
+            --accent: {{branding.colors.accent}};
+        }
+    </style>
+    {% endif %}
+</head>
+<body data-school-slug="{{ current_user.school.slug }}" onload="loadHeader('{{ current_user.school.slug|upper }} Baseball Analytics', '/static/resources/HomePlate.png', '{{ logo_path }}'); loadFooter(); loadNavbar();">
+    <div id="navbar-placeholder"></div>
+    <div id="header-placeholder"></div>
+
+    <main class="main-content">
+
+        <!-- =====================================================================
+             SUBSCRIPTION STATUS
+             Shows the school's current subscription plan, status, and next
+             billing date. Pull current_user.school.stripe_subscription_status
+             for the status badge. For billing date and plan name, call
+             stripe.Subscription.retrieve(school.stripe_subscription_id) and
+             read current_period_end (Unix timestamp — convert to readable date)
+             and items.data[0].price.nickname for the plan name. Pass these
+             values from the route into the template as context variables.
+             ===================================================================== -->
+        <div class="bubble">
+            <h2>Subscription Status</h2>
+            <p>Current Plan: {{ current_user.school.stripe_subscription_status }}</p>
+            <p>Admin Email:</p>
+            <input id="admin-email" type="email" class="bubble" value="{{ current_user.school.admin_email }}" style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px">
+        </div>
+
+        <!-- =====================================================================
+             SCHOOL BRANDING
+             Color pickers for the six branding tokens: primary, secondary,
+             tertiary, accent, light, and dark. Pre-populate with the current
+             values read from the school's branding.json via BrandingLoader.
+             On submit, validate that all six values are valid hex colors, then
+             write the updated JSON back to storage/schools/{slug}/assets/branding.json.
+             A live preview reflecting the chosen colors is a helpful addition.
+             POST to /api/settings/branding.
+             ===================================================================== -->
+        <div class="bubble">
+            <h2>School Branding</h2>
+            <p>Scroll through this page before saving to make sure you can see all of the text</p>
+            <div class="color-grid">
+                {% for token in ['primary', 'secondary', 'tertiary', 'dark', 'light', 'accent'] %}
+                <div class="color-card" id="color-card-{{ token }}"
+                     style="background-color: {{ branding.colors[token] }};"
+                     onclick="document.getElementById('color-{{ token }}').click()">
+                    <input type="color" class="color-picker" id="color-{{ token }}"
+                           value="{{ branding.colors[token] }}"
+                           oninput="syncColor('{{ token }}', this.value)">
+                    <div class="color-card-footer">
+                        <span class="color-card-label">{{ token | capitalize }}</span>
+                        <input type="text" class="color-card-hex" id="color-{{ token }}-text"
+                               value="{{ branding.colors[token] }}" maxlength="7" placeholder="#000000"
+                               oninput="syncColorText('{{ token }}', this.value)"
+                               onclick="event.stopPropagation()">
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <div>
+                <h2>School Logo</h2>
+                <img id="logo-preview" src="{{ logo_path }}" alt="Current Logo" style="max-width: 200px; max-height: 200px; margin-bottom: 16px; border: 2px solid var(--secondary); padding: 8px; background-color: white; border-radius: 16px;">
+                <br>
+                <input type="file" id="logo-upload" accept=".png,.jpg,.jpeg" style="display: none;" onchange="handleLogoUpload(event)">
+                <button class="upload-btn" onclick="document.getElementById('logo-upload').click()">Upload New Logo</button>
+            </div>
+        </div>  
+
+        <!-- =====================================================================
+             PLAYER ROSTER UPLOAD
+             Accepts a CSV or Excel file with one row per player. Expected columns:
+             player_id (must match TrackMan PitcherId), first_name, last_name,
+             and optionally position and jersey_number. On upload, parse the file
+             with pandas, validate required columns are present, and store the
+             data for use in report generation (player profile pictures are keyed
+             by player_id in Cloudinary at schools/{slug}/players/{player_id}/pfp).
+             A separate image upload per player can be offered on this page or
+             as a follow-up step. POST to /api/settings/roster.
+             ===================================================================== -->
+        <div class="bubble">
+            <h2 class="section-toggle" onclick="toggleSection('roster-content', this)">Player Roster <span class="toggle-arrow">▶</span></h2>
+            <div id="roster-content" class="collapsible collapsible-lg">
+                <p style="margin: 8px 0;">Modify player information and upload rosters, profile pictures, etc. here.</p>
+                <div id="roster-table-container"></div>
+                <div style="display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;">
+                    <button class="upload-btn" onclick="addRosterRow()">+ Add Player</button>
+                    <input type="file" id="roster-upload" accept=".csv,.xlsx,.xls" style="display: none;" onchange="uploadRoster(event)">
+                    <button class="upload-btn" onclick="document.getElementById('roster-upload').click()">Upload Roster</button>
+                    <input type="file" id="pfp-folder-upload" accept=".png,.jpg,.jpeg" multiple webkitdirectory style="display: none;" onchange="handleFolderUpload(event)">
+                    <button class="upload-btn" onclick="document.getElementById('pfp-folder-upload').click()">Upload Photo Folder</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- =====================================================================
+             BILLING HISTORY
+             Lists past invoices for the school's Stripe customer. Retrieve with
+             stripe.Invoice.list(customer=school.stripe_customer_id, limit=12).
+             Display invoice date, amount paid, and a link to the hosted invoice
+             PDF (invoice.invoice_pdf). Show "No billing history" if the list
+             is empty or the customer has no paid invoices yet.
+             ===================================================================== -->
+        {% if current_user.school.stripe_customer_id %}
+        <div class="bubble">
+            <h2 class="section-toggle" onclick="toggleSection('billing-content', this)">Billing History <span class="toggle-arrow">▶</span></h2>
+            <div id="billing-content" class="collapsible collapsible-lg">
+                {% if invoices %}
+                <table class="roster-table" style="margin-top: 12px;">
+                    <thead><tr><th>Date</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+                    <tbody>
+                    {% for inv in invoices %}
+                    <tr>
+                        <td>{{ inv.date }}</td>
+                        <td>{{ inv.amount }}</td>
+                        <td>{{ inv.status | capitalize }}</td>
+                        <td>{% if inv.pdf_url %}<a href="{{ inv.pdf_url }}" target="_blank">Download PDF</a>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p style="margin-top: 8px;">No billing history.</p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- =====================================================================
+             CANCEL SUBSCRIPTION  —  DANGER ZONE
+             Allows the admin to cancel the school's active Stripe subscription.
+             Before cancelling, show a confirmation prompt explaining that access
+             will continue until the end of the current billing period.
+             To cancel: stripe.Subscription.cancel(school.stripe_subscription_id)
+             then set school.stripe_subscription_status = 'canceled' and commit.
+             After cancellation, redirect to the dashboard with a flash message.
+             This section should be visually distinct (red border or warning styling)
+             to make the severity of the action clear. POST to /api/settings/cancel.
+             ===================================================================== -->
+        {% if current_user.school.stripe_subscription_status in ('active', 'trialing') and current_user.school.stripe_subscription_id %}
+        <div class="bubble" style="border-color: #d22d49;">
+            <h2 style="color: #d22d49;">Cancel Subscription</h2>
+            <div id="cancel-subscription-btn-wrap">
+                <button class="download-btn btn-danger" onclick="showCancelForm()">Cancel Subscription</button>
+            </div>
+            <div id="cancel-subscription-form" class="collapsible">
+                <p style="margin: 8px 0;">Access continues until the end of the current billing period. Type <strong>CANCEL</strong> to confirm.</p>
+                <input id="cancel-confirm-input" class="bubble" type="text" placeholder="CANCEL"
+                       style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px">
+                <div style="display: flex; gap: 8px; margin-top: 8px;">
+                    <button class="download-btn btn-danger" onclick="cancelSubscription()">Confirm Cancel</button>
+                    <button class="download-btn" onclick="hideCancelForm()">Back</button>
+                </div>
+            </div>
+        </div>
+        {% elif current_user.school.stripe_subscription_id %}
+        <div class="bubble" style="border-color: #4CAF50;">
+            <h2 style="color: #4CAF50;">Restart Subscription</h2>
+            <p style="margin-bottom: 12px;">Your subscription is currently <strong>{{ current_user.school.stripe_subscription_status }}</strong>. Resubscribe to restore access.</p>
+            <button class="download-btn btn-good" onclick="startSubscription()">Start Subscription</button>
+        </div>
+        {% endif %}
+
+    </main>
+
+    <button class="save-fab" onclick="saveSubscription()">Save</button>
+
+    <div id="footer-placeholder"></div>
+    <script src="{{ url_for('static', filename='scripts.js') }}"></script>
+</body>
+</html>

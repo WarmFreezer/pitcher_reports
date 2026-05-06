@@ -251,7 +251,457 @@ def about():
 def terms():
     return render_template('terms.html')
 
+@app.route("/account")
+@login_required
+def account():
+    branding = Branding_Loader.get_branding(current_user.school.slug)
+    logo_path = f"/storage/schools/{current_user.school.slug}/assets/logo.png"
+    return render_template('account.html', branding=branding, logo_path=logo_path)
+
+@app.route("/subscription")
+@login_required
+def subscription():
+    # Only the school's admin email may access this page
+    if current_user.email != current_user.school.admin_email:
+        flash('You do not have permission to access that page.', 'danger')
+        return redirect(url_for('dashboard'))
+    from datetime import datetime
+    branding = Branding_Loader.get_branding(current_user.school.slug)
+    logo_path = f"/storage/schools/{current_user.school.slug}/assets/logo.png"
+    invoices = []
+    if current_user.school.stripe_customer_id:
+        try:
+            result = stripe.Invoice.list(customer=current_user.school.stripe_customer_id, limit=12)
+            invoices = [{
+                'date': datetime.fromtimestamp(inv.created).strftime('%B %d, %Y'),
+                'amount': f"${inv.amount_paid / 100:.2f}",
+                'status': inv.status,
+                'pdf_url': inv.invoice_pdf
+            } for inv in result.data]
+        except Exception as e:
+            app.logger.error(f"Error fetching invoices: {e}")
+    return render_template('subscription.html', branding=branding, logo_path=logo_path, invoices=invoices)
+
 # ****** API Endpoints ******
+@app.route("/api/account/password", methods=['POST'])
+@login_required
+def update_password():
+    data = request.get_json()
+    current_password = data.get('current_password')
+    new_password = data.get('new_password')
+
+    if not current_password or not new_password:
+        return jsonify({'error': 'Please fill in all fields.'}), 400
+
+    if len(new_password) < 8:
+        return jsonify({'error': 'New password must be at least 8 characters.'}), 400
+
+    if not Auth.verify_password(current_user, current_password):
+        return jsonify({'error': 'Current password is incorrect.'}), 400
+
+    try:
+        Auth.update_password(current_user, current_password, new_password)
+        return jsonify({'message': 'Password updated successfully.'}), 200
+    except Exception as e:
+        app.logger.error(f"Error updating password: {e}")
+        return jsonify({'error': 'Failed to update password.'}), 500
+
+@app.route("/api/account/information", methods=['POST'])
+@login_required
+def update_information():
+    data = request.get_json()
+    first_name = data.get('name').split(' ')[0] if data.get('name') else current_user.first_name
+    last_name = data.get('name').split(' ')[1] if data.get('name') else current_user.last_name
+    email = data.get('email')
+
+    if not first_name or not last_name or not email:
+        return jsonify({'error': 'Please fill in all fields.'}), 400
+
+    try:
+        if email != current_user.email:
+            Auth.update_email(current_user, email)
+        if first_name != current_user.first_name or last_name != current_user.last_name:
+            Auth.update_name(current_user, first_name, last_name)
+        return jsonify({'message': 'Information updated successfully.'}), 200
+    except Exception as e:
+        app.logger.error(f"Error updating information: {e}")
+        return jsonify({'error': 'Failed to update information.'}), 500
+
+@app.route("/api/account/delete", methods=['POST'])
+@login_required
+def delete_account():
+    data = request.get_json()
+    confirm = data.get('confirm')
+
+    if confirm != 'DELETE':
+        return jsonify({'error': 'Please type DELETE to confirm account deletion.'}), 400
+
+    if current_user.email == current_user.school.admin_email:
+        return jsonify({'error': 'The administrator account cannot be deleted. Please cancel subscription or change administrator if you wish to delete your school and all associated accounts.'}), 400
+
+    try:
+        user_id = current_user.id
+        logout_user()
+        user = User.query.get(user_id)
+        db.session.delete(user)
+        db.session.commit()
+        return jsonify({'message': 'Account deleted successfully.'}), 200
+    except Exception as e:
+        app.logger.error(f"Error deleting account: {e}")
+        return jsonify({'error': 'Failed to delete account.'}), 500
+
+@app.route("/api/subscription/cancel", methods=['POST'])
+@login_required
+def cancel_subscription():
+    if not current_user.school.stripe_subscription_id:
+        return jsonify({'message': 'This is a permanent subscription and cannot be cancelled.', 'permanent': True}), 200
+
+    if current_user.email != current_user.school.admin_email:
+        return jsonify({'error': 'Only the school administrator can cancel the subscription.'}), 403
+    
+    try:
+        stripe.Subscription.modify(
+            current_user.school.stripe_subscription_id,
+            cancel_at_period_end=True
+        )
+        current_user.school.stripe_subscription_status = 'canceled'
+        db.session.commit()
+        return jsonify({'message': 'Subscription cancelled successfully.'}), 200
+    except Exception as e:
+        app.logger.error(f"Error cancelling subscription: {e}")
+        return jsonify({'error': 'Failed to cancel subscription.'}), 500
+
+@app.route("/api/subscription/start", methods=['POST'])
+@login_required
+def start_subscription():
+    if current_user.email != current_user.school.admin_email:
+        return jsonify({'error': 'Only the school administrator can manage the subscription.'}), 403
+    try:
+        # If an existing subscription is still alive (just pending cancellation),
+        # undo the cancellation instead of creating a new one
+        if current_user.school.stripe_subscription_id:
+            sub = stripe.Subscription.retrieve(current_user.school.stripe_subscription_id)
+            if sub.status in ('active', 'trialing') and sub.cancel_at_period_end:
+                stripe.Subscription.modify(
+                    current_user.school.stripe_subscription_id,
+                    cancel_at_period_end=False
+                )
+                current_user.school.stripe_subscription_status = sub.status
+                db.session.commit()
+                return jsonify({'reactivated': True, 'message': 'Subscription reactivated successfully.'}), 200
+
+        # Subscription is truly gone — create a new checkout session
+        checkout_session = stripe.checkout.Session.create(
+            line_items=[{'price': stripe_price_id, 'quantity': 1}],
+            mode='subscription',
+            ui_mode='embedded',
+            return_url=f'{request.host_url}return?session_id={{CHECKOUT_SESSION_ID}}',
+            customer=current_user.school.stripe_customer_id or None,
+            customer_email=None if current_user.school.stripe_customer_id else current_user.school.admin_email,
+            metadata={'school_slug': current_user.school.slug}
+        )
+        return jsonify({'client_secret': checkout_session.client_secret}), 200
+    except Exception as e:
+        app.logger.error(f"Error starting subscription: {e}")
+        return jsonify({'error': 'Failed to start subscription.'}), 500
+
+@app.route("/api/subscription/settings", methods=['POST'])
+@login_required
+def update_subscription_settings():
+    if current_user.email != current_user.school.admin_email:
+        return jsonify({'error': 'Only the admin can update school settings.'}), 403
+    data = request.get_json()
+    new_email = data.get('admin_email', '').strip()
+    if not new_email or '@' not in new_email:
+        return jsonify({'error': 'Invalid email address.'}), 400
+    try:
+        current_user.school.admin_email = new_email
+        db.session.commit()
+        return jsonify({'message': 'Settings updated successfully.'}), 200
+    except Exception as e:
+        app.logger.error(f"Error updating school settings: {e}")
+        return jsonify({'error': 'Failed to update settings.'}), 500
+
+@app.route("/api/subscription/rebrand", methods=['POST'])
+@login_required
+def rebrand_subscription():
+    import re
+    data = request.get_json()
+    colors = data.get('colors', {})
+
+    required = {'primary', 'secondary', 'tertiary', 'dark', 'light', 'accent'}
+    if not required.issubset(colors.keys()):
+        return jsonify({'error': 'Missing required color tokens.'}), 400
+
+    hex_re = re.compile(r'^#[0-9a-fA-F]{6}$')
+    for token, value in colors.items():
+        if not hex_re.match(value):
+            return jsonify({'error': f'Invalid hex color for {token}: {value}'}), 400
+
+    try:
+        branding = Branding_Loader.get_branding(current_user.school.slug)
+        branding['colors'] = colors
+        Branding_Loader.update_branding(current_user.school.slug, branding)
+        return jsonify({'message': 'Branding updated successfully.'}), 200
+    except Exception as e:
+        app.logger.error(f"Error updating branding: {e}")
+        return jsonify({'error': 'Failed to update branding.'}), 500
+
+LOGO_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+LOGO_ALLOWED_EXT = {'png', 'jpg', 'jpeg'}
+
+@app.route('/api/subscription/logo', methods=['POST'])
+@login_required
+def upload_logo():
+    from PIL import Image
+
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided.'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected.'}), 400
+
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in LOGO_ALLOWED_EXT:
+        return jsonify({'error': 'File must be a PNG or JPG.'}), 400
+
+    file.seek(0, 2)
+    if file.tell() > LOGO_MAX_BYTES:
+        return jsonify({'error': 'File too large. Maximum size is 5 MB.'}), 400
+    file.seek(0)
+
+    try:
+        img = Image.open(file).convert('RGBA')
+    except Exception:
+        return jsonify({'error': 'Invalid or corrupt image file.'}), 400
+
+    try:
+        assets_dir = os.path.join(app.config['STORAGE'], 'schools', current_user.school.slug, 'assets')
+        os.makedirs(assets_dir, exist_ok=True)
+        img.save(os.path.join(assets_dir, 'logo.png'), 'PNG')
+        return jsonify({
+            'message': 'Logo uploaded successfully.',
+            'logo_url': f'/storage/schools/{current_user.school.slug}/assets/logo.png'
+        }), 200
+    except Exception as e:
+        app.logger.error(f"Error saving logo: {e}")
+        return jsonify({'error': 'Failed to save logo.'}), 500
+
+roster_required_columns = {
+    'Trackman ID': 'string', 
+    'First Name': 'string',
+    'Last Name': 'string',
+    'Birthday': 'string',
+    'Height': 'string',
+    'Weight': 'numeric'
+}
+
+@app.route('/api/subscription/roster', methods=['GET'])
+@login_required
+def get_roster():
+    roster_path = os.path.join(app.config['STORAGE'], 'schools', current_user.school.slug, 'assets', 'roster.csv')
+    if not os.path.exists(roster_path):
+        return jsonify({'roster': [], 'columns': []}), 200
+    try:
+        df = pd.read_csv(roster_path).fillna('')
+        if 'Trackman ID' in df.columns:
+            df['Trackman ID'] = df['Trackman ID'].apply(
+                lambda x: str(int(float(x))) if x != '' else ''
+            )
+        return jsonify({'roster': df.to_dict(orient='records'), 'columns': list(df.columns)}), 200
+    except Exception as e:
+        app.logger.error(f"Error reading roster: {e}")
+        return jsonify({'error': 'Failed to read roster.'}), 500
+
+@app.route('/api/subscription/roster', methods=['PUT'])
+@login_required
+def save_roster():
+    data = request.get_json()
+    rows = data.get('rows', [])
+    columns = data.get('columns', [])
+    if not columns:
+        return jsonify({'error': 'No columns provided.'}), 400
+    try:
+        df = pd.DataFrame(rows if rows else [], columns=columns)
+        assets_dir = os.path.join(app.config['STORAGE'], 'schools', current_user.school.slug, 'assets')
+        os.makedirs(assets_dir, exist_ok=True)
+        df.to_csv(os.path.join(assets_dir, 'roster.csv'), index=False)
+        return jsonify({'message': 'Roster saved successfully.'}), 200
+    except Exception as e:
+        app.logger.error(f"Error saving roster: {e}")
+        return jsonify({'error': 'Failed to save roster.'}), 500
+
+@app.route('/api/subscription/roster/pfp/<player_id>', methods=['POST'])
+@login_required
+def upload_player_pfp(player_id):
+    import re
+    from PIL import Image
+    if not re.match(r'^[\w\-]+$', player_id):
+        return jsonify({'error': 'Invalid player ID.'}), 400
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided.'}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected.'}), 400
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+    if ext not in LOGO_ALLOWED_EXT:
+        return jsonify({'error': 'File must be a PNG or JPG.'}), 400
+    file.seek(0, 2)
+    if file.tell() > LOGO_MAX_BYTES:
+        return jsonify({'error': 'File too large. Maximum size is 5 MB.'}), 400
+    file.seek(0)
+    try:
+        img = Image.open(file).convert('RGBA')
+    except Exception:
+        return jsonify({'error': 'Invalid or corrupt image file.'}), 400
+    try:
+        player_dir = os.path.join(app.config['STORAGE'], 'schools', current_user.school.slug, 'assets', 'players', player_id)
+        os.makedirs(player_dir, exist_ok=True)
+        img.save(os.path.join(player_dir, 'pfp.png'), 'PNG')
+        return jsonify({
+            'message': 'Profile picture uploaded successfully.',
+            'pfp_url': f'/storage/schools/{current_user.school.slug}/assets/players/{player_id}/pfp.png'
+        }), 200
+    except Exception as e:
+        app.logger.error(f"Error saving player pfp: {e}")
+        return jsonify({'error': 'Failed to save profile picture.'}), 500
+
+@app.route('/api/subscription/roster/pfp/bulk', methods=['POST'])
+@login_required
+def upload_player_pfp_bulk():
+    import re
+    import unicodedata
+    from PIL import Image
+
+    files = request.files.getlist('files')
+    if not files:
+        return jsonify({'error': 'No files provided.'}), 400
+
+    roster_path = os.path.join(app.config['STORAGE'], 'schools', current_user.school.slug, 'assets', 'roster.csv')
+    if not os.path.exists(roster_path):
+        return jsonify({'error': 'No roster found. Please upload a roster first.'}), 400
+
+    roster_df = pd.read_csv(roster_path)
+
+    def normalize(s):
+        s = unicodedata.normalize('NFD', str(s).lower())
+        s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
+        return re.sub(r'[^a-z]', '', s)
+
+    name_to_id = {}
+    for _, row in roster_df.iterrows():
+        first = normalize(row.get('First Name', ''))
+        last = normalize(row.get('Last Name', ''))
+        player_id = str(row.get('Trackman ID', '')).strip()
+        if first and last and player_id:
+            name_to_id[first + last] = player_id
+            name_to_id[last + first] = player_id
+
+    print("name_to_id:", name_to_id)
+
+    matched, unmatched = [], []
+
+    for file in files:
+        if not file.filename:
+            continue
+        ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
+        if ext not in LOGO_ALLOWED_EXT:
+            unmatched.append(file.filename)
+            continue
+
+        basename = file.filename.replace('\\', '/').split('/')[-1]
+        stem = normalize(os.path.splitext(basename)[0])
+        print(f"file: {file.filename}  stem: {stem}  match: {name_to_id.get(stem)}")
+        player_id = name_to_id.get(stem)
+        if not player_id:
+            unmatched.append(file.filename)
+            continue
+
+        file.seek(0, 2)
+        too_large = file.tell() > LOGO_MAX_BYTES
+        file.seek(0)
+        if too_large:
+            print(f"!!! PFP TOO LARGE {file.filename}: {file.tell()} bytes")
+            unmatched.append(file.filename)
+            continue
+
+        try:
+            img = Image.open(file).convert('RGBA')
+            player_dir = os.path.join(app.config['STORAGE'], 'schools', current_user.school.slug, 'assets', 'players', player_id)
+            os.makedirs(player_dir, exist_ok=True)
+            img.save(os.path.join(player_dir, 'pfp.png'), 'PNG')
+            matched.append(file.filename)
+        except Exception as e:
+            print(f"!!! PFP SAVE ERROR {file.filename}: {type(e).__name__}: {e}")
+            unmatched.append(file.filename)
+
+    return jsonify({
+        'message': f'Matched {len(matched)} of {len(matched) + len(unmatched)} photos.',
+        'matched': matched,
+        'unmatched': unmatched
+    }), 200
+
+@app.route('/api/subscription/roster', methods=['POST'])
+@login_required
+def upload_roster():
+    school_temp_folder, _ = get_school_directories()
+
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file part in the request'}), 400
+    
+    file = request.files['file']
+
+    if file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+    
+    filename = secure_filename(file.filename)
+    filepath = os.path.join(school_temp_folder, f'{current_user.id}_roster_{filename}')
+    file.save(filepath)
+
+    if filepath.endswith('.csv'):
+        df = pd.read_csv(filepath)[['Trackman ID', 'First Name', 'Last Name', 'Birthday', 'Height', 'Weight']]
+    elif filepath.endswith('.xlsx') or filepath.endswith('.xls'):
+        df = pd.read_excel(filepath)[['Trackman ID', 'First Name', 'Last Name', 'Birthday', 'Height', 'Weight']]
+    else:
+        try: 
+            os.remove(filepath)
+        except:
+            pass
+        return jsonify({'error': 'Unsupported file format. Please provide a .csv, .xlsx, or .xls file.'}), 400
+
+    is_valid, result = file_validator.validate_uploaded_file(
+        source_df=df,
+        file=file,
+        filepath=filepath,
+        required_columns=list(roster_required_columns.keys()),
+        column_types=roster_required_columns
+    )
+
+    if not is_valid:
+        try: 
+            os.remove(filepath)
+        except:
+            pass
+        return jsonify({'error': result}), 400
+    
+    checksum = result
+    app.logger.info(f"Valid roster file uploaded: {filename} - Checksum: {checksum}")
+
+    try:
+        assets_dir = os.path.join(app.config['STORAGE'], 'schools', current_user.school.slug, 'assets')
+        os.makedirs(assets_dir, exist_ok=True)
+        roster_path = os.path.join(assets_dir, 'roster.csv')
+        df.to_csv(roster_path, index=False)
+        os.remove(filepath)
+        return jsonify({
+            'message': 'Roster uploaded and processed successfully.',
+            'roster_url': f'/storage/schools/{current_user.school.slug}/assets/roster.csv'
+        }), 200
+    except Exception as e:
+        app.logger.error(f"Error saving roster: {e}")
+        return jsonify({'error': 'Failed to save roster.'}), 500
+
 @app.route('/api/upload', methods=['POST'])
 @login_required
 def upload_file():
@@ -329,6 +779,9 @@ def upload_file():
         # Load Branding data per school
         branding = Branding_Loader.get_branding(current_user.school.slug)
 
+        # Roster df
+        roster = pd.read_csv(os.path.join(app.config['STORAGE'], 'schools', current_user.school.slug, 'assets', 'roster.csv')) if os.path.exists(os.path.join(app.config['STORAGE'], 'schools', current_user.school.slug, 'assets', 'roster.csv')) else pd.DataFrame()
+
         gen = PDF_Generator(
             current_user=current_user,
             branding=branding)
@@ -343,6 +796,10 @@ def upload_file():
                 # Generate heat map
                 report.pitch_heat_map_by_batter_side(source_df, current_user.id, school_temp_folder, pitcher_id, 0.75)
                 report.pitch_break_map(source_df, current_user.id, school_temp_folder, pitcher_id, 0.75)
+
+            if pitcher_id not in roster['Trackman ID'].values:
+                last_name, first_name = source_df.loc[source_df['PitcherId'] == pitcher_id, 'Pitcher'].iloc[0].split(', ', 1)
+                roster = pd.concat([roster, pd.DataFrame([{'Trackman ID': pitcher_id, 'First Name': first_name, 'Last Name': last_name}])], ignore_index=True)
 
             # Build table data
             table_data = report.build_table(source_df, pitcher_id)
@@ -396,6 +853,8 @@ def upload_file():
             del table_data
             del report_html
             gc.collect()
+
+        roster.to_csv(os.path.join(app.config['STORAGE'], 'schools', current_user.school.slug, 'assets', 'roster.csv'), index=False)
 
         # Merge all PDFs into one
         merged_pdf_path = os.path.join(school_output_folder, f'{current_user.id}_merged_pitcher_reports.pdf')

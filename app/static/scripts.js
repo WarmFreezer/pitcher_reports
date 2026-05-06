@@ -45,26 +45,25 @@ function loadNavbar() {
                     <div class="dropdown-content">
                         <a href="/upload" onclick="uploadFile(); return false;">📤 Upload</a>
                         <a href="#" id="nav-download-link" onclick="downloadPDFs(); return false;">📥 Download</a>
-                        <a href="#print">🖨️ Print</a>
-                        <a href="#save">💾 Save</a>
                     </div>
                 </li>
                 <li class="dropdown">
                     <a href="javascript:void(0)" class="nav-link">View ▼</a>
                     <div class="dropdown-content">
-                        <a href="/report">📋 Full Report</a>
+                        <a href="/report">📋 Season Report</a>
                     </div>
                 </li>
                 <li class="dropdown">
-                    <a href="javascript:void(0)" class="nav-link">Tools ▼</a>
+                    <a href="javascript:void(0)" class="nav-link">Settings ▼</a>
                     <div class="dropdown-content">
-                        <a href="#settings">⚙️ Settings</a>
+                        <a href="/account">👤 Account</a>
+                        <a href="/subscription">💳 Subscription</a>
                     </div>
                 </li>
                 <li><a href="/about" class="nav-link">About</a></li>
                 <li style="margin-left: auto;">
                     <a href="/logout" class="nav-link">
-                        <button style="background: none; border: none; color: white; cursor: pointer; font-size: inherit; font-family: inherit; padding-right: 16px;">Logout</button>
+                        <button style="background: none; border: none; color: white; cursor: pointer; font-size: inherit; font-family: 'Cambria', serif; padding-right: 16px;">Logout</button>
                     </a>
                 </li>
             </ul>
@@ -230,9 +229,9 @@ async function loadHeader(title = "Pitcher Report", pfp = "/static/resources/Hom
 function loadFooter() {
     const footerHTML = `
         <footer class="site-footer">
-            <p style="color: white; font-family: 'Arial', sans-serif;">&copy; 2026 Thomas Eubank</p>
-            <a href=/about style="color: white; font-family: 'Arial', sans-serif;">About</a>
-            <a href=/terms style="color: white; margin-left: 16px; font-family: 'Arial', sans-serif;">Terms</a>
+            <p style="color: white; font-family: 'Cambria', serif;">&copy; 2026 Thomas Eubank</p>
+            <a href=/about style="color: white; font-family: 'Cambria', serif;">About</a>
+            <a href=/terms style="color: white; margin-left: 16px; font-family: 'Cambria', serif;">Terms</a>
         </footer>
     `;
     document.getElementById('footer-placeholder').innerHTML = footerHTML;
@@ -356,6 +355,475 @@ function dropdownInit() {
         if (!picker.contains(e.target)) picker.classList.remove('open');
     });
 }
+
+// Change Password form toggle
+function showPasswordForm() {
+    document.getElementById('change-password-btn-wrap').style.display = 'none';
+    document.getElementById('change-password-form').classList.add('open');
+    document.getElementById('current-password').focus();
+}
+
+function hidePasswordForm() {
+    document.getElementById('change-password-btn-wrap').style.display = 'block';
+    document.getElementById('change-password-form').classList.remove('open');
+    document.getElementById('current-password').value = '';
+    document.getElementById('new-password').value = '';
+}
+
+async function updatePassword() {
+    const currentPassword = document.getElementById('current-password').value;
+    const newPassword = document.getElementById('new-password').value;
+
+    if (!currentPassword || !newPassword) {
+        alert('Please fill in both fields.');
+        return;
+    }
+    if (newPassword.length < 8) {
+        alert('New password must be at least 8 characters.');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/account/password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ current_password: currentPassword, new_password: newPassword })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            alert('Password updated successfully.');
+            hidePasswordForm();
+        } else {
+            alert(data.error || 'Failed to update password.');
+        }
+    } catch {
+        alert('An error occurred. Please try again.');
+    }
+}
+
+async function startSubscription() {
+    try {
+        const response = await fetch('/api/subscription/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await response.json();
+        if (response.ok) {
+            if (data.reactivated) {
+                alert(data.message);
+                window.location.reload();
+            } else {
+                window.location.href = `/checkout?client_secret=${data.client_secret}`;
+            }
+        } else {
+            alert(data.error || 'Failed to start subscription.');
+        }
+    } catch {
+        alert('An error occurred. Please try again.');
+    }
+}
+
+function showCancelForm() {
+    document.getElementById('cancel-subscription-btn-wrap').style.display = 'none';
+    document.getElementById('cancel-subscription-form').classList.add('open');
+    document.getElementById('cancel-confirm-input').focus();
+}
+
+function hideCancelForm() {
+    document.getElementById('cancel-subscription-btn-wrap').style.display = 'block';
+    document.getElementById('cancel-subscription-form').classList.remove('open');
+    document.getElementById('cancel-confirm-input').value = '';
+}
+
+async function cancelSubscription() {
+    const confirmation = document.getElementById('cancel-confirm-input').value.trim();
+    if (confirmation !== 'CANCEL') {
+        alert('Please type CANCEL to confirm.');
+        return;
+    }
+    try {
+        const response = await fetch('/api/subscription/cancel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await response.json();
+        if (response.ok) {
+            alert(data.message);
+            if (!data.permanent) window.location.href = '/dashboard';
+        } else {
+            alert(data.error || 'Failed to cancel subscription.');
+        }
+    } catch {
+        alert('An error occurred. Please try again.');
+    }
+}
+
+function showDeleteForm() {
+    document.getElementById('delete-account-btn-wrap').style.display = 'none';
+    document.getElementById('delete-account-form').classList.add('open');
+    document.getElementById('confirm-delete').focus();
+}
+
+function hideDeleteForm() {
+    document.getElementById('delete-account-btn-wrap').style.display = 'block';
+    document.getElementById('delete-account-form').classList.remove('open');
+    document.getElementById('confirm-delete').value = '';
+}
+
+async function deleteAccount() {
+    const confirmation = document.getElementById('confirm-delete').value.trim();
+    if (confirmation !== 'DELETE') {
+        alert('Please type DELETE to confirm account deletion.');
+        return;
+    }
+    try {
+        const response = await fetch('/api/account/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ confirm: confirmation })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            alert('Account deleted successfully.');
+            window.location.href = '/';
+        } else {
+            alert(data.error || 'Failed to delete account.');
+        }
+    } catch {
+        alert('An error occurred. Please try again.');
+    }
+}
+
+const COLOR_TOKENS = ['primary', 'secondary', 'tertiary', 'dark', 'light', 'accent'];
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+
+function syncColor(token, value) {
+    document.getElementById('color-' + token + '-text').value = value;
+    document.documentElement.style.setProperty('--' + token, value);
+    document.getElementById('color-card-' + token).style.backgroundColor = value;
+}
+
+function syncColorText(token, value) {
+    if (HEX_RE.test(value)) {
+        document.getElementById('color-' + token).value = value;
+        document.documentElement.style.setProperty('--' + token, value);
+        document.getElementById('color-card-' + token).style.backgroundColor = value;
+    }
+}
+
+async function saveSubscription() {
+    const colors = {};
+    for (const token of COLOR_TOKENS) {
+        const el = document.getElementById('color-' + token + '-text');
+        if (!el) continue;
+        const value = el.value.trim();
+        if (!HEX_RE.test(value)) {
+            alert(`Invalid hex color for ${token}: "${value}"`);
+            return;
+        }
+        colors[token] = value;
+    }
+
+    const saves = [];
+
+    if (Object.keys(colors).length === COLOR_TOKENS.length) {
+        saves.push(
+            fetch('/api/subscription/rebrand', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ colors })
+            }).then(r => r.json().then(d => ({ ok: r.ok, data: d, label: 'Branding' })))
+        );
+    }
+
+    const adminEmail = document.getElementById('admin-email');
+    if (adminEmail) {
+        saves.push(
+            fetch('/api/subscription/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ admin_email: adminEmail.value.trim() })
+            }).then(r => r.json().then(d => ({ ok: r.ok, data: d, label: 'Settings' })))
+        );
+    }
+
+    const rosterPayload = collectRoster();
+    if (rosterPayload) {
+        saves.push(
+            fetch('/api/subscription/roster', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(rosterPayload)
+            }).then(r => r.json().then(d => ({ ok: r.ok, data: d, label: 'Roster' })))
+        );
+    }
+
+    try {
+        const results = await Promise.all(saves);
+        const failed = results.filter(r => !r.ok);
+        if (failed.length) {
+            alert(failed.map(r => `${r.label}: ${r.data.error}`).join('\n'));
+        } else {
+            alert('Saved successfully.');
+        }
+    } catch {
+        alert('An error occurred. Please try again.');
+    }
+}
+
+// ── Roster table ────────────────────────────────────────────────────────────
+
+let _rosterColumns = [];
+
+async function loadRoster() {
+    const container = document.getElementById('roster-table-container');
+    if (!container) return;
+    try {
+        const response = await fetch('/api/subscription/roster');
+        const data = await response.json();
+        if (response.ok) {
+            _rosterColumns = data.columns;
+            renderRosterTable(data.roster, data.columns);
+        }
+    } catch {
+        container.innerHTML = '<p style="color:red;">Failed to load roster.</p>';
+    }
+}
+
+function renderRosterTable(roster, columns) {
+    const container = document.getElementById('roster-table-container');
+    if (!container) return;
+
+    if (!columns || columns.length === 0) {
+        container.innerHTML = '<p style="color: var(--dark); margin-bottom: 8px;">No roster uploaded yet.</p>';
+        return;
+    }
+
+    const headerCells = ['Photo', ...columns, ''].map(c => `<th>${c}</th>`).join('');
+    const rows = roster.map(row => buildRosterRow(row, columns)).join('');
+
+    container.innerHTML = `
+        <div class="roster-scroll">
+            <table class="roster-table">
+                <thead><tr>${headerCells}</tr></thead>
+                <tbody id="roster-body">${rows}</tbody>
+            </table>
+        </div>`;
+}
+
+function escapeAttr(v) {
+    return String(v ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+}
+
+function buildRosterRow(row, columns) {
+    const trackmanId = row[columns[0]] ?? '';
+    const pfpUrl = `/storage/schools/${window._schoolSlug}/assets/players/${trackmanId}/pfp.png?t=${Date.now()}`;
+
+    const pfpCell = `
+        <td class="pfp-cell">
+            <img class="player-pfp" src="${pfpUrl}" onerror="this.src='/static/resources/HomePlate.png'">
+            <input type="file" accept=".png,.jpg,.jpeg" style="display:none"
+                   onchange="uploadPlayerPfp('${trackmanId}', this)">
+            <span class="pfp-edit" onclick="this.previousElementSibling.click()">✎</span>
+        </td>`;
+
+    const dataCells = columns.map(col =>
+        `<td><input class="roster-input" value="${escapeAttr(row[col])}" data-col="${escapeAttr(col)}"></td>`
+    ).join('');
+
+    const deleteCell = `<td><button class="roster-delete-btn" onclick="deleteRosterRow(this)">×</button></td>`;
+
+    return `<tr>${pfpCell}${dataCells}${deleteCell}</tr>`;
+}
+
+function addRosterRow() {
+    const tbody = document.getElementById('roster-body');
+    if (!tbody || _rosterColumns.length === 0) return;
+    const emptyRow = Object.fromEntries(_rosterColumns.map(c => [c, '']));
+    tbody.insertAdjacentHTML('beforeend', buildRosterRow(emptyRow, _rosterColumns));
+}
+
+function deleteRosterRow(btn) {
+    btn.closest('tr').remove();
+}
+
+function collectRoster() {
+    const tbody = document.getElementById('roster-body');
+    if (!tbody || _rosterColumns.length === 0) return null;
+    const rows = Array.from(tbody.querySelectorAll('tr')).map(tr => {
+        const inputs = tr.querySelectorAll('.roster-input');
+        const row = {};
+        inputs.forEach(input => { row[input.dataset.col] = input.value; });
+        return row;
+    });
+    return { columns: _rosterColumns, rows };
+}
+
+async function uploadPlayerPfp(playerId, fileInput) {
+    if (!playerId || !fileInput.files[0]) return;
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    try {
+        const response = await fetch(`/api/subscription/roster/pfp/${playerId}`, {
+            method: 'POST',
+            body: formData
+        });
+        const data = await response.json();
+        if (response.ok) {
+            const img = fileInput.closest('td').querySelector('.player-pfp');
+            if (img) img.src = data.pfp_url + '?t=' + Date.now();
+        } else {
+            alert(data.error || 'Failed to upload profile picture.');
+        }
+    } catch {
+        alert('An error occurred. Please try again.');
+    }
+    fileInput.value = '';
+}
+
+function toggleSection(id, heading) {
+    const el = document.getElementById(id);
+    el.classList.toggle('open');
+    heading.classList.toggle('open');
+}
+
+(function () {
+    if (document.getElementById('roster-table-container')) {
+        window._schoolSlug = document.body.dataset.schoolSlug || '';
+        loadRoster();
+    }
+})();
+
+async function handleLogoUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const response = await fetch('/api/subscription/logo', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await response.json();
+        if (response.ok) {
+            const url = data.logo_url + '?t=' + Date.now();
+            const preview = document.getElementById('logo-preview');
+            if (preview) preview.src = url;
+            const headerLogo = document.querySelector('.header-right img');
+            if (headerLogo) headerLogo.src = url;
+        } else {
+            alert(data.error || 'Failed to upload logo.');
+        }
+    } catch {
+        alert('An error occurred. Please try again.');
+    }
+
+    event.target.value = '';
+}
+
+async function handleFolderUpload(event) {
+    const files = Array.from(event.target.files).filter(f =>
+        /\.(png|jpe?g)$/i.test(f.name)
+    );
+    if (!files.length) {
+        alert('No PNG or JPG images found in the selected folder.');
+        event.target.value = '';
+        return;
+    }
+
+    const formData = new FormData();
+    files.forEach(f => formData.append('files', f));
+
+    try {
+        const response = await fetch('/api/subscription/roster/pfp/bulk', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await response.json();
+        if (response.ok) {
+            let msg = data.message;
+            if (data.unmatched && data.unmatched.length) {
+                msg += `\n\nUnmatched files:\n${data.unmatched.join('\n')}`;
+            }
+            alert(msg);
+            loadRoster();
+        } else {
+            alert(data.error || 'Failed to upload photos.');
+        }
+    } catch {
+        alert('An error occurred. Please try again.');
+    }
+
+    event.target.value = '';
+}
+
+// api/subscription/roster
+async function uploadRoster() {
+    const fileInput = document.getElementById('roster-upload');
+    if (!fileInput) return;
+
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+        const response = await fetch('/api/subscription/roster', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await response.json();
+        if (response.ok) {
+            alert('Roster uploaded successfully.');
+        } else {
+            alert(data.error || 'Failed to upload roster.');
+        }
+    } catch {
+        alert('An error occurred. Please try again.');
+    }
+
+    fileInput.value = '';
+}
+
+async function updateInformation() {
+    const name = document.getElementById('update-name-input').value.trim();
+    const email = document.getElementById('update-email-input').value.trim();
+
+    try {
+        const response = await fetch('/api/account/information', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name, email: email })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            alert('Information updated successfully.');
+        } else {
+            alert(data.error || 'Failed to update information.');
+        }
+    } catch {
+        alert('An error occurred. Please try again.');
+    }
+}
+
+// FAB — stop following scroll once footer is visible
+(function () {
+    const fab = document.querySelector('.save-fab');
+    if (!fab) return;
+
+    function updateFab() {
+        const footer = document.getElementById('footer-placeholder');
+        if (!footer) return;
+        const footerTop = footer.getBoundingClientRect().top;
+        const margin = 32;
+        fab.style.bottom = Math.max(margin, window.innerHeight - footerTop + margin) + 'px';
+    }
+
+    window.addEventListener('scroll', updateFab, { passive: true });
+    updateFab();
+})();
 
 // File Exists
 async function fileExists(url) {

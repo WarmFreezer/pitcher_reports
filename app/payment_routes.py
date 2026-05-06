@@ -52,20 +52,31 @@ class PaymentRoutes:
                         
                         if subscription.status == 'active' or subscription.status == 'trialing':
                             metadata = checkout_session.metadata
-                            db.session.add(School(
-                                name=metadata['name'],
-                                slug=metadata['slug'],
-                                admin_email=metadata['admin_email'],
-                                stripe_customer_id=checkout_session.customer,
-                                stripe_subscription_id=subscription_id,
-                                stripe_subscription_status=subscription.status
-                            ))
-                            db.session.commit()
 
-                            session.pop('pending_school', None)
-
-                            flash('Subscription successful! Please create your user account.', 'success')
-                            return redirect(url_for('register'))
+                            if 'school_slug' in metadata and 'name' not in metadata:
+                                # Resubscribe flow — update existing school
+                                school = School.query.filter_by(slug=metadata['school_slug']).first()
+                                if school:
+                                    school.stripe_customer_id = checkout_session.customer
+                                    school.stripe_subscription_id = subscription_id
+                                    school.stripe_subscription_status = subscription.status
+                                    db.session.commit()
+                                flash('Subscription reactivated successfully!', 'success')
+                                return redirect(url_for('subscription'))
+                            else:
+                                # New school creation flow
+                                db.session.add(School(
+                                    name=metadata['name'],
+                                    slug=metadata['slug'],
+                                    admin_email=metadata['admin_email'],
+                                    stripe_customer_id=checkout_session.customer,
+                                    stripe_subscription_id=subscription_id,
+                                    stripe_subscription_status=subscription.status
+                                ))
+                                db.session.commit()
+                                session.pop('pending_school', None)
+                                flash('Subscription successful! Please create your user account.', 'success')
+                                return redirect(url_for('register'))
                         else:
                             return render_template('subscription_pending.html', 
                                                 subscription=subscription)

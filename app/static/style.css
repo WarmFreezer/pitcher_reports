@@ -19,7 +19,7 @@
 
 body {
     background-color: white;
-    font-family: Arial, sans-serif;
+    font-family: Cambria, serif;
     color: var(--dark);
     height: 100%;
     display: flex;
@@ -176,7 +176,7 @@ select {
     text-align: center;
     padding: 14px 20px;
     text-decoration: none;
-    font-family: 'Graduate', Arial, sans-serif;
+    font-family: 'Cambria', Arial, sans-serif;
     transition: background-color 0.3s ease;
 }
 
@@ -362,12 +362,42 @@ select {
 }
 
 .bubble {
-    padding: 20px; 
-    background-color: var(--light); 
-    border-radius: 32px; 
+    padding: 20px;
+    background-color: var(--light);
+    border-radius: 32px;
     margin: 32px;
     width: 1200px;
     justify-self: center;
+    transition: all 0.3s ease;
+}
+
+.collapsible {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.35s ease;
+}
+
+.collapsible.open {
+    max-height: 500px;
+}
+
+.collapsible-lg.open {
+    max-height: 5000px;
+}
+
+.section-toggle {
+    cursor: pointer;
+    user-select: none;
+}
+
+.toggle-arrow {
+    font-size: 0.7em;
+    display: inline-block;
+    transition: transform 0.3s ease;
+}
+
+.section-toggle.open .toggle-arrow {
+    transform: rotate(90deg);
 }
 
 .content {
@@ -417,6 +447,54 @@ select {
     align-items: stretch;
 }
 
+.comparison-toggle {
+    background: white;
+    border: 2px solid var(--accent);
+    border-radius: 16px;
+    overflow: hidden;
+}
+
+.toggle-tabs {
+    display: flex;
+    border-bottom: 2px solid var(--accent);
+}
+
+.toggle-tab {
+    flex: 1;
+    padding: 14px;
+    background: none;
+    border: none;
+    border-right: 1px solid var(--accent);
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: bold;
+    font-family: 'Graduate', Arial, sans-serif;
+    color: var(--dark);
+    transition: background 0.2s, color 0.2s;
+}
+
+.toggle-tab:last-child {
+    border-right: none;
+}
+
+.toggle-tab--active {
+    background: var(--tertiary);
+    color: white;
+}
+
+.toggle-tab:not(.toggle-tab--active):hover {
+    background: var(--light);
+}
+
+.toggle-panel {
+    display: none;
+    padding: 20px;
+}
+
+.toggle-panel--active {
+    display: block;
+}
+
 .comparison-card {
     background-color: white;
     border: 2px solid var(--accent);
@@ -449,13 +527,40 @@ select {
 
 .comparison-scroll {
     width: 100%;
-    flex: 1;
-    min-height: 0;
+    height: 65vh;
     overflow-x: auto;
     overflow-y: auto;
     border: 1px solid var(--accent);
     border-radius: 10px;
     background-color: #fff;
+}
+
+.comparison-image--before {
+    width: auto;
+    max-width: none;
+    height: auto;
+    object-fit: unset;
+}
+
+.comparison-image--after {
+    width: 100%;
+    max-width: calc(100vw / 3);
+    height: auto;
+    display: block;
+    margin: 0 auto;
+}
+
+.toggle-panel--scrollable {
+    max-height: 65vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.comparison-iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
 }
 
 .comparison-dialogue {
@@ -558,6 +663,7 @@ select {
    ============================================================================ */
 .download-btn {
     display: inline-block;
+    font-family: Cambria, serif;
     background-color: white;
     color: var(--dark);
     padding: 12px 24px;
@@ -574,6 +680,21 @@ select {
 .download-btn:hover {
     background-color: var(--secondary);
     text-decoration: none;
+}
+
+.download-btn.btn-danger:hover {
+    background-color: #d22d49;
+    color: white;
+}
+
+.download-btn.btn-warn:hover {
+    background-color: #d9a22d;
+    color: white;
+}
+
+.download-btn.btn-good:hover {
+    background-color: #4CAF50;
+    color: white;
 }
 
 .download-btn-small {
@@ -613,6 +734,217 @@ select {
 .upload-btn:hover {
     background-color: var(--secondary);
     text-decoration: none;
+}
+
+/* ============================================================================
+   COLOR PICKER
+   ============================================================================ */
+
+.color-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.color-card {
+    border-radius: 16px;
+    height: 160px;
+    padding: 16px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.color-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 65%;
+    background: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.35));
+    border-radius: 0 0 16px 16px;
+    pointer-events: none;
+}
+
+.color-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.color-picker {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+}
+
+.color-card-footer {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.color-card-label {
+    color: white;
+    font-weight: bold;
+    font-size: 16px;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.color-card-hex {
+    width: 100px;
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 6px;
+    color: white;
+    font-family: monospace;
+    font-size: 13px;
+    padding: 4px 8px;
+    max-width: none;
+    transition: background 0.2s;
+}
+
+.color-card-hex:focus {
+    outline: none;
+    background: rgba(255, 255, 255, 0.35);
+}
+
+/* ============================================================================
+   ROSTER TABLE
+   ============================================================================ */
+
+.roster-scroll {
+    overflow-x: auto;
+    margin-top: 12px;
+}
+
+.roster-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.roster-table th {
+    background-color: var(--tertiary);
+    color: white;
+    padding: 10px 12px;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.roster-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--accent);
+    vertical-align: middle;
+}
+
+.roster-table tr:hover td {
+    background-color: var(--light);
+}
+
+.roster-input {
+    border: none;
+    background: transparent;
+    font-size: 14px;
+    font-family: Cambria, serif;
+    color: var(--dark);
+    width: 100%;
+    min-width: 80px;
+    padding: 4px 0;
+    max-width: none;
+}
+
+.roster-input:focus {
+    outline: none;
+    border-bottom: 1px solid var(--secondary);
+}
+
+.pfp-cell {
+    position: relative;
+    width: 52px;
+    text-align: center;
+}
+
+.player-pfp {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--accent);
+    display: block;
+    margin: 0 auto;
+}
+
+.pfp-edit {
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    background: var(--secondary);
+    color: white;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    font-size: 10px;
+    line-height: 16px;
+    text-align: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.pfp-cell:hover .pfp-edit {
+    opacity: 1;
+}
+
+.roster-delete-btn {
+    background: none;
+    border: none;
+    color: #d22d49;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+}
+
+.roster-delete-btn:hover {
+    color: #a01f35;
+}
+
+/* ============================================================================
+   FLOATING ACTION BUTTON
+   ============================================================================ */
+
+.save-fab {
+    position: fixed;
+    bottom: 32px;
+    right: 32px;
+    z-index: 200;
+    padding: 14px 32px;
+    border-radius: 32px;
+    background-color: var(--tertiary);
+    color: var(--light);
+    font-family: Cambria, serif;
+    font-size: 16px;
+    font-weight: bold;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    transition: background-color 0.3s, box-shadow 0.3s;
+}
+
+.save-fab:hover {
+    background-color: var(--secondary);
+    color: var(--dark);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
 }
 
 /* ============================================================================

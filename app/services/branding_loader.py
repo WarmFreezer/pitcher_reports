@@ -48,10 +48,12 @@ class BrandingLoader:
     def update_branding(school_slug, branding_data):
         branding_path = os.path.join(BrandingLoader.SCHOOLS, school_slug, 'assets', 'branding.json')
         if not os.path.exists(branding_path):
-            raise FileNotFoundError(f"Branding file not found for school: {school_slug}")
-
-        with open(branding_path, 'w') as f:
-            json.dump(branding_data, f, indent=4)
+            os.makedirs(os.path.dirname(branding_path), exist_ok=True)
+            with open(branding_path, 'w') as f:
+                json.dump(branding_data, f, indent=4)
+        else:
+            with open(branding_path, 'w') as f:
+                json.dump(branding_data, f, indent=4)
 
         return True
 

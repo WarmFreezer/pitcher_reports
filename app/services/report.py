@@ -5,11 +5,16 @@ import matplotlib
 # Use a non-interactive backend for matplotlib
 matplotlib.use('Agg') 
 
+from matplotlib.colors import LinearSegmentedColormap, to_rgb
 from matplotlib.patches import Rectangle
 from matplotlib import pyplot as plt
 import matplotlib.patches as patches
 import seaborn as sns
 import os
+
+def _cmap(hex_color, name):
+    r, g, b = to_rgb(hex_color)
+    return LinearSegmentedColormap.from_list(name, [(r, g, b, 0), (r, g, b, 1)])
 
 # Define required columns and their types
 required_columns = {
@@ -49,36 +54,28 @@ pitch_order = {
     'Slider': 'SL',
     'ChangeUp': 'CH',
     'Splitter': 'SP',
-    'Knuckleball': 'CT',
+    'Knuckleball': 'KB',
+    'Cutter': 'CT',
     'Sinker': 'SK',
     'Four-Seam': 'FF',
     'Undefined': 'UN'
 }
-
-# Define colors for each pitch type
-pitch_colors = {
-        'Fastball': 'Reds',
-        'Curveball': 'Oranges',
-        'Slider': 'BrBG',
-        'ChangeUp': 'Greens',
-        'Splitter': 'Blues',
-        'Knuckleball': 'Purples',
-        'Sinker': 'BuGn',
-        'Four-Seam': 'PuRd',
-        'Undefined': 'Greys'
-}
     
 pitch_point_colors = {
-    'Fastball': '#FF0000',
-    'Curveball': '#FF8800',
-    'Slider': '#552200',
-    'ChangeUp': '#00FF00',
-    'Splitter': '#0000FF',
-    'Knuckleball': '#FF00FF',
-    'Sinker': '#00AAAA',
+    'Fastball': '#d22d49',
+    'Curveball': '#00d1ed',
+    'Slider': '#004400',
+    'ChangeUp': '#1dbe3a',
+    'Splitter': '#4f0010',
+    'Knuckleball': '#472cee',
+    'Cutter': '#933f2c',
+    'Sinker': '#fe9d00',
     'Four-Seam': '#FF0088',
     'Undefined': '#888888'
 }
+
+# Define colors for each pitch type
+pitch_colors = {k: _cmap(v, k) for k, v in pitch_point_colors.items()}
 
 STRIKES = ['StrikeCalled', 'StrikeSwinging', 'FoulBallNotFieldable']
 
@@ -202,7 +199,7 @@ def build_table(source, pitcher_id):
         report_df['CSW'] = report_df['CSW'].map(lambda x: f"{x:.1f}%")
 
         # Take the top 4 most thrown pitches for the report
-        report_df = report_df.sort_values('Thrown', ascending=False).head(4)
+        report_df = report_df.sort_values('Thrown', ascending=False).head(6)
 
         # Sort by constant order
         pitch_order_list = list(pitch_order.values())
@@ -255,11 +252,10 @@ def pitch_heat_map_by_batter_side(source, id, output_path, pitcher_id, threshold
                         y=pitch_data['PlateLocHeight'],
                         fill=True,
                         thresh=threshold,       
-                        color=point_color,
-                        alpha=0.6,
+                        cmap=cmap,
                         bw_adjust=bw_adjust,
                         ax=ax,
-                        levels=2
+                        levels=10
                     )
 
                     # Plot average pitch location for pitch type
@@ -271,7 +267,8 @@ def pitch_heat_map_by_batter_side(source, id, output_path, pitcher_id, threshold
                         color=point_color,
                         marker='.',
                         s=100,
-                        label=f'{pitch_type}: {len(pitch_data)} pitches'
+                        zorder=5,
+                        label=f'{pitch_order.get(pitch_type)}: {len(pitch_data)} pitches'
                     )
                 else:
                     # Plot individual points
@@ -281,9 +278,10 @@ def pitch_heat_map_by_batter_side(source, id, output_path, pitcher_id, threshold
                         color=point_color,
                         alpha=0.6,
                         s=50,
+                        zorder=5,
                         edgecolors='black',
                         linewidth=0.5,
-                        label=f'{pitch_type}: {len(pitch_data)} pitches'
+                        label=f'{pitch_order.get(pitch_type, pitch_type)}: {len(pitch_data)} pitches'
                     )
             
             # Set plot properties
@@ -309,11 +307,6 @@ def pitch_heat_map_by_batter_side(source, id, output_path, pitcher_id, threshold
                                 facecolor='none', linestyle=(0, (1, 10)))
             ax.add_patch(shadow_zone)
             
-            # Add legend
-            handles, labels = ax.get_legend_handles_labels()
-            by_label = dict(zip(labels, handles))
-            ax.legend(by_label.values(), by_label.keys(), loc='upper right', fontsize=12)
-        
         # Adjust spacing to make room for title
         plt.subplots_adjust(left=0.06, right=0.96, top=0.88, bottom=0.1, wspace=0.2)
 
@@ -362,11 +355,10 @@ def pitch_break_map(source, id, output_path, pitcher_id, threshold=0.1):
                     y=pitch_data['InducedVertBreak'],
                     fill=True,
                     thresh=threshold,       
-                    color=point_color,
-                    alpha=0.6,
+                    cmap=cmap,
                     bw_adjust=bw_adjust,
                     ax=ax,
-                    levels=2
+                    levels=10
                 )
 
                 # Plot average pitch location for pitch type
@@ -378,7 +370,8 @@ def pitch_break_map(source, id, output_path, pitcher_id, threshold=0.1):
                     color=point_color,
                     marker='.',
                     s=100,
-                    label=f'{pitch_type}: {len(pitch_data)} pitches'
+                    zorder=5,
+                    label=f'{pitch_order.get(pitch_type, pitch_type)}: {len(pitch_data)} pitches'
                 )
             else:
                 # Plot individual points
@@ -388,9 +381,10 @@ def pitch_break_map(source, id, output_path, pitcher_id, threshold=0.1):
                     color=point_color,
                     alpha=0.6,
                     s=50,
+                    zorder=5,
                     edgecolors='black',
                     linewidth=0.5,
-                    label=f'{pitch_type}: {len(pitch_data)} pitches'
+                    label=f'{pitch_order.get(pitch_type, pitch_type)}: {len(pitch_data)} pitches'
                 )
 
             # Plot pitch type average movement vector for the pitcher
@@ -412,7 +406,7 @@ def pitch_break_map(source, id, output_path, pitcher_id, threshold=0.1):
         # Add legend
         handles, labels = ax.get_legend_handles_labels()
         by_label = dict(zip(labels, handles))
-        ax.legend(by_label.values(), by_label.keys(), loc='upper right', fontsize=12)
+        ax.legend(by_label.values(), by_label.keys(), loc='lower right', fontsize=12)
         
         # Adjust spacing to make room for title
         plt.subplots_adjust(left=0.06, right=0.96, top=0.88, bottom=0.1, wspace=0.2)
@@ -479,7 +473,7 @@ def usage_table(source, pitcher_id):
             report['Whiff'] = report['Whiff'].map(lambda x: f"{x:.1f}%")
 
             # Limit to top 4 most thrown pitches for the report
-            report = report.sort_values('Count', ascending=False).head(4)
+            report = report.sort_values('Count', ascending=False).head(6)
 
             # Sort by dictionary order
             pitch_order_list = list(pitch_order.values())
@@ -528,6 +522,7 @@ def strikeout_map(source, id, output_path, pitcher_id):
             color='red',
             alpha=0.6,
             s=50,
+            zorder=5,
             edgecolors='black',
             linewidth=0.5,
             label=f'Strikeouts: {len(strikeout_data)}'
