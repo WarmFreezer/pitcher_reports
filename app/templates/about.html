@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Baseball Analytics - About</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/about.css') }}">
 </head>
 <body onload="loadNavbar(); loadHeader('About - Baseball Analytics', '/static/resources/HomePlate.png');loadFooter();">
     <!-- Navbar Placeholder -->
@@ -54,11 +57,17 @@
                 });
             </script>
         </div>
+        <div class="bubble about-bubble" style="margin-top: 0;">
+            <h2 style="margin-bottom: 12px;">Contact & Support</h2>
+            <p class="about-lead" style="margin-bottom: 16px;">Questions about the product, your subscription, or TrackMan integration? Get in touch directly.</p>
+            <p style="margin: 6px 0;">📧 <a href="mailto:thomas.eubank516@gmail.com" style="color: var(--secondary);">thomas.eubank516@gmail.com</a></p>
+            <p style="margin: 6px 0;">📞 <a href="tel:+16063034052" style="color: var(--secondary);">606-303-4052</a></p>
+        </div>
     </main>
 
     <!-- Footer Placeholder -->
     <div id="footer-placeholder"></div>
 
-    <script src="{{ url_for('static', filename='scripts.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/core.js') }}"></script>
 </body>
 </html>

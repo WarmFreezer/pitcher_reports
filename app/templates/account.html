@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Account - {{ current_user.school.name }}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/forms.css') }}">
 
     {% if branding %}
     <style>
@@ -51,7 +54,7 @@
              masked inputs. Enforce a minimum length on the new password.
              POST to an API endpoint; flash success or a specific error message.
              ===================================================================== -->
-        <div class="bubble" style="max-width: min-content; justify-items: center;">
+        <div class="bubble" style="width: min-content; justify-items: center;">
             <div id="change-password-btn-wrap">
                 <button class="download-btn btn-warn" onclick="showPasswordForm()">Change Password</button>
             </div>
@@ -79,6 +82,7 @@
     </main>
 
     <div id="footer-placeholder"></div>
-    <script src="{{ url_for('static', filename='scripts.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/core.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/pages/account.js') }}"></script>
 </body>
 </html>

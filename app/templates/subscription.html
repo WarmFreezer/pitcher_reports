@@ -4,7 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Subscription - {{ current_user.school.name }}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/forms.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tables.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/subscription.css') }}">
 
     {% if branding %}
     <style>
@@ -56,6 +61,14 @@
             <h2>School Branding</h2>
             <p>Scroll through this page before saving to make sure you can see all of the text</p>
             <div class="color-grid">
+                <div class="color-card logo-card" onclick="document.getElementById('logo-upload').click()">
+                    <img id="logo-preview" src="{{ logo_path }}" alt="School Logo" class="logo-card-img">
+                    <input type="file" id="logo-upload" accept=".png,.jpg,.jpeg" style="display:none" onchange="handleLogoUpload(event)">
+                    <div class="color-card-footer">
+                        <span class="color-card-label">Logo</span>
+                        <span class="color-card-hex" style="font-family: Cambria, serif;">Click to upload</span>
+                    </div>
+                </div>
                 {% for token in ['primary', 'secondary', 'tertiary', 'dark', 'light', 'accent'] %}
                 <div class="color-card" id="color-card-{{ token }}"
                      style="background-color: {{ branding.colors[token] }};"
@@ -73,14 +86,7 @@
                 </div>
                 {% endfor %}
             </div>
-            <div>
-                <h2>School Logo</h2>
-                <img id="logo-preview" src="{{ logo_path }}" alt="Current Logo" style="max-width: 200px; max-height: 200px; margin-bottom: 16px; border: 2px solid var(--secondary); padding: 8px; background-color: white; border-radius: 16px;">
-                <br>
-                <input type="file" id="logo-upload" accept=".png,.jpg,.jpeg" style="display: none;" onchange="handleLogoUpload(event)">
-                <button class="upload-btn" onclick="document.getElementById('logo-upload').click()">Upload New Logo</button>
-            </div>
-        </div>  
+        </div>
 
         <!-- =====================================================================
              PLAYER ROSTER UPLOAD
@@ -141,6 +147,13 @@
         </div>
         {% endif %}
 
+        <div class="bubble">
+            <h2>Support</h2>
+            <p style="margin: 8px 0;">For billing issues, account questions, or general help, reach out directly:</p>
+            <p style="margin: 8px 0;">📧 <a href="mailto:thomas.eubank516@gmail.com" style="color: var(--secondary);">thomas.eubank516@gmail.com</a></p>
+            <p style="margin: 8px 0;">📞 <a href="tel:+16063034052" style="color: var(--secondary);">606-303-4052</a></p>
+        </div>
+
         <!-- =====================================================================
              CANCEL SUBSCRIPTION  —  DANGER ZONE
              Allows the admin to cancel the school's active Stripe subscription.
@@ -181,6 +194,7 @@
     <button class="save-fab" onclick="saveSubscription()">Save</button>
 
     <div id="footer-placeholder"></div>
-    <script src="{{ url_for('static', filename='scripts.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/core.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/pages/subscription.js') }}"></script>
 </body>
 </html>

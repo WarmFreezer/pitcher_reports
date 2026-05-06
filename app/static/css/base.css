@@ -1,0 +1,38 @@
+/* ============================================================================
+   VARIABLES & RESET
+   ============================================================================ */
+
+:root {
+  --primary: #042026;
+  --secondary: #a67f5d;
+  --tertiary: #401d09;
+  --dark: #30312C;
+  --light: #ececec;
+  --accent: #d9d2bf;
+  --danger: #d22d49;
+  --warn: #d9a22d;
+  --good: #4CAF50;
+  --border: #ddd;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background-color: white;
+    font-family: Cambria, serif;
+    color: var(--dark);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    flex-grow: 0;
+    animation: pageFadeIn 0.2s ease-in;
+}
+
+@keyframes pageFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}

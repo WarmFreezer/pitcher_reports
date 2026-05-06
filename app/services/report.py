@@ -13,6 +13,8 @@ import seaborn as sns
 import os
 
 def _cmap(hex_color, name):
+    # Build a transparency gradient from fully transparent to the pitch color,
+    # so overlapping KDE fills blend cleanly on the white plot background
     r, g, b = to_rgb(hex_color)
     return LinearSegmentedColormap.from_list(name, [(r, g, b, 0), (r, g, b, 1)])
 
@@ -136,7 +138,8 @@ def build_table(source, pitcher_id):
                 game_report['RelS'].append(pitch_type_data['RelSide'].mean())
                 game_report['Ext.'].append(pitch_type_data['Extension'].mean())
 
-                # Parse Tilt values and report only hour:minute
+                # Tilt is stored as a clock-face string (e.g. "12:30") in multiple possible
+                # formats depending on the TrackMan export version — try each before giving up
                 tilt_text = pitch_type_data['Tilt'].astype(str).str.strip()
                 tilt_parsed = pd.to_datetime(tilt_text, format='%H:%M', errors='coerce')
                 tilt_parsed = tilt_parsed.fillna(pd.to_datetime(tilt_text, format='%H:%M:%S', errors='coerce'))
@@ -148,13 +151,12 @@ def build_table(source, pitcher_id):
                 game_report['Axis'].append(axis_time) 
                 game_report['Zone'].append(pitch_type_data['ZoneTime'].mean() * 100)
 
-                # Calculate Chase %
+                # Chase %: pitch was outside the zone AND the batter swung
                 chase_count = 0
                 for _, row in pitch_type_data.iterrows():
                     outside = (row['PlateLocHeight'] < 1.5) or (row['PlateLocHeight'] > 3.5)
                     outside_height = abs(row['PlateLocSide']) > 0.83
                     batter_swung = row['PitchCall'] in ['StrikeSwinging', 'FoulBallNotFieldable', 'InPlay', 'HitByPitch']
-                    
                     if (outside or outside_height) and batter_swung:
                         chase_count += 1
                         
@@ -180,6 +182,7 @@ def build_table(source, pitcher_id):
                     if (row['PitchCall'] in ['StrikeSwinging']):
                         swinging_strike_count += 1
                 
+                # CSW (Called Strike + Whiff) % — industry-standard pitcher effectiveness metric
                 csw_percent = (called_strike_count + swinging_strike_count) / len(pitch_type_data) * 100.00
                 game_report['CSW'].append(csw_percent)
 

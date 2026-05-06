@@ -4,7 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Schools</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/forms.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/auth.css') }}">
 
     <style>
         .upload-btn:hover {
@@ -39,6 +43,7 @@
                     <input class="bubble" type="slug" name="slug" placeholder="School Slug" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
                     <input class="bubble" type="email" name="admin_email" placeholder="Admin Email" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
                     <input class="bubble" type="email" name="confirm_admin_email" placeholder="Confirm Admin Email" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
+                    <input class="bubble" type="text" name="trackman_id" placeholder="TrackMan Team ID" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
                     <button type="submit" class="upload-btn" id="create-school-button" style="max-width: 750px; width: 100%;">Create School</button>
                 </form>
             </div>
@@ -51,6 +56,7 @@
     <!-- Footer Placeholder -->
     <div id="footer-placeholder"></div>
 
-    <script src="{{ url_for('static', filename='scripts.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/core.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/pages/auth.js') }}"></script>
 </body>
 </html>

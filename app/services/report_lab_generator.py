@@ -47,6 +47,7 @@ class PDF_Generator:
     def __init__(self, current_user, branding):
         self.current_user = current_user
 
+        # Always resolve logo from local storage; fall back to the app icon if not yet uploaded
         logo_path = os.path.join(STORAGE_SCHOOLS, current_user.school.slug, 'assets', 'logo.png')
         self.school_logo = logo_path if os.path.exists(logo_path) else os.path.join(STATIC_RESOURCES, 'HomePlate.png')
 
@@ -541,6 +542,7 @@ class PDF_Generator:
             Path to the generated PDF
         """
         
+        # Resolve player pfp from local storage; fall back to placeholder if not uploaded
         pfp_path = os.path.join(STORAGE_SCHOOLS, self.current_user.school.slug, 'assets', 'players', str(data.get('pitcher_id')), 'pfp.png')
         player_pfp = pfp_path if os.path.exists(pfp_path) else os.path.join(STATIC_RESOURCES, 'favicon.png')
 
