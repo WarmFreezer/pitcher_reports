@@ -30,16 +30,6 @@
 
     <main class="main-content">
 
-        <!-- =====================================================================
-             SUBSCRIPTION STATUS
-             Shows the school's current subscription plan, status, and next
-             billing date. Pull current_user.school.stripe_subscription_status
-             for the status badge. For billing date and plan name, call
-             stripe.Subscription.retrieve(school.stripe_subscription_id) and
-             read current_period_end (Unix timestamp — convert to readable date)
-             and items.data[0].price.nickname for the plan name. Pass these
-             values from the route into the template as context variables.
-             ===================================================================== -->
         <div class="bubble">
             <h2>Subscription Status</h2>
             <p>Current Plan: {{ current_user.school.stripe_subscription_status }}</p>
@@ -47,16 +37,6 @@
             <input id="admin-email" type="email" class="bubble" value="{{ current_user.school.admin_email }}" style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px">
         </div>
 
-        <!-- =====================================================================
-             SCHOOL BRANDING
-             Color pickers for the six branding tokens: primary, secondary,
-             tertiary, accent, light, and dark. Pre-populate with the current
-             values read from the school's branding.json via BrandingLoader.
-             On submit, validate that all six values are valid hex colors, then
-             write the updated JSON back to storage/schools/{slug}/assets/branding.json.
-             A live preview reflecting the chosen colors is a helpful addition.
-             POST to /api/settings/branding.
-             ===================================================================== -->
         <div class="bubble">
             <h2>School Branding</h2>
             <p>Scroll through this page before saving to make sure you can see all of the text</p>
@@ -88,21 +68,13 @@
             </div>
         </div>
 
-        <!-- =====================================================================
-             PLAYER ROSTER UPLOAD
-             Accepts a CSV or Excel file with one row per player. Expected columns:
-             player_id (must match TrackMan PitcherId), first_name, last_name,
-             and optionally position and jersey_number. On upload, parse the file
-             with pandas, validate required columns are present, and store the
-             data for use in report generation (player profile pictures are keyed
-             by player_id in Cloudinary at schools/{slug}/players/{player_id}/pfp).
-             A separate image upload per player can be offered on this page or
-             as a follow-up step. POST to /api/settings/roster.
-             ===================================================================== -->
         <div class="bubble">
             <h2 class="section-toggle" onclick="toggleSection('roster-content', this)">Player Roster <span class="toggle-arrow">▶</span></h2>
             <div id="roster-content" class="collapsible collapsible-lg">
-                <p style="margin: 8px 0;">Modify player information and upload rosters, profile pictures, etc. here.</p>
+                <div style="display: flex; align-items: center; gap: 12px; margin: 8px 0 4px;">
+                    <p>Modify player information and upload rosters, profile pictures, etc. here.</p>
+                    <a href="{{ url_for('static', filename='resources/roster_template.csv') }}" download="roster_template.csv" class="download-btn-small" style="white-space: nowrap;">⬇ Download Template</a>
+                </div>
                 <div id="roster-table-container"></div>
                 <div style="display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;">
                     <button class="upload-btn" onclick="addRosterRow()">+ Add Player</button>
@@ -114,14 +86,6 @@
             </div>
         </div>
 
-        <!-- =====================================================================
-             BILLING HISTORY
-             Lists past invoices for the school's Stripe customer. Retrieve with
-             stripe.Invoice.list(customer=school.stripe_customer_id, limit=12).
-             Display invoice date, amount paid, and a link to the hosted invoice
-             PDF (invoice.invoice_pdf). Show "No billing history" if the list
-             is empty or the customer has no paid invoices yet.
-             ===================================================================== -->
         {% if current_user.school.stripe_customer_id %}
         <div class="bubble">
             <h2 class="section-toggle" onclick="toggleSection('billing-content', this)">Billing History <span class="toggle-arrow">▶</span></h2>
@@ -154,17 +118,6 @@
             <p style="margin: 8px 0;">📞 <a href="tel:+16063034052" style="color: var(--secondary);">606-303-4052</a></p>
         </div>
 
-        <!-- =====================================================================
-             CANCEL SUBSCRIPTION  —  DANGER ZONE
-             Allows the admin to cancel the school's active Stripe subscription.
-             Before cancelling, show a confirmation prompt explaining that access
-             will continue until the end of the current billing period.
-             To cancel: stripe.Subscription.cancel(school.stripe_subscription_id)
-             then set school.stripe_subscription_status = 'canceled' and commit.
-             After cancellation, redirect to the dashboard with a flash message.
-             This section should be visually distinct (red border or warning styling)
-             to make the severity of the action clear. POST to /api/settings/cancel.
-             ===================================================================== -->
         {% if current_user.school.stripe_subscription_status in ('active', 'trialing') and current_user.school.stripe_subscription_id %}
         <div class="bubble" style="border-color: #d22d49;">
             <h2 style="color: #d22d49;">Cancel Subscription</h2>

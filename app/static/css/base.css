@@ -3,12 +3,13 @@
    ============================================================================ */
 
 :root {
-  --primary: #042026;
-  --secondary: #a67f5d;
-  --tertiary: #401d09;
-  --dark: #30312C;
+  --primary: #0B1F3A;
+  --secondary: #E8B84B;
+  --tertiary: #2B486E;
+  --dark: #1f1f1f;
   --light: #ececec;
-  --accent: #d9d2bf;
+  --accent: #8B1A1A;
+  
   --danger: #d22d49;
   --warn: #d9a22d;
   --good: #4CAF50;

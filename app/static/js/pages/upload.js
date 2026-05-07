@@ -87,7 +87,7 @@ async function handleFileSelect(event) {
         }
     } catch (error) {
         console.error('Error uploading file:', error);
-        alert('Error uploading file: ' + error.message);
+        toast('Error uploading file: ' + error.message, 'error');
         if (reportOutput) {
             reportOutput.innerHTML = `<p style="color: red; margin: 32px;">Error: ${error.message}</p>`;
         }
@@ -128,7 +128,7 @@ function generateReport(data) {
         const img = document.createElement('img');
         img.src = data.heatmap_url;
         img.alt = `${data.pitcher_name} Heat Map`;
-        img.width = 800;
+        img.className = 'report-img report-img-heatmap';
         // onerror fires when the image 404s (school subscription inactive = no charts generated)
         img.onerror = function() {
             this.parentElement.innerHTML = '<p style="color: red;">Heatmap image not available. Update your subscription.</p>';
@@ -141,7 +141,7 @@ function generateReport(data) {
         const img = document.createElement('img');
         img.src = data.breakmap_url;
         img.alt = `${data.pitcher_name} Break Map`;
-        img.width = 400;
+        img.className = 'report-img report-img-breakmap';
         img.onerror = function() {
             this.parentElement.innerHTML = '<p style="color: red;">Breakmap image not available. Update your subscription.</p>';
         };
@@ -151,21 +151,16 @@ function generateReport(data) {
     const tableContainer = clone.querySelector('.pitcher-table');
     if (tableContainer && data.pitcher_table) {
         tableContainer.innerHTML = data.pitcher_table;
-        tableContainer.style.fontSize = '12px';
     }
 
     const leftUsageContainer = clone.querySelector('.left-usage');
     if (leftUsageContainer && data.left_usage_table) {
         leftUsageContainer.innerHTML = data.left_usage_table;
-        leftUsageContainer.style.fontSize = '12px';
-        leftUsageContainer.style.borderCollapse = 'collapse';
     }
 
     const rightUsageContainer = clone.querySelector('.right-usage');
     if (rightUsageContainer && data.right_usage_table) {
         rightUsageContainer.innerHTML = data.right_usage_table;
-        rightUsageContainer.style.fontSize = '12px';
-        rightUsageContainer.style.borderCollapse = 'collapse';
     }
 
     clone.appendChild(document.createElement('br'));

@@ -18,11 +18,11 @@ async function updatePassword() {
     const newPassword = document.getElementById('new-password').value;
 
     if (!currentPassword || !newPassword) {
-        alert('Please fill in both fields.');
+        toast('Please fill in both fields.', 'error');
         return;
     }
     if (newPassword.length < 8) {
-        alert('New password must be at least 8 characters.');
+        toast('New password must be at least 8 characters.', 'error');
         return;
     }
 
@@ -34,13 +34,13 @@ async function updatePassword() {
         });
         const data = await response.json();
         if (response.ok) {
-            alert('Password updated successfully.');
+            toast('Password updated successfully.', 'success');
             hidePasswordForm();
         } else {
-            alert(data.error || 'Failed to update password.');
+            toast(data.error || 'Failed to update password.', 'error');
         }
     } catch {
-        alert('An error occurred. Please try again.');
+        toast('An error occurred. Please try again.', 'error');
     }
 }
 
@@ -61,7 +61,7 @@ function hideDeleteForm() {
 async function deleteAccount() {
     const confirmation = document.getElementById('confirm-delete').value.trim();
     if (confirmation !== 'DELETE') {
-        alert('Please type DELETE to confirm account deletion.');
+        toast('Please type DELETE to confirm account deletion.', 'error');
         return;
     }
     try {
@@ -72,13 +72,13 @@ async function deleteAccount() {
         });
         const data = await response.json();
         if (response.ok) {
-            alert('Account deleted successfully.');
-            window.location.href = '/';
+            toast('Account deleted successfully.', 'success');
+            setTimeout(() => window.location.href = '/', 1500);
         } else {
-            alert(data.error || 'Failed to delete account.');
+            toast(data.error || 'Failed to delete account.', 'error');
         }
     } catch {
-        alert('An error occurred. Please try again.');
+        toast('An error occurred. Please try again.', 'error');
     }
 }
 
@@ -96,11 +96,11 @@ async function updateInformation() {
         });
         const data = await response.json();
         if (response.ok) {
-            alert('Information updated successfully.');
+            toast('Information updated successfully.', 'success');
         } else {
-            alert(data.error || 'Failed to update information.');
+            toast(data.error || 'Failed to update information.', 'error');
         }
     } catch {
-        alert('An error occurred. Please try again.');
+        toast('An error occurred. Please try again.', 'error');
     }
 }

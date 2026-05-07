@@ -134,12 +134,54 @@
 }
 
 /* ============================================================================
+   HAMBURGER BUTTON & OVERLAY
+   ============================================================================ */
+
+.hamburger-btn {
+    display: none;
+    position: fixed;
+    top: 12px;
+    right: 16px;
+    z-index: 1001;
+    background: var(--tertiary);
+    border: none;
+    border-radius: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    color: white;
+    font-size: 22px;
+    line-height: 1;
+    transition: background-color 0.2s;
+}
+
+.hamburger-btn:hover {
+    background: var(--secondary);
+}
+
+.nav-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    z-index: 998;
+}
+
+.nav-overlay.active {
+    display: block;
+}
+
+/* ============================================================================
    RESPONSIVE
    ============================================================================ */
 
 @media (max-width: 900px) {
+    .hamburger-btn {
+        display: block;
+    }
+
     .main-nav {
         position: fixed;
+        top: unset;
         bottom: -100%;
         left: 0;
         right: 0;
@@ -167,6 +209,26 @@
 
     .nav-list li:last-child {
         margin-left: 0;
+    }
+
+    /* Disable hover-driven dropdowns on touch — hover state sticks after a tap */
+    .dropdown:hover .dropdown-content {
+        display: none !important;
+    }
+
+    .dropdown.mobile-open .dropdown-content {
+        display: block !important;
+        position: static;
+        box-shadow: none;
+        min-width: unset;
+        border: none;
+        border-top: 1px solid var(--secondary);
+        background-color: var(--light);
+    }
+
+    .dropdown.mobile-open .dropdown-content a {
+        padding-left: 36px;
+        color: var(--dark);
     }
 
     .nav-link {

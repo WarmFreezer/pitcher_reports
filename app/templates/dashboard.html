@@ -52,5 +52,16 @@
     <div id="footer-placeholder"></div>
 
     <script src="{{ url_for('static', filename='js/core.js') }}"></script>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <script>
+        const _categoryMap = { danger: 'error', warning: 'info', success: 'success', info: 'info' };
+        {% for category, message in messages %}
+        window.addEventListener('load', () => toast({{ message | tojson }}, _categoryMap['{{ category }}'] || 'info'));
+        {% endfor %}
+    </script>
+    {% endif %}
+    {% endwith %}
 </body>
 </html>

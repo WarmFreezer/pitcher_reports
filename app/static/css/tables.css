@@ -13,6 +13,30 @@
 .pitcher-data-table { margin: 20px 0; }
 .pitch-usage-table  { margin: 10px 0; }
 
+.table-scroll {
+    overflow-x: auto;
+    width: 100%;
+    -webkit-overflow-scrolling: touch;
+    min-width: 0;
+}
+
+.pitcher-usage-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+    min-width: 0;
+    flex: 1;
+}
+
+.pitcher-table {
+    overflow-x: auto;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
 .pitcher-data-table th,
 .pitcher-data-table td,
 .pitch-usage-table th,
@@ -39,6 +63,65 @@
 .pitcher-data-table tr:hover,
 .pitch-usage-table tr:hover {
     background-color: #f0f0f0;
+}
+
+/* ============================================================================
+   REPORT IMAGES & LAYOUT
+   ============================================================================ */
+
+.report-img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
+.report-img-heatmap { width: 800px; }
+.report-img-breakmap { width: 400px; }
+
+.report-lower-row {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.pitcher-heatmap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    width: 100%;
+}
+
+.pitcher-breakmap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    flex: 0 0 auto;
+    max-width: 100%;
+}
+
+@media (max-width: 900px) {
+    .report-img-heatmap,
+    .report-img-breakmap {
+        width: 100%;
+    }
+
+    .report-lower-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .pitcher-breakmap {
+        flex: none;
+        width: 100%;
+    }
+
+    .pitcher-usage-panel {
+        width: 100%;
+    }
 }
 
 /* ============================================================================

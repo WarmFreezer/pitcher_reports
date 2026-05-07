@@ -26,7 +26,7 @@ async function saveSubscription() {
         if (!el) continue;
         const value = el.value.trim();
         if (!HEX_RE.test(value)) {
-            alert(`Invalid hex color for ${token}: "${value}"`);
+            toast(`Invalid hex color for ${token}: "${value}"`, 'error');
             return;
         }
         colors[token] = value;
@@ -71,12 +71,12 @@ async function saveSubscription() {
         const results = await Promise.all(saves);
         const failed = results.filter(r => !r.ok);
         if (failed.length) {
-            alert(failed.map(r => `${r.label}: ${r.data.error}`).join('\n'));
+            failed.forEach(r => toast(`${r.label}: ${r.data.error}`, 'error'));
         } else {
-            alert('Saved successfully.');
+            toast('Saved successfully.', 'success');
         }
     } catch {
-        alert('An error occurred. Please try again.');
+        toast('An error occurred. Please try again.', 'error');
     }
 }
 
@@ -101,11 +101,12 @@ async function handleLogoUpload(event) {
             if (preview) preview.src = url;
             const headerLogo = document.querySelector('.header-right img');
             if (headerLogo) headerLogo.src = url;
+            toast('Logo uploaded successfully.', 'success');
         } else {
-            alert(data.error || 'Failed to upload logo.');
+            toast(data.error || 'Failed to upload logo.', 'error');
         }
     } catch {
-        alert('An error occurred. Please try again.');
+        toast('An error occurred. Please try again.', 'error');
     }
 
     event.target.value = '';
@@ -214,11 +215,12 @@ async function uploadPlayerPfp(playerId, fileInput) {
         if (response.ok) {
             const img = fileInput.closest('td').querySelector('.player-pfp');
             if (img) img.src = data.pfp_url + '?t=' + Date.now();
+            toast('Profile picture updated.', 'success');
         } else {
-            alert(data.error || 'Failed to upload profile picture.');
+            toast(data.error || 'Failed to upload profile picture.', 'error');
         }
     } catch {
-        alert('An error occurred. Please try again.');
+        toast('An error occurred. Please try again.', 'error');
     }
     fileInput.value = '';
 }
@@ -228,7 +230,7 @@ async function handleFolderUpload(event) {
         /\.(png|jpe?g)$/i.test(f.name)
     );
     if (!files.length) {
-        alert('No PNG or JPG images found in the selected folder.');
+        toast('No PNG or JPG images found in the selected folder.', 'error');
         event.target.value = '';
         return;
     }
@@ -245,15 +247,15 @@ async function handleFolderUpload(event) {
         if (response.ok) {
             let msg = data.message;
             if (data.unmatched && data.unmatched.length) {
-                msg += `\n\nUnmatched files:\n${data.unmatched.join('\n')}`;
+                msg += `\n\nUnmatched:\n${data.unmatched.join('\n')}`;
             }
-            alert(msg);
+            toast(msg, data.unmatched?.length ? 'info' : 'success');
             loadRoster();
         } else {
-            alert(data.error || 'Failed to upload photos.');
+            toast(data.error || 'Failed to upload photos.', 'error');
         }
     } catch {
-        alert('An error occurred. Please try again.');
+        toast('An error occurred. Please try again.', 'error');
     }
 
     event.target.value = '';
@@ -275,12 +277,13 @@ async function uploadRoster() {
         });
         const data = await response.json();
         if (response.ok) {
-            alert('Roster uploaded successfully.');
+            toast('Roster uploaded successfully.', 'success');
+            loadRoster();
         } else {
-            alert(data.error || 'Failed to upload roster.');
+            toast(data.error || 'Failed to upload roster.', 'error');
         }
     } catch {
-        alert('An error occurred. Please try again.');
+        toast('An error occurred. Please try again.', 'error');
     }
 
     fileInput.value = '';
@@ -306,16 +309,16 @@ async function startSubscription() {
         if (response.ok) {
             if (data.reactivated) {
                 // Subscription was still alive (cancel_at_period_end) — just undo the cancellation
-                alert(data.message);
-                window.location.reload();
+                toast(data.message, 'success');
+                setTimeout(() => window.location.reload(), 1500);
             } else {
                 window.location.href = `/checkout?client_secret=${data.client_secret}`;
             }
         } else {
-            alert(data.error || 'Failed to start subscription.');
+            toast(data.error || 'Failed to start subscription.', 'error');
         }
     } catch {
-        alert('An error occurred. Please try again.');
+        toast('An error occurred. Please try again.', 'error');
     }
 }
 
@@ -334,7 +337,7 @@ function hideCancelForm() {
 async function cancelSubscription() {
     const confirmation = document.getElementById('cancel-confirm-input').value.trim();
     if (confirmation !== 'CANCEL') {
-        alert('Please type CANCEL to confirm.');
+        toast('Please type CANCEL to confirm.', 'error');
         return;
     }
     try {
@@ -344,13 +347,13 @@ async function cancelSubscription() {
         });
         const data = await response.json();
         if (response.ok) {
-            alert(data.message);
-            if (!data.permanent) window.location.href = '/dashboard';
+            toast(data.message, data.permanent ? 'info' : 'success');
+            if (!data.permanent) setTimeout(() => window.location.href = '/dashboard', 1500);
         } else {
-            alert(data.error || 'Failed to cancel subscription.');
+            toast(data.error || 'Failed to cancel subscription.', 'error');
         }
     } catch {
-        alert('An error occurred. Please try again.');
+        toast('An error occurred. Please try again.', 'error');
     }
 }
 
