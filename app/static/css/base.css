@@ -1,0 +1,39 @@
+/* ============================================================================
+   VARIABLES & RESET
+   ============================================================================ */
+
+:root {
+  --primary: #0B1F3A;
+  --secondary: #E8B84B;
+  --tertiary: #2B486E;
+  --dark: #1f1f1f;
+  --light: #ececec;
+  --accent: #8B1A1A;
+  
+  --danger: #d22d49;
+  --warn: #d9a22d;
+  --good: #4CAF50;
+  --border: #ddd;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background-color: white;
+    font-family: Cambria, serif;
+    color: var(--dark);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    flex-grow: 0;
+    animation: pageFadeIn 0.2s ease-in;
+}
+
+@keyframes pageFadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html style="height: 100%;">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subscription - {{ current_user.school.name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/forms.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tables.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/subscription.css') }}">
+
+    {% if branding %}
+    <style>
+        :root {
+            --primary: {{branding.colors.primary}};
+            --secondary: {{branding.colors.secondary}};
+            --tertiary: {{branding.colors.tertiary}};
+            --dark: {{branding.colors.dark}};
+            --light: {{branding.colors.light}};
+            --accent: {{branding.colors.accent}};
+        }
+    </style>
+    {% endif %}
+</head>
+<body data-school-slug="{{ current_user.school.slug }}" onload="loadHeader('{{ current_user.school.slug|upper }} Baseball Analytics', '/static/resources/HomePlate.png', '{{ logo_path }}'); loadFooter(); loadNavbar();">
+    <div id="navbar-placeholder"></div>
+    <div id="header-placeholder"></div>
+
+    <main class="main-content">
+
+        <div class="bubble">
+            <h2>Subscription Status</h2>
+            <p>Current Plan: {{ current_user.school.stripe_subscription_status }}</p>
+            <p>Admin Email:</p>
+            <input id="admin-email" type="email" class="bubble" value="{{ current_user.school.admin_email }}" style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px">
+        </div>
+
+        <div class="bubble">
+            <h2>School Branding</h2>
+            <p>Scroll through this page before saving to make sure you can see all of the text</p>
+            <div class="color-grid">
+                <div class="color-card logo-card" onclick="document.getElementById('logo-upload').click()">
+                    <img id="logo-preview" src="{{ logo_path }}" alt="School Logo" class="logo-card-img">
+                    <input type="file" id="logo-upload" accept=".png,.jpg,.jpeg" style="display:none" onchange="handleLogoUpload(event)">
+                    <div class="color-card-footer">
+                        <span class="color-card-label">Logo</span>
+                        <span class="color-card-hex" style="font-family: Cambria, serif;">Click to upload</span>
+                    </div>
+                </div>
+                {% for token in ['primary', 'secondary', 'tertiary', 'dark', 'light', 'accent'] %}
+                <div class="color-card" id="color-card-{{ token }}"
+                     style="background-color: {{ branding.colors[token] }};"
+                     onclick="document.getElementById('color-{{ token }}').click()">
+                    <input type="color" class="color-picker" id="color-{{ token }}"
+                           value="{{ branding.colors[token] }}"
+                           oninput="syncColor('{{ token }}', this.value)">
+                    <div class="color-card-footer">
+                        <span class="color-card-label">{{ token | capitalize }}</span>
+                        <input type="text" class="color-card-hex" id="color-{{ token }}-text"
+                               value="{{ branding.colors[token] }}" maxlength="7" placeholder="#000000"
+                               oninput="syncColorText('{{ token }}', this.value)"
+                               onclick="event.stopPropagation()">
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="bubble">
+            <h2 class="section-toggle" onclick="toggleSection('roster-content', this)">Player Roster <span class="toggle-arrow">▶</span></h2>
+            <div id="roster-content" class="collapsible collapsible-lg">
+                <div style="display: flex; align-items: center; gap: 12px; margin: 8px 0 4px;">
+                    <p>Modify player information and upload rosters, profile pictures, etc. here.</p>
+                    <a href="{{ url_for('static', filename='resources/roster_template.csv') }}" download="roster_template.csv" class="download-btn-small" style="white-space: nowrap;">⬇ Download Template</a>
+                </div>
+                <div id="roster-table-container"></div>
+                <div style="display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;">
+                    <button class="upload-btn" onclick="addRosterRow()">+ Add Player</button>
+                    <input type="file" id="roster-upload" accept=".csv,.xlsx,.xls" style="display: none;" onchange="uploadRoster(event)">
+                    <button class="upload-btn" onclick="document.getElementById('roster-upload').click()">Upload Roster</button>
+                    <input type="file" id="pfp-folder-upload" accept=".png,.jpg,.jpeg" multiple webkitdirectory style="display: none;" onchange="handleFolderUpload(event)">
+                    <button class="upload-btn" onclick="document.getElementById('pfp-folder-upload').click()">Upload Photo Folder</button>
+                </div>
+            </div>
+        </div>
+
+        {% if current_user.school.stripe_customer_id %}
+        <div class="bubble">
+            <h2 class="section-toggle" onclick="toggleSection('billing-content', this)">Billing History <span class="toggle-arrow">▶</span></h2>
+            <div id="billing-content" class="collapsible collapsible-lg">
+                {% if invoices %}
+                <table class="roster-table" style="margin-top: 12px;">
+                    <thead><tr><th>Date</th><th>Amount</th><th>Status</th><th></th></tr></thead>
+                    <tbody>
+                    {% for inv in invoices %}
+                    <tr>
+                        <td>{{ inv.date }}</td>
+                        <td>{{ inv.amount }}</td>
+                        <td>{{ inv.status | capitalize }}</td>
+                        <td>{% if inv.pdf_url %}<a href="{{ inv.pdf_url }}" target="_blank">Download PDF</a>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p style="margin-top: 8px;">No billing history.</p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="bubble">
+            <h2>Support</h2>
+            <p style="margin: 8px 0;">For billing issues, account questions, or general help, reach out directly:</p>
+            <p style="margin: 8px 0;">📧 <a href="mailto:thomas.eubank516@gmail.com" style="color: var(--secondary);">thomas.eubank516@gmail.com</a></p>
+            <p style="margin: 8px 0;">📞 <a href="tel:+16063034052" style="color: var(--secondary);">606-303-4052</a></p>
+        </div>
+
+        {% if current_user.school.stripe_subscription_status in ('active', 'trialing') and current_user.school.stripe_subscription_id %}
+        <div class="bubble" style="border-color: #d22d49;">
+            <h2 style="color: #d22d49;">Cancel Subscription</h2>
+            <div id="cancel-subscription-btn-wrap">
+                <button class="download-btn btn-danger" onclick="showCancelForm()">Cancel Subscription</button>
+            </div>
+            <div id="cancel-subscription-form" class="collapsible">
+                <p style="margin: 8px 0;">Access continues until the end of the current billing period. Type <strong>CANCEL</strong> to confirm.</p>
+                <input id="cancel-confirm-input" class="bubble" type="text" placeholder="CANCEL"
+                       style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px">
+                <div style="display: flex; gap: 8px; margin-top: 8px;">
+                    <button class="download-btn btn-danger" onclick="cancelSubscription()">Confirm Cancel</button>
+                    <button class="download-btn" onclick="hideCancelForm()">Back</button>
+                </div>
+            </div>
+        </div>
+        {% elif current_user.school.stripe_subscription_id %}
+        <div class="bubble" style="border-color: #4CAF50;">
+            <h2 style="color: #4CAF50;">Restart Subscription</h2>
+            <p style="margin-bottom: 12px;">Your subscription is currently <strong>{{ current_user.school.stripe_subscription_status }}</strong>. Resubscribe to restore access.</p>
+            <button class="download-btn btn-good" onclick="startSubscription()">Start Subscription</button>
+        </div>
+        {% endif %}
+
+    </main>
+
+    <button class="save-fab" onclick="saveSubscription()">Save</button>
+
+    <div id="footer-placeholder"></div>
+    <script src="{{ url_for('static', filename='js/core.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/pages/subscription.js') }}"></script>
+</body>
+</html>

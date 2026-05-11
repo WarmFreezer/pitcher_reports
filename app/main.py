@@ -10,444 +10,83 @@ thomas.eubank516@gmail.com
 Purpose: Generates pitcher performance reports from game datasets exported from TrackMan.
 '''
 
-import gc
 import os
-import glob
-import stripe
-import pandas as pd
-from functools import wraps
+from flask import Flask, send_from_directory
 from flask_cors import CORS
 from flask_migrate import Migrate
-from werkzeug.utils import secure_filename
-from flask_login import LoginManager, login_user, logout_user, login_required, current_user
-from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, send_from_directory, session
+from flask_login import LoginManager, current_user
 
-from app.services import report, auth, report_lab_generator, file_validator, branding_loader
-from app.db import models
-import app.payment_routes as payment_routes            
+from app.db.models import db, User
+from app.services.branding_loader import BrandingLoader
+from app.routes.payments import payment_bp
+
+from app.routes.auth import auth_bp
+from app.routes.pages import pages_bp
+from app.routes.account import account_bp
+from app.routes.subscription import subscription_bp
+from app.routes.upload import upload_bp
 
 STORAGE_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'storage')
 
-Auth = auth.Auth
-db = models.db
-User = models.User
-School = models.School
-Branding_Loader = branding_loader.BrandingLoader
-PDF_Generator = report_lab_generator.PDF_Generator
-bcrypt = auth.bcrypt
-
-app = Flask(__name__,
-            template_folder='templates',
-            static_folder='static')
+app = Flask(__name__, template_folder='templates', static_folder='static')
 app.secret_key = os.environ.get('APP_SECRET_KEY')
-CORS(app) 
+CORS(app)
 
 # Flask CLI
 from app import cli as cli_commands
 cli_commands.register_cli_commands(app)
 
-# Payment Config
-stripe_secret_key = os.environ.get('STRIPE_SECRET_KEY')
-stripe_publishable_key = os.environ.get('STRIPE_PUBLISHABLE_KEY')
-stripe_price_id = os.environ.get('STRIPE_PRICE_ID')
-stripe.api_key = stripe_secret_key
-payment_routes.PaymentRoutes = payment_routes.PaymentRoutes(app, stripe_publishable_key)
-
-# Database URL Formatting Fix
+# Database
 database_url = os.environ.get('DATABASE_URL', 'sqlite:///pitcher_reports.db')
 if database_url.startswith('postgres://'):
     database_url = database_url.replace('postgres://', 'postgresql://', 1)
 
-# Config
 app.config['SECRET_KEY'] = app.secret_key
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['STORAGE'] = STORAGE_FOLDER
 
 os.makedirs(STORAGE_FOLDER, exist_ok=True)
-
 db.init_app(app)
 migrate = Migrate(app, db)
 
-# Initialize Extensions
+# Login manager
 login_manager = LoginManager(app)
-login_manager.login_view = 'login'
-
-# Set Global Variables
-required_columns = report.required_columns
+login_manager.login_view = 'auth.login'
 
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# Context processor to inject branding into templates
+# Context processor
 @app.context_processor
 def inject_branding():
     if current_user.is_authenticated:
-        branding = Branding_Loader.get_branding(current_user.school.slug)
-        logo_path = Branding_Loader.get_logo_path(current_user.school.slug)
+        branding = BrandingLoader.get_branding(current_user.school.slug)
+        logo_path = BrandingLoader.get_logo_path(current_user.school.slug)
         return {'branding': branding, 'logo_path': logo_path}
     return {}
 
-# Serve static files
+# Static file serving
 @app.route('/storage/schools/<school_slug>/assets/<path:filename>')
 def school_files(school_slug, filename):
     return send_from_directory(os.path.join(app.config['STORAGE'], 'schools', school_slug, 'assets'), filename)
 
-# Serve temp files
 @app.route('/storage/schools/<school_slug>/temp/<path:filename>')
-@login_required
 def school_temp_files(school_slug, filename):
     return send_from_directory(os.path.join(app.config['STORAGE'], 'schools', school_slug, 'temp'), filename)
 
-# Serve report files
 @app.route('/storage/schools/<school_slug>/reports/<path:filename>')
-@login_required
 def school_report_files(school_slug, filename):
     return send_from_directory(os.path.join(app.config['STORAGE'], 'schools', school_slug, 'reports'), filename)
 
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    schools = School.query.order_by(School.name).all()
-
-    if request.method == 'POST':
-        name = request.form.get('name')
-        first_name, last_name = name.split(' ', 1) if ' ' in name else (name, '')
-        email = request.form.get('email')
-        password = request.form.get('password')
-        confirm_password = request.form.get('confirm_password')
-        school_name = request.form.get('school')
-
-        if password != confirm_password:
-            flash('Passwords do not match.', 'danger')
-            return redirect(url_for('register'))
-
-        if User.query.filter_by(email=email).first():
-            flash('Email already registered. Please log in.', 'warning')
-            return redirect(url_for('login'))
-
-        school = School.query.filter_by(name=school_name).first()
-        if not school:
-            flash('School not found. Please enter a valid school.', 'danger')
-            return redirect(url_for('register'))
-
-        school_domain = school.admin_email.split('@')[-1]
-        if not email.endswith(f"@{school_domain}"):
-            flash('Email does not match school domain. Please use a valid school email.', 'danger')
-            return redirect(url_for('register'))
-
-        if email == school.admin_email:
-            role = 'admin'
-        else:
-            role = 'member'
-
-        new_user = User(
-            first_name=first_name,
-            last_name=last_name,
-            email=email,
-            password_hash=bcrypt.generate_password_hash(password).decode('utf-8'),
-            school_id=school.id,
-            role=role
-        )
-        db.session.add(new_user)
-        db.session.commit()
-
-        flash('Account created successfully! Please log in.', 'success')
-        return redirect(url_for('login'))
-
-    return render_template('create_account.html', schools=schools)
-
-@app.route('/schools', methods=['GET', 'POST'])
-def schools():
-    if request.method == 'POST':
-        school_name = request.form.get('name')
-        school_slug = request.form.get('slug')
-        admin_email = request.form.get('admin_email')
-        confirm_admin_email = request.form.get('confirm_admin_email')
-
-        if School.query.filter_by(name=school_name).first():
-            flash('School name already exists. Please choose a different name.', 'danger')
-            return redirect(url_for('schools'))
-        
-        if admin_email != confirm_admin_email:
-            flash('Admin email addresses do not match. Please confirm the admin email.', 'danger')
-            return redirect(url_for('schools'))
-
-        session['pending_school'] = {
-            'name': school_name,
-            'slug': school_slug,
-            'admin_email': admin_email
-        }
-
-        try:
-            checkout_session = stripe.checkout.Session.create(
-                line_items=[{'price': stripe_price_id, 'quantity': 1}],
-                mode='subscription',
-                ui_mode='embedded',
-                return_url='http://localhost:5000/return?session_id={CHECKOUT_SESSION_ID}',
-                metadata=session['pending_school'],
-                customer_email=session['pending_school']['admin_email']
-            )
-            return redirect(url_for('embedded_checkout', client_secret=checkout_session.client_secret))
-        except Exception as e:
-            print(str(e))
-            flash('Could not start checkout. Please try again.', 'danger')
-            return redirect(url_for('schools'))
-
-        '''
-        TODO: Redirect to school management page with option to subscribe if payment fails, instead of redirecting back to school creation form. This will allow users to create their school and then subscribe at a later time if they want.
-        '''
-
-    return render_template('schools.html')
-
-@app.route('/login', methods=['GET', 'POST'])
-def login(): 
-    if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
-    
-    if request.method == 'POST':
-        email = request.form.get('email')
-        password = request.form.get('password')
-
-        user = Auth.get_user_by_email(email)
-
-        if user and Auth.verify_password(user, password):
-            login_user(user, remember=request.form.get('remember'))
-            next_page = request.args.get('next')
-            return redirect(next_page or url_for('dashboard'))
-        else:
-            flash('Invalid email or password', 'danger')
-            
-    return render_template('login.html')
-
-@app.route('/logout')
-@login_required
-def logout():
-    logout_user()
-    flash('You have been logged out.', 'info')
-    return redirect(url_for('index'))
-
-@app.route('/dashboard')
-@login_required
-def dashboard():
-    return render_template('dashboard.html')
-
-@app.route("/")
-def index():
-    if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
-    return redirect(url_for('login'))
-
-@app.route("/upload")
-@login_required
-def upload():
-    return render_template('index.html')
-
-@app.route("/about")
-def about():
-    return render_template('about.html')
-
-@app.route("/terms")
-def terms():
-    return render_template('terms.html')
-
-# ****** API Endpoints ******
-@app.route('/api/upload', methods=['POST'])
-@login_required
-def upload_file():
-    school_temp_folder, school_output_folder = get_school_directories()
-
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file part in the request'}), 400
-
-    file = request.files['file']
-
-    if file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
-
-    # Delete old input files
-    old_excels = glob.glob(os.path.join(school_temp_folder, f'{current_user.id}_*.xlsx')) + \
-                 glob.glob(os.path.join(school_temp_folder, f'{current_user.id}_*.xls')) + \
-                 glob.glob(os.path.join(school_temp_folder, f'{current_user.id}_*.csv'))
-    for old_excel in old_excels:
-        try:
-            os.remove(old_excel)
-        except Exception as e:
-            print (f"Error deleting old file: {old_excel} - {e}")
-            pass
-
-    filename = secure_filename(file.filename)
-    filepath = os.path.join(school_temp_folder, f'{current_user.id}_{filename}')
-    file.save(filepath)
-
-    if filepath.endswith('.csv'):
-        source_df = pd.read_csv(filepath)
-    elif filepath.endswith('.xlsx') or filepath.endswith('.xls'):
-        source_df = pd.read_excel(filepath)
-    else: 
-        raise ValueError("Unsupported file format. Please provide a .csv, .xlsx, or .xls file.")
-
-    is_valid, result = file_validator.validate_uploaded_file(
-        source_df=source_df,
-        file=file, 
-        filepath=filepath,
-        required_columns=list(required_columns.keys()),
-        column_types=required_columns
-    )
-    
-    if not is_valid:
-        try: 
-            os.remove(filepath)
-        except:
-            pass
-
-        app.logger.warning(f"File validation failed: {filename} - {result}")
-
-        return jsonify({'error': result}), 400
-    
-    checksum = result
-    app.logger.info(f"Valid file uploaded: {filename} - Checksum: {checksum}")
-
-    try:
-        # Delete old output images
-        old_images = glob.glob(os.path.join(school_temp_folder, f'{current_user.id}_*.png'))
-        for old_image in old_images:
-            try:
-                os.remove(old_image)
-            except Exception as e:
-                print(f"Error deleting old image: {old_image} - {e}")
-                pass
-        
-        # Delete old pdfs
-        old_pdfs = glob.glob(os.path.join(school_output_folder, f'{current_user.id}_*.pdf'))
-        for old_pdf in old_pdfs:
-            try:
-                os.remove(old_pdf)
-            except Exception as e:
-                pass
-
-        # Load Branding data per school
-        branding = Branding_Loader.get_branding(current_user.school.slug)
-
-        gen = PDF_Generator(
-            current_user=current_user,
-            branding=branding)
-
-        # Create list of report data
-        reports = []
-        for pitcher_id in source_df['PitcherId'].unique():
-            if source_df.loc[source_df['PitcherId'] == pitcher_id, 'PitcherTeam'].iloc[0] != current_user.school.trackman_id:
-                continue
-
-            if current_user.school.is_active:
-                # Generate heat map
-                report.pitch_heat_map_by_batter_side(source_df, current_user.id, school_temp_folder, pitcher_id, 0.75)
-                report.pitch_break_map(source_df, current_user.id, school_temp_folder, pitcher_id, 0.75)
-
-            # Build table data
-            table_data = report.build_table(source_df, pitcher_id)
-            if not table_data or len(table_data) < 2 or table_data[1] is None:
-                raise ValueError(f'Failed to build table data for pitcher ID {pitcher_id}')
-            report_html = table_data[4].to_html(index=False, float_format='%.2f', border=0, classes='pitcher-data-table', escape=False, justify='left', na_rep='')
-
-            # Pitch Usage table data
-            pitch_usage_data = report.usage_table(source_df, pitcher_id)
-            if not pitch_usage_data or len(pitch_usage_data) < 2 or pitch_usage_data[1] is None:
-                raise ValueError(f'Failed to build pitch usage table data for pitcher ID {pitcher_id}')
-            left_usage_html = pitch_usage_data[0].to_html(index=False, float_format='%.2f', border=0, classes='pitch-usage-table', escape=False, justify='left', na_rep='')
-            right_usage_html = pitch_usage_data[1].to_html(index=False, float_format='%.2f', border=0, classes='pitch-usage-table', escape=False, justify='left', na_rep='')
-
-            year = table_data[0].split('-')[0]
-            month = table_data[0].split('-')[1]
-            day = table_data[0].split('-')[2]
-
-            date = month + '/' + day + '/' + year
-            away_team = table_data[2]
-            home_team = table_data[1]
-
-            # Add to reports list
-            reports.append({
-                'pitcher_id': str(pitcher_id),
-                'pitcher_name': table_data[3],
-                'pitcher_table': report_html,
-                'left_usage_table': left_usage_html,
-                'right_usage_table': right_usage_html,
-                'heatmap_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_heat_map.png',
-                'breakmap_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_break_map.png',
-                'pdf_url': f'/storage/schools/{current_user.school.slug}/reports/{current_user.id}_pitcher_{pitcher_id}_report.pdf'
-            })
-
-            # Generate PDF report
-            _report = {
-                'pitcher_name': table_data[3],
-                'pitcher_id': str(pitcher_id),
-                'date': date,
-                'home_team': home_team,
-                'away_team': away_team,
-                'pitch_stats': table_data[4],
-                'pitch_usage_left': pitch_usage_data[0],
-                'pitch_usage_right': pitch_usage_data[1],
-                'pitch_heat_map': os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_heat_map.png'),
-                'pitch_break_map': os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_break_map.png'),
-            }
-
-            gen.generate_pitcher_report(_report, os.path.abspath(os.path.join(school_output_folder, f'{current_user.id}_pitcher_{pitcher_id}_report.pdf')))
-
-            del table_data
-            del report_html
-            gc.collect()
-
-        # Merge all PDFs into one
-        merged_pdf_path = os.path.join(school_output_folder, f'{current_user.id}_merged_pitcher_reports.pdf')
-        report_lab_generator.merge_pdfs(current_user.id, school_output_folder, merged_pdf_path)
-
-        return jsonify({
-            'message': 'File processed successfully',
-            'num_reports': len(reports),
-            'reports': reports,
-            'merged_pdf_url': f'/storage/schools/{current_user.school.slug}/reports/{current_user.id}_merged_pitcher_reports.pdf',
-            'game_data' : {
-                'date': date,
-                'home_team': home_team,
-                'away_team': away_team,
-            },
-            'user': {
-                'name': f"{current_user.first_name} {current_user.last_name}",
-                'school': current_user.school.name
-            }
-        })
-    
-    except Exception as e:
-        print(f"\n!!! ERROR: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': f'Failed to process file: {str(e)}'}), 500
-
-def get_school_directories():
-    if not current_user.is_authenticated:
-        raise Exception("User not authenticated")
-    
-    school_slug = current_user.school.slug
-
-    school_temp_dir = os.path.join(app.config['STORAGE'], 'schools', f'{school_slug}', 'temp')
-    school_output_dir = os.path.join(app.config['STORAGE'], 'schools', f'{school_slug}', 'reports')
-
-    # Create directories if they don't exist
-    os.makedirs(school_temp_dir, exist_ok=True)
-    os.makedirs(school_output_dir, exist_ok=True)
-
-    return school_temp_dir, school_output_dir
-
-def active_subscription_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if not current_user.is_authenticated:
-            return redirect(url_for('login'))
-        if not current_user.school.is_active:
-            flash('Your school does not have an active subscription. Please contact your administrator.', 'danger')
-            return redirect(url_for('dashboard'))
-        return f(*args, **kwargs)
-    return decorated
+# Register blueprints
+app.register_blueprint(auth_bp)
+app.register_blueprint(pages_bp)
+app.register_blueprint(account_bp)
+app.register_blueprint(subscription_bp)
+app.register_blueprint(upload_bp)
+app.register_blueprint(payment_bp)
 
 if __name__ == '__main__':
     app.run()

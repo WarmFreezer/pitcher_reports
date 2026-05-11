@@ -4,7 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Baseball Analytics - About</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/about.css') }}">
 </head>
 <body onload="loadNavbar(); loadHeader('About - Baseball Analytics', '/static/resources/HomePlate.png');loadFooter();">
     <!-- Navbar Placeholder -->
@@ -20,33 +23,51 @@
                 <br>Including quick view on the website, downloadable PDFs, and custom branding options.
             </h2>
 
-            <div class="about-comparison" aria-label="Before and after report comparison">
-                <article class="comparison-card comparison-card--before" aria-labelledby="before-heading">
-                    <h2 id="before-heading">Before</h2>
-                    <p class="comparison-subtitle">Raw TrackMan output</p>
-                    <div class="comparison-scroll" aria-label="Scrollable TrackMan report image">
-                        <img src="{{ url_for('static', filename='resources/TrackMan.png') }}" alt="TrackMan report example" class="comparison-image comparison-image--before" style="max-height: 653px;">
-                    </div>
-                </article>
-
-                <div class="comparison-dialogue" role="note" aria-label="Transformation dialogue">
-                    <p>Go from this</p>
-                    <span class="comparison-arrow" aria-hidden="true">→</span>
-                    <p>to this</p>
+            <div class="comparison-toggle" aria-label="Before and after report comparison">
+                <div class="toggle-tabs" role="tablist">
+                    <button class="toggle-tab toggle-tab--active" role="tab" aria-selected="true" aria-controls="tab-before" data-tab="before">Before — Raw TrackMan</button>
+                    <button class="toggle-tab" role="tab" aria-selected="false" aria-controls="tab-after" data-tab="after">After — Pitcher Report</button>
                 </div>
 
-                <article class="comparison-card" aria-labelledby="after-heading">
-                    <h2 id="after-heading">After</h2>
+                <div class="toggle-panel toggle-panel--active" id="tab-before" role="tabpanel">
+                    <p class="comparison-subtitle">Scroll to see the full scale of raw TrackMan output</p>
+                    <div class="comparison-scroll">
+                        <iframe src="{{ url_for('static', filename='resources/TrackMan.htm') }}" title="TrackMan report example" class="comparison-iframe"></iframe>
+                    </div>
+                </div>
+
+                <div class="toggle-panel toggle-panel--scrollable" id="tab-after" role="tabpanel">
                     <p class="comparison-subtitle">Readable pitcher report with school branding</p>
-                    <img src="{{ url_for('static', filename='resources/PitcherReport.png') }}" alt="Pitcher report example, Used with permission" class="comparison-image comparison-image--after" style="max-height: 655px;">
-                </article>
+                    <img src="{{ url_for('static', filename='resources/PitcherReport.png') }}" alt="Pitcher report example, Used with permission" class="comparison-image--after">
+                </div>
             </div>
+
+            <script>
+                document.querySelectorAll('.toggle-tab').forEach(tab => {
+                    tab.addEventListener('click', () => {
+                        document.querySelectorAll('.toggle-tab').forEach(t => {
+                            t.classList.remove('toggle-tab--active');
+                            t.setAttribute('aria-selected', 'false');
+                        });
+                        document.querySelectorAll('.toggle-panel').forEach(p => p.classList.remove('toggle-panel--active'));
+                        tab.classList.add('toggle-tab--active');
+                        tab.setAttribute('aria-selected', 'true');
+                        document.getElementById('tab-' + tab.dataset.tab).classList.add('toggle-panel--active');
+                    });
+                });
+            </script>
+        </div>
+        <div class="bubble about-bubble" style="margin-top: 0;">
+            <h2 style="margin-bottom: 12px;">Contact & Support</h2>
+            <p class="about-lead" style="margin-bottom: 16px;">Questions about the product, your subscription, or TrackMan integration? Get in touch directly.</p>
+            <p style="margin: 6px 0;">📧 <a href="mailto:thomas.eubank516@gmail.com" style="color: var(--accent);">thomas.eubank516@gmail.com</a></p>
+            <p style="margin: 6px 0;">📞 <a href="tel:+16063034052" style="color: var(--accent);">606-303-4052</a></p>
         </div>
     </main>
 
     <!-- Footer Placeholder -->
     <div id="footer-placeholder"></div>
 
-    <script src="{{ url_for('static', filename='scripts.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/core.js') }}"></script>
 </body>
 </html>

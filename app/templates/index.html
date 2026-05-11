@@ -4,7 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{current_user.school.slug|upper}} Baseball Analytics - Home</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/forms.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tables.css') }}">
 
     {% if branding %}
     <style>
@@ -57,23 +61,24 @@
                 <div class="download-container" style="padding-right: 20px;"></div>
             </div>
             <div class="pitcher-heatmap" style="display: flex; justify-content: center; align-items: center;"></div>
-            <div style="display: flex; flex-direction: row; justify-content: center;">
-                <div class="pitcher-breakmap" style="display: flex; justify-content: center; align-items: center;"></div>
-                <div class="pitcher-data-table" style="display: flex; flex-direction: column; justify-content: center; align-items: center; max-width: fit-content;">
+            <div class="report-lower-row">
+                <div class="pitcher-breakmap"></div>
+                <div class="pitcher-usage-panel">
                     <h2>Pitch Usage</h2>
                     <h3>LHH</h3>
-                    <div class="left-usage" style="display: flex;"></div>
+                    <div class="left-usage table-scroll"></div>
                     <h3>RHH</h3>
-                    <div class="right-usage" style="display: flex;"></div>
+                    <div class="right-usage table-scroll"></div>
                 </div>
-            </div>            
-            <div class="pitcher-table" style="display: flex; max-width: 1200px; width: auto; margin-left: auto; margin-right: auto;"></div>
+            </div>
+            <div class="pitcher-table table-scroll"></div>
         </div>
     </template>
     
     <!-- Footer Placeholder -->
     <div id="footer-placeholder"></div>
     
-    <script src="{{ url_for('static', filename='scripts.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/core.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/pages/upload.js') }}"></script>
 </body>
 </html>

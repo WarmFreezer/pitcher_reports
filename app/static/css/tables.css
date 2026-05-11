@@ -1,0 +1,226 @@
+/* ============================================================================
+   REPORT TABLES
+   ============================================================================ */
+
+.pitcher-data-table,
+.pitch-usage-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    table-layout: auto;
+}
+
+.pitcher-data-table { margin: 20px 0; }
+.pitch-usage-table  { margin: 10px 0; }
+
+.table-scroll {
+    overflow-x: auto;
+    width: 100%;
+    -webkit-overflow-scrolling: touch;
+    min-width: 0;
+}
+
+.pitcher-usage-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    text-align: center;
+    min-width: 0;
+    flex: 1;
+}
+
+.pitcher-table {
+    overflow-x: auto;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.pitcher-data-table th,
+.pitcher-data-table td,
+.pitch-usage-table th,
+.pitch-usage-table td {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    text-align: center;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.pitcher-data-table th,
+.pitch-usage-table th {
+    background-color: var(--tertiary);
+    color: white;
+    font-weight: bold;
+}
+
+.pitcher-data-table tr:nth-child(even),
+.pitch-usage-table tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+.pitcher-data-table tr:hover,
+.pitch-usage-table tr:hover {
+    background-color: #f0f0f0;
+}
+
+/* ============================================================================
+   REPORT IMAGES & LAYOUT
+   ============================================================================ */
+
+.report-img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
+.report-img-heatmap { width: 800px; }
+.report-img-breakmap { width: 400px; }
+
+.report-lower-row {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.pitcher-heatmap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    width: 100%;
+}
+
+.pitcher-breakmap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    flex: 0 0 auto;
+    max-width: 100%;
+}
+
+@media (max-width: 900px) {
+    .report-img-heatmap,
+    .report-img-breakmap {
+        width: 100%;
+    }
+
+    .report-lower-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .pitcher-breakmap {
+        flex: none;
+        width: 100%;
+    }
+
+    .pitcher-usage-panel {
+        width: 100%;
+    }
+}
+
+/* ============================================================================
+   ROSTER TABLE
+   ============================================================================ */
+
+.roster-scroll {
+    overflow-x: auto;
+    margin-top: 12px;
+}
+
+.roster-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.roster-table th {
+    background-color: var(--tertiary);
+    color: white;
+    padding: 10px 12px;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.roster-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--accent);
+    vertical-align: middle;
+}
+
+.roster-table tr:hover td {
+    background-color: var(--light);
+}
+
+.roster-input {
+    border: none;
+    background: transparent;
+    font-size: 14px;
+    font-family: Cambria, serif;
+    color: var(--dark);
+    width: 100%;
+    min-width: 80px;
+    padding: 4px 0;
+    max-width: none;
+}
+
+.roster-input:focus {
+    outline: none;
+    border-bottom: 1px solid var(--secondary);
+}
+
+.pfp-cell {
+    position: relative;
+    width: 52px;
+    text-align: center;
+}
+
+.player-pfp {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--accent);
+    display: block;
+    margin: 0 auto;
+}
+
+.pfp-edit {
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    background: var(--secondary);
+    color: white;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    font-size: 10px;
+    line-height: 16px;
+    text-align: center;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.pfp-cell:hover .pfp-edit {
+    opacity: 1;
+}
+
+.roster-delete-btn {
+    background: none;
+    border: none;
+    color: var(--danger);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+}
+
+.roster-delete-btn:hover {
+    color: #a01f35;
+}

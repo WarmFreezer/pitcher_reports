@@ -1,0 +1,32 @@
+{
+    "school": {
+        "name": "Default University",
+        "short_name": "Default",
+        "mascot": "Fred",
+        "slug": "default"
+    },
+    "colors": {
+        "primary": "#00576b",
+        "secondary": "#ff7700",
+        "tertiary": "#9e3a00",
+        "dark": "#30312C",
+        "light": "#ececec",
+        "accent": "#ffcfa8"
+    },
+    "logos": {
+        "primary": "assets/logo.png"
+    },
+    "typography": {
+        "font_family": "Graduate, sans-serif",
+        "font_weights": {
+            "light": 300,
+            "regular": 400,
+            "bold": 700
+        }
+    },
+    "report_settings": {
+        "header_height_px": 120,
+        "show_logo": true,
+        "footer_text": "\u00c2\u00a9 Eubank Technologies. All rights reserved."
+    }
+}

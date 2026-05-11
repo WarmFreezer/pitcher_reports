@@ -1,6 +1,5 @@
 import os
 import base64
-import requests
 import pandas as pd
 from PIL import Image as PILImage
 from io import BytesIO
@@ -16,7 +15,9 @@ from reportlab.platypus import (
 )
 
 from .branding_loader import BrandingLoader
-from .cloudinary_service import CloudinaryService
+
+STORAGE_SCHOOLS = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'storage', 'schools')
+STATIC_RESOURCES = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'static', 'resources')
 
 class PDF_Generator:
     PAGE_W, PAGE_H = letter
@@ -46,15 +47,9 @@ class PDF_Generator:
     def __init__(self, current_user, branding):
         self.current_user = current_user
 
-        cloudinary_public_id = f"schools/{current_user.school.slug}/assets/logo"
-        school_logo = CloudinaryService.img_exists(cloudinary_public_id)
-        if not school_logo:
-            self.school_logo = os.path.join('app', 'static', 'resources', 'HomePlate.png')
-        else:
-            response = requests.get(school_logo)
-            buffer = BytesIO(response.content)
-            buffer.seek(0)
-            self.school_logo = buffer
+        # Always resolve logo from local storage; fall back to the app icon if not yet uploaded
+        logo_path = os.path.join(STORAGE_SCHOOLS, current_user.school.slug, 'assets', 'logo.png')
+        self.school_logo = logo_path if os.path.exists(logo_path) else os.path.join(STATIC_RESOURCES, 'HomePlate.png')
 
         self.primary_color = colors.HexColor(branding['colors']['primary'])
         self.secondary_color = colors.HexColor(branding['colors']['secondary'])
@@ -233,10 +228,12 @@ class PDF_Generator:
             ('FONTSIZE', (0, 1), (-1, -1), 7),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
             ('TOPPADDING', (0, 0), (-1, 0), 8),
+            ('TOPPADDING', (0, 1), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 5),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [self.WHITE, self.light_color]),
         ]
-        
+
         stats_table.setStyle(TableStyle(table_style))
         elements.append(stats_table)
         elements.append(Spacer(1, 0.05 * inch))
@@ -292,10 +289,12 @@ class PDF_Generator:
             ('FONTSIZE', (0, 1), (-1, -1), 7),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
             ('TOPPADDING', (0, 0), (-1, 0), 8),
+            ('TOPPADDING', (0, 1), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 5),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [self.WHITE, self.light_color]),
         ]
-        
+
         usage_table.setStyle(TableStyle(table_style))
         elements.append(usage_table)
         elements.append(Spacer(1, 0.05 * inch))
@@ -543,20 +542,19 @@ class PDF_Generator:
             Path to the generated PDF
         """
         
-        cloudinary_public_id = f"schools/{self.current_user.school.slug}/players/{data.get('pitcher_id')}/pfp"
-        player_pfp = CloudinaryService.img_exists(cloudinary_public_id)
-        if not player_pfp:
-            player_pfp = os.path.join('app', 'static', 'resources', 'favicon.png')
+        # Resolve player pfp from local storage; fall back to placeholder if not uploaded
+        pfp_path = os.path.join(STORAGE_SCHOOLS, self.current_user.school.slug, 'assets', 'players', str(data.get('pitcher_id')), 'pfp.png')
+        player_pfp = pfp_path if os.path.exists(pfp_path) else os.path.join(STATIC_RESOURCES, 'favicon.png')
 
         # Replace SimpleDocTemplate with this in generate_pitcher_report:
         frame = Frame(
-            self.MARGIN,        
-            self.MARGIN,           
-            self.PAGE_W - 2 * self.MARGIN,   
-            self.PAGE_H - self.MARGIN,      
+            self.MARGIN,
+            0,
+            self.PAGE_W - 2 * self.MARGIN,
+            self.PAGE_H,
             leftPadding=0,
             rightPadding=0,
-            topPadding=0,         
+            topPadding=0,
             bottomPadding=0,
         )
 
@@ -566,7 +564,7 @@ class PDF_Generator:
             rightMargin=self.MARGIN,
             leftMargin=self.MARGIN,
             topMargin=0,
-            bottomMargin=self.MARGIN,
+            bottomMargin=0,
         )
         pdf_file.addPageTemplates([PageTemplate(id='main', frames=[frame])])
         
