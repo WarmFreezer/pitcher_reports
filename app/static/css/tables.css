@@ -27,13 +27,12 @@
     text-align: center;
     min-width: 0;
     flex: 1;
+    min-width: 300px;
 }
 
 .pitcher-table {
     overflow-x: auto;
-    max-width: 1200px;
-    margin-left: auto;
-    margin-right: auto;
+    width: 100%;
     -webkit-overflow-scrolling: touch;
 }
 
@@ -76,7 +75,7 @@
 }
 
 .report-img-heatmap { width: 800px; }
-.report-img-breakmap { width: 400px; }
+.report-img-breakmap { width: 100%; max-width: 400px; }
 
 .report-lower-row {
     display: flex;
@@ -84,6 +83,7 @@
     justify-content: center;
     flex-wrap: wrap;
     gap: 16px;
+    width: 100%;
 }
 
 .pitcher-heatmap {
@@ -100,7 +100,8 @@
     align-items: center;
     overflow: hidden;
     flex: 0 0 auto;
-    max-width: 100%;
+    width: auto;
+    max-width: 50%;
 }
 
 @media (max-width: 900px) {
@@ -117,10 +118,12 @@
     .pitcher-breakmap {
         flex: none;
         width: 100%;
+        max-width: 100%;
     }
 
     .pitcher-usage-panel {
         width: 100%;
+        min-width: 0;
     }
 }
 

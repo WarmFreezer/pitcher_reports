@@ -1,122 +1,115 @@
 # Baseball Pitcher Report Generator
 
-A Flask-based web application that generates comprehensive pitcher performance reports from TrackMan baseball data files. Features multi-school support with custom branding, user authentication, and PDF report generation.
+A Flask web application that generates comprehensive pitcher performance reports from TrackMan baseball data. Supports multiple schools with subscription-based access, custom branding, and professional PDF report generation.
+
+Deployed on [Railway](https://railway.app) with automated SSL.
 
 ## Features
 
-- 🔐 **User Authentication**: Secure login system with role-based access
-- 🏫 **Multi-School Support**: Manage multiple schools with custom branding
-- 📊 **Interactive Heat Maps**: Visualize pitch locations by batter handedness
-- 📈 **Statistical Tables**: Detailed performance metrics for each pitcher
-- 📄 **PDF Export**: Download individual or merged PDF reports
-- 🎨 **Custom Branding**: School-specific colors, logos, and styling
-- ⚡ **Batch Processing**: Process multiple pitchers from a single upload
+- **User Authentication** — Secure login with role-based access (admin / member)
+- **Self-Service School Registration** — Schools sign up and subscribe via Stripe Embedded Checkout
+- **Email Domain Validation** — User registration is restricted to the school's verified email domain
+- **Subscription Gating** — Heat maps and break maps require an active Stripe subscription; table data is always available
+- **Pitch Heat Maps** — Visualize pitch locations split by batter handedness (L/R)
+- **Pitch Break Maps** — Visualize movement profiles for each pitcher
+- **Pitch Usage Tables** — Per-pitch-type usage breakdowns vs. left and right-handed batters
+- **Statistical Tables** — Detailed per-pitch-type performance metrics
+- **PDF Reports** — Per-pitcher PDFs with school branding, plus a merged all-pitchers PDF
+- **Custom Branding** — School-specific colors and logos
+- **TrackMan Team Filtering** — Reports are scoped to the uploading school's TrackMan ID
 
-## Prerequisites
+## Tech Stack
 
-- Python 3.8 or higher
-- pip (Python package installer)
+- **Framework**: Flask 3.x
+- **Database**: PostgreSQL (production) / SQLite (local dev), managed with Flask-Migrate
+- **Auth**: Flask-Login + Flask-Bcrypt
+- **PDF Generation**: ReportLab
+- **Visualizations**: Matplotlib + Seaborn
+- **Payments**: Stripe (Embedded Checkout + Webhooks)
+- **Production Server**: Gunicorn
+- **Deployment**: Railway
 
-## Installation
+## Local Development
 
-### 1. Clone or Download the Repository
+### 1. Clone the repository
+
 ```bash
 git clone https://github.com/WarmFreezer/pitcher_reports.git
 cd pitcher_reports
 ```
 
-### 2. Create a Virtual Environment (Recommended)
+### 2. Create and activate a virtual environment
 
-**Windows:**
 ```bash
-python -m venv venv
-venv\Scripts\activate
+python -m venv .venv
+# Windows
+.venv\Scripts\activate
+# Mac/Linux
+source .venv/bin/activate
 ```
 
-**Mac/Linux:**
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
+### 3. Install dependencies
 
-### 3. Install Required Packages
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Initialize the Database
-```bash
-flask --app app.main init-db
+### 4. Configure environment variables
+
+Create a `.env` file in the project root:
+
+```env
+APP_SECRET_KEY=your-secret-key
+
+# Database (omit to use SQLite locally)
+DATABASE_URL=postgresql://user:pass@localhost/pitcher_reports
+
+# Stripe
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PUBLISHABLE_KEY=pk_test_...
+STRIPE_PRICE_ID=price_...
+STRIPE_WHSEC=whsec_...
+
 ```
 
-### 5. Create a School
-
-Before creating users, you need at least one school:
+### 5. Initialize the database
 
 ```bash
-flask --app app.main create-school "School Name" school_slug --primary-color "#0033A0" --secondary-color "#FFCF00"
+flask --app app.main db upgrade
 ```
 
-Example:
-```bash
-flask --app app.main create-school "Morehead State University" msu --primary-color "#0033A0" --secondary-color "#FFCF00"
-```
+### 6. Run the development server
 
-**After creating a school, add a logo:**
-1. Place your school logo at: `app/storage/schools/school_slug/assets/logo.png`
-2. Update `app/storage/schools/school_slug/assets/branding.json` with additional branding settings
-
-### 6. Create a User
-
-```bash
-flask --app app.main create-user EMAIL PASSWORD --first-name "First" --last-name "Last" --school-id 1 --role admin
-```
-
-Example:
-```bash
-flask --app app.main create-user coach@example.com password123 --first-name "John" --last-name "Doe" --school-id 1 --role admin
-```
-
-**To find your school ID:**
-```bash
-flask --app app.main list-schools
-```
-
-## Usage
-
-### 1. Start the Application
 ```bash
 flask --app app.main run
 ```
 
-Or using Python:
-```bash
-python -m flask --app app.main run
-```
+Navigate to `http://127.0.0.1:5000`.
 
-### 2. Open in Browser
+## Usage
 
-Navigate to: `http://127.0.0.1:5000`
+### Registering a School
 
-### 3. Login
+1. Go to `/schools` and fill in the school name, slug, and admin email
+2. Complete the Stripe Embedded Checkout to activate the subscription
+3. After payment, you are redirected to create the first (admin) user account
 
-Use the credentials you created during setup.
+### Registering Users
 
-### 4. Upload Data File
+1. Go to `/register`
+2. Enter a name, email (must match the school's domain), and password
+3. The user whose email matches `school.admin_email` is granted the `admin` role; all others receive `member`
 
-1. Click the **"Upload File"** button
-2. Select an Excel file (.xlsx) containing TrackMan pitcher data
-3. Wait for processing to complete
+### Uploading Data and Generating Reports
 
-### 5. View and Download Reports
+1. Log in and navigate to the Upload page
+2. Upload a TrackMan export file (`.xlsx`, `.xls`, or `.csv`)
+3. The app filters pitchers by the school's `trackman_id`
+4. Reports render inline; individual and merged PDFs are available for download
 
-- **View Online**: Reports appear automatically after upload
-- **Download Individual PDFs**: Click the "Download PDF" button on each report
-- **Download All**: Use File → Download in the navbar to get all reports in one PDF
+## School Branding
 
-## School Branding Configuration
-
-Each school's branding is stored in `app/storage/schools/{slug}/assets/branding.json`:
+Branding is defined in `app/storage/schools/{slug}/assets/branding.json`:
 
 ```json
 {
@@ -138,163 +131,96 @@ Each school's branding is stored in `app/storage/schools/{slug}/assets/branding.
         "primary": "assets/logo.png"
     },
     "typography": {
-        "font_family": "Graduate, sans-serif",
-        "font_weights": {
-            "light": 300,
-            "regular": 400,
-            "bold": 700
-        }
+        "font_family": "Graduate, sans-serif"
     },
     "report_settings": {
         "header_height_px": 120,
         "show_logo": true,
-        "footer_text": "© 2024 School Name. All rights reserved."
+        "footer_text": "© 2025 School Name. All rights reserved."
     }
 }
 ```
 
+School logos are loaded from `app/storage/schools/{slug}/assets/logo.png`.
+
 ## CLI Commands
 
-### Database
 ```bash
-flask --app app.main init-db              # Initialize database
-```
+# Database
+flask --app app.main db upgrade          # Run pending migrations
+flask --app app.main init-db             # Create tables (dev only)
+flask --app app.main reset-db            # Drop and recreate all tables (destructive)
 
-### Schools
-```bash
-flask --app app.main create-school NAME SLUG [OPTIONS]
-flask --app app.main list-schools         # List all schools
-```
+# Schools
+flask --app app.main create-school-func NAME SLUG PRIMARY SECONDARY TERTIARY ACCENT LIGHT DARK
+flask --app app.main list-schools
 
-### Users
-```bash
-flask --app app.main create-user EMAIL PASSWORD [OPTIONS]
-flask --app app.main list-users           # List all users
+# Users
+flask --app app.main create-user-func EMAIL PASSWORD [--first-name X] [--last-name Y] [--school-id N] [--role admin|member]
+flask --app app.main list-users
 ```
 
 ## Required Data Format
 
-The application accepts TrackMan baseball reports in Excel format (.xlsx). The file must include the following columns:
+TrackMan exports must include these columns:
 
-- `Pitcher` - Pitcher name
-- `PitcherId` - Unique pitcher identifier
-- `TaggedPitchType` - Type of pitch thrown
-- `PlateLocHeight` - Vertical plate location
-- `PlateLocSide` - Horizontal plate location
-- `BatterSide` - Left/Right handed batter
-- Additional TrackMan metrics
+| Column | Description |
+|---|---|
+| `Pitcher` | Pitcher name |
+| `PitcherId` | Unique pitcher identifier |
+| `PitcherTeam` | Team ID (matched against school's `trackman_id`) |
+| `TaggedPitchType` | Pitch type label |
+| `PlateLocHeight` | Vertical plate location |
+| `PlateLocSide` | Horizontal plate location |
+| `BatterSide` | `Left` or `Right` |
 
-## Troubleshooting
+Accepted formats: `.xlsx`, `.xls`, `.csv`
 
-### Port Already in Use
+## Deployment
 
-Change the port when starting the application:
-```bash
-flask --app app.main run --port 5001
-```
+The app is deployed on Railway. Key production configuration:
 
-### Module Not Found Errors
-
-Ensure you're in the virtual environment and packages are installed:
-```bash
-pip install --upgrade -r requirements.txt
-```
-
-### Database Errors
-
-If you encounter database issues, reinitialize:
-```bash
-flask --app app.main init-db
-```
-
-### Images Not Loading
-
-Verify the absolute path configuration in `app/main.py` line 27:
-```python
-STORAGE_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'storage')
-```
+- `DATABASE_URL` — Railway-provided PostgreSQL connection string (automatically rewritten from `postgres://` to `postgresql://`)
+- SSL is provisioned automatically by Railway
+- `gunicorn` is the production WSGI server
 
 ## File Structure
 
 ```
 pitcher_reports/
 ├── app/
-│   ├── __init__.py
-│   ├── main.py              # Flask application
-│   ├── cli.py               # CLI commands
+│   ├── main.py                     # Flask app + routes
+│   ├── cli.py                      # Flask CLI commands
+│   ├── payment_routes.py           # Stripe checkout + webhook routes
 │   ├── db/
-│   │   ├── models.py        # Database models
+│   │   ├── models.py               # SQLAlchemy models (School, User)
 │   │   └── session.py
 │   ├── services/
-│   │   ├── auth.py          # Authentication
+│   │   ├── auth.py
 │   │   ├── branding_loader.py
 │   │   ├── file_validator.py
-│   │   ├── pdf_generator.py
-│   │   └── report.py        # Report generation
+│   │   ├── report.py               # Data processing + visualizations
+│   │   └── report_lab_generator.py # ReportLab PDF generation
 │   ├── static/
-│   │   ├── scripts.js
-│   │   ├── style.css
-│   │   └── resources/
 │   ├── storage/
-│   │   └── schools/
-│   │       └── {slug}/
-│   │           ├── assets/
-│   │           │   ├── logo.png
-│   │           │   └── branding.json
-│   │           ├── players/
-│   │           ├── reports/
-│   │           └── temp/
+│   │   └── schools/{slug}/
+│   │       ├── assets/             # branding.json, local logo fallback
+│   │       ├── temp/               # Heat map + break map images (per-user)
+│   │       └── reports/            # Generated PDFs (per-user)
 │   └── templates/
-│       ├── dashboard.html
-│       ├── index.html
-│       └── login.html
-├── instance/
-│   └── pitcher_reports.db   # SQLite database
+├── migrations/                     # Alembic migration files
 ├── requirements.txt
 └── README.md
 ```
 
-## Dependencies
-
-- **Flask** - Web framework
-- **Flask-CORS** - Cross-origin resource sharing
-- **Flask-Login** - User session management
-- **Flask-Bcrypt** - Password hashing
-- **Flask-SQLAlchemy** - Database ORM
-- **pandas** - Data manipulation
-- **openpyxl** - Excel file support
-- **matplotlib** - Plotting library
-- **seaborn** - Statistical visualization
-- **xhtml2pdf** - HTML to PDF conversion
-- **PyPDF2** - PDF manipulation
-- **python-magic-bin** - File type detection
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
 ## License
 
-This project is source-available for non-commercial use only.
-Commercial licensing is available upon request.
+This project is source-available for non-commercial use only. Commercial licensing available upon request.
 
 University logos, seals, and trademarks are the property of their respective institutions and are not licensed for reuse or redistribution.
 
 ## Contact
 
-Thomas Eubank - [thomas.eubank516@gmail.com](mailto:thomas.eubank516@gmail.com)
+Thomas Eubank — [thomas.eubank516@gmail.com](mailto:thomas.eubank516@gmail.com)
 
 Project Link: [https://github.com/WarmFreezer/pitcher_reports](https://github.com/WarmFreezer/pitcher_reports)
-
-## Acknowledgments
-
-- MSU Baseball Analytics Team
-- Prof. Asim Chaudhry
-
----
-
-**Last Updated:** February 2026
