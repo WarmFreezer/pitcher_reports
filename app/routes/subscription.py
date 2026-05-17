@@ -1,11 +1,13 @@
 import os
 import re
+import tempfile
 import stripe
 import unicodedata
 import pandas as pd
+from io import BytesIO
 from datetime import datetime
 from PIL import Image
-from flask import Blueprint, request, jsonify, render_template, redirect, url_for, flash, current_app
+from flask import Blueprint, request, jsonify, render_template, redirect, url_for, flash, current_app, send_file
 from flask_login import login_required, current_user
 
 from app.db.models import db
@@ -156,6 +158,36 @@ def rebrand_subscription():
     except Exception as e:
         current_app.logger.error(f"Error updating branding: {e}")
         return jsonify({'error': 'Failed to update branding.'}), 500
+
+
+# ── Branding PDF preview ─────────────────────────────────────────────────────
+
+@subscription_bp.route('/api/subscription/preview-pdf', methods=['GET'])
+@login_required
+def preview_branding_pdf():
+    from app.services.report_lab_generator import PDF_Generator
+
+    branding = BrandingLoader.get_branding(current_user.school.slug)
+    gen = PDF_Generator(current_user, branding)
+
+    with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
+        tmp_path = f.name
+
+    try:
+        gen.generate_color_preview(tmp_path)
+        with open(tmp_path, 'rb') as f:
+            pdf_bytes = BytesIO(f.read())
+    except Exception as e:
+        current_app.logger.error(f"Error generating branding preview: {e}")
+        return jsonify({'error': 'Failed to generate preview.'}), 500
+    finally:
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
+
+    pdf_bytes.seek(0)
+    return send_file(pdf_bytes, mimetype='application/pdf', download_name='branding_preview.pdf')
 
 
 # ── Logo upload ───────────────────────────────────────────────────────────────

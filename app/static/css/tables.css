@@ -52,18 +52,18 @@
 .pitcher-data-table th,
 .pitch-usage-table th {
     background-color: var(--tertiary);
-    color: white;
+    color: var(--text-secondary);
     font-weight: bold;
 }
 
 .pitcher-data-table tr:nth-child(even),
 .pitch-usage-table tr:nth-child(even) {
-    background-color: #f9f9f9;
+    background-color: var(--bg-card);
 }
 
 .pitcher-data-table tr:hover,
 .pitch-usage-table tr:hover {
-    background-color: #f0f0f0;
+    background-color: var(--bg-hover);
 }
 
 /* ============================================================================
@@ -148,7 +148,7 @@
 
 .roster-table th {
     background-color: var(--tertiary);
-    color: white;
+    color: var(--text-secondary);
     padding: 10px 12px;
     text-align: left;
     white-space: nowrap;
@@ -161,7 +161,7 @@
 }
 
 .roster-table tr:hover td {
-    background-color: var(--light);
+    background-color: var(--bg-hover);
 }
 
 .roster-input {
@@ -169,7 +169,7 @@
     background: transparent;
     font-size: 14px;
     font-family: Cambria, serif;
-    color: var(--dark);
+    color: var(--text-primary);
     width: 100%;
     min-width: 80px;
     padding: 4px 0;
@@ -202,7 +202,7 @@
     bottom: 4px;
     right: 4px;
     background: var(--secondary);
-    color: white;
+    color: var(--text-secondary);
     border-radius: 50%;
     width: 16px;
     height: 16px;
@@ -229,5 +229,5 @@
 }
 
 .roster-delete-btn:hover {
-    color: #a01f35;
+    color: var(--danger);
 }

@@ -1,5 +1,7 @@
+import os
 import numpy as np
 import pandas as pd
+import seaborn as sns
 import matplotlib
 
 # Use a non-interactive backend for matplotlib
@@ -9,8 +11,53 @@ from matplotlib.colors import LinearSegmentedColormap, to_rgb
 from matplotlib.patches import Rectangle
 from matplotlib import pyplot as plt
 import matplotlib.patches as patches
-import seaborn as sns
-import os
+
+baseball_width = 0.24  # Approximate width of a baseball in feet
+
+_THEME_COLORS = {
+    'light': {
+        'figure.facecolor': 'none',
+        'figure.edgecolor': 'none',
+        'axes.facecolor':   'none',
+        'text.color':       '#111111',
+        'axes.edgecolor':   '#111111',
+        'axes.titlecolor':  '#111111',
+        'axes.labelcolor':  '#111111',
+        'xtick.color':      '#444444',
+        'ytick.color':      '#444444',
+        'grid.color':       '#444444',
+        'grid.alpha':       0.3,
+    },
+    'dark': {
+        'figure.facecolor': 'none',
+        'figure.edgecolor': 'none',
+        'axes.facecolor':   'none',
+        'text.color':       '#e0e0e0',
+        'axes.edgecolor':   '#e0e0e0',
+        'axes.titlecolor':  '#e0e0e0',
+        'axes.labelcolor':  '#e0e0e0',
+        'xtick.color':      '#aaaaaa',
+        'ytick.color':      '#aaaaaa',
+        'grid.color':       '#aaaaaa',
+        'grid.alpha':       0.3,
+    },
+}
+
+matplotlib.rcParams.update({
+    'font.family': 'Cambria',
+    'font.size': 18,
+    'font.weight': 'bold',
+})
+
+def _make_strike_zone():
+    return Rectangle((-0.83, 1.5), 1.66, 2.0,
+        linewidth=2, edgecolor=matplotlib.rcParams['text.color'], facecolor='none', linestyle='--')
+
+def _make_shadow_zone():
+    return Rectangle(
+        (-0.83 - baseball_width, 1.5 - baseball_width),
+        1.66 + 2 * baseball_width, 2.0 + 2 * baseball_width,
+        linewidth=1, edgecolor=matplotlib.rcParams['xtick.color'], facecolor='none', linestyle=(0, (1, 10)))
 
 def _cmap(hex_color, name):
     # Build a transparency gradient from fully transparent to the pitch color,
@@ -80,8 +127,6 @@ pitch_point_colors = {
 pitch_colors = {k: _cmap(v, k) for k, v in pitch_point_colors.items()}
 
 STRIKES = ['StrikeCalled', 'StrikeSwinging', 'FoulBallNotFieldable']
-
-baseball_width = 0.24  # Approximate width of a baseball in feet
 
 def build_table(source, pitcher_id):
     try:
@@ -215,12 +260,14 @@ def build_table(source, pitcher_id):
         print(f"Error building table for pitcher ID {pitcher_id}: {e}")
         return None
 
-def pitch_heat_map_by_batter_side(source, id, output_path, pitcher_id, threshold=0.1):
-    try:        
-        table = source[['Pitcher', 'PitcherId', 'TaggedPitchType', 'PlateLocHeight', 'PlateLocSide', 'BatterSide']] 
+def pitch_heat_map_by_batter_side(source, id, output_path, pitcher_id, threshold=0.1, theme='light'):
+    fig = None
+    try:
+        matplotlib.rcParams.update(_THEME_COLORS.get(theme, _THEME_COLORS['light']))
+
+        table = source[['Pitcher', 'PitcherId', 'TaggedPitchType', 'PlateLocHeight', 'PlateLocSide', 'BatterSide']]
         pitcher_data = table[table['PitcherId'] == pitcher_id]
-        
-        # Create subplots for left and right handed batters
+
         fig, (ax_left, ax_right) = plt.subplots(1, 2, figsize=(18, 8))
         
         # Process each batter side
@@ -288,53 +335,41 @@ def pitch_heat_map_by_batter_side(source, id, output_path, pitcher_id, threshold
                     )
             
             # Set plot properties
-            ax.set_title(f'vs {batter_side}-Handed Batters (n={len(batter_data)})', fontsize=14, fontweight='bold', pad=10)
-            ax.set_xlabel('Plate Location Side (ft)', fontsize=12, labelpad=8)
-            ax.set_ylabel('Plate Location Height (ft)', fontsize=12, labelpad=8)
+            ax.set_title(f'vs {batter_side}-Handed Batters (n={len(batter_data)})', fontsize=24, fontweight='bold', pad=10)
+            ax.set_xlabel('Plate Location Side (ft)', fontsize=18, labelpad=8)
+            ax.set_ylabel('Plate Location Height (ft)', fontsize=18, labelpad=8)
             ax.set_xlim(-2.5, 2.5)
             ax.set_ylim(0, 5)
             ax.set_aspect('equal', adjustable='box')
             
-            # Add strike zone rectangle (approximate)
-            strike_zone = Rectangle((-0.83, 1.5), 1.66, 2.0, 
-                                linewidth=2, edgecolor='black', 
-                                facecolor='none', linestyle='--')
-            ax.add_patch(strike_zone)
+            ax.add_patch(_make_strike_zone())
+            ax.add_patch(_make_shadow_zone())
 
-            # Add shadow zone rectangle (approximate)
-            shadow_zone = Rectangle(
-                (-0.83 - baseball_width, 1.5 - baseball_width), 
-                1.66 + 2 *baseball_width, 
-                2.0 + 2 * baseball_width, 
-                                linewidth=1, edgecolor='gray', 
-                                facecolor='none', linestyle=(0, (1, 10)))
-            ax.add_patch(shadow_zone)
-            
-        # Adjust spacing to make room for title
-        plt.subplots_adjust(left=0.06, right=0.96, top=0.88, bottom=0.1, wspace=0.2)
-
-        # Save the figure in the output folder for report building
-        plt.savefig(os.path.join(output_path, f'{id}_pitcher_{pitcher_id}_heat_map.png'), pad_inches=0.3, dpi=300, bbox_inches='tight')
-        plt.close(fig)
+        fig.subplots_adjust(left=0.06, right=0.96, top=0.88, bottom=0.1, wspace=0.2)
+        fig.savefig(os.path.join(output_path, f'{id}_pitcher_{pitcher_id}_heat_map_{theme}.png'), pad_inches=0.3, dpi=300, bbox_inches='tight', transparent=True)
 
     except Exception as e:
         print(f"Error generating heat map for pitcher ID {pitcher_id}: {e}")
+    finally:
+        if fig is not None:
+            plt.close(fig)
 
-def pitch_break_map(source, id, output_path, pitcher_id, threshold=0.1):
+def pitch_break_map(source, id, output_path, pitcher_id, threshold=0.1, theme='light'):
+    fig = None
     try:
-        table = source[['Pitcher', 'PitcherId', 'TaggedPitchType', 'InducedVertBreak', 'HorzBreak', ]] 
+        matplotlib.rcParams.update(_THEME_COLORS.get(theme, _THEME_COLORS['light']))
+
+        table = source[['Pitcher', 'PitcherId', 'TaggedPitchType', 'InducedVertBreak', 'HorzBreak']]
         pitcher_data = table[table['PitcherId'] == pitcher_id]
 
-        # Create subplot for pitch break
         fig, ax = plt.subplots(figsize=(9, 8))
-        
+
         if len(pitcher_data) == 0:
-            ax.text(0, 2.5, f'No data for pitcher ID {pitcher_id}', 
+            ax.text(0, 2.5, f'No data for pitcher ID {pitcher_id}',
                 ha='center', va='center', fontsize=14)
             ax.set_xlim(-2.5, 2.5)
             ax.set_ylim(0, 5)
-            plt.savefig(os.path.join(output_path, f'{id}_pitcher_{pitcher_id}_break_map.png'), pad_inches=0.3, dpi=300, bbox_inches='tight')
-            plt.close(fig)
+            fig.savefig(os.path.join(output_path, f'{id}_pitcher_{pitcher_id}_break_map_{theme}.png'), pad_inches=0.3, dpi=300, bbox_inches='tight', transparent=True)
             return
         
         # Get unique pitch types for this pitcher
@@ -398,29 +433,26 @@ def pitch_break_map(source, id, output_path, pitcher_id, threshold=0.1):
         ax.quiver(0, 0, pitcher_data['HorzBreak'].mean(), pitcher_data['InducedVertBreak'].mean(), angles='xy', scale_units='xy', scale=1, color='gray', width=0.01)
 
         # Set plot properties
-        ax.set_title(f'Pitch Break (n={len(pitcher_data)}), Arm Angle: {arm_angle:.1f}°', fontsize=14, fontweight='bold', pad=10)
-        ax.set_xlabel('Horizontal Break (in)', fontsize=12, labelpad=8)
-        ax.set_ylabel('Induced Vertical Break (in)', fontsize=12, labelpad=8)
+        ax.set_title(f'Pitch Break (n={len(pitcher_data)}), Arm Angle: {arm_angle:.1f}°', fontsize=24, fontweight='bold', pad=10)
+        ax.set_xlabel('Horizontal Break (in)', fontsize=18, labelpad=8)
+        ax.set_ylabel('Induced Vertical Break (in)', fontsize=18, labelpad=8)
         ax.set_xlim(-25, 25)
         ax.set_ylim(-25, 25)
         ax.grid(True, linestyle='--', alpha=0.5)
         ax.set_aspect('equal', adjustable='box')
-        
-        # Add legend
+
         handles, labels = ax.get_legend_handles_labels()
         by_label = dict(zip(labels, handles))
-        ax.legend(by_label.values(), by_label.keys(), loc='lower right', fontsize=12)
+        ax.legend(by_label.values(), by_label.keys(), loc='lower right', fontsize=18)
         
-        # Adjust spacing to make room for title
-        plt.subplots_adjust(left=0.06, right=0.96, top=0.88, bottom=0.1, wspace=0.2)
-
-        # Save the figure in the output folder for report building
-        plt.savefig(os.path.join(output_path, f'{id}_pitcher_{pitcher_id}_break_map.png'), pad_inches=0.3, dpi=300, bbox_inches='tight')
-        plt.close(fig)
+        fig.subplots_adjust(left=0.06, right=0.96, top=0.88, bottom=0.1, wspace=0.2)
+        fig.savefig(os.path.join(output_path, f'{id}_pitcher_{pitcher_id}_break_map_{theme}.png'), pad_inches=0.3, dpi=300, bbox_inches='tight', transparent=True)
 
     except Exception as e:
         print(f"Error reading file for pitcher ID {pitcher_id}: {e}")
-        return
+    finally:
+        if fig is not None:
+            plt.close(fig)
 
 def usage_table(source, pitcher_id):
     try:

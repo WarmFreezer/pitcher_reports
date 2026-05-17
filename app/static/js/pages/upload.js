@@ -1,35 +1,23 @@
-// Display uploaded data preview
-function displayUploadData(data) {
-    const contentArea = document.getElementById('uploadDataDisplay');
-    if (!contentArea) return;
-
-    const downloadButton = data.merged_pdf_url
-        ? `<a href="${data.merged_pdf_url}" download="all_pitcher_reports.pdf" class="download-btn" style="text-decoration: none;">Download Full PDF</a>`
-        : '';
-
-    contentArea.innerHTML = `
-        <div class="bubble">
-            <h2>File Upload Summary</h2>
-            <p>${data.message}</p>
-            ${downloadButton}
-        </div>
-    `;
-}
-
-// Display game data preview
+// Display game data and upload summary combined
 function displayGameData(data) {
     const contentArea = document.getElementById('gameDataDisplay');
     if (!contentArea) return;
 
-    const teamsTitle = `${data.game_data.away_team} @ ${data.game_data.home_team}`;
-    document.title = teamsTitle;
+    const { game_data, message, merged_pdf_url } = data;
+    document.title = `${game_data.away_team} @ ${game_data.home_team}`;
+
+    const downloadButton = merged_pdf_url
+        ? `<a href="${merged_pdf_url}" download="all_pitcher_reports.pdf" class="download-btn" style="text-decoration: none;">Download Full PDF</a>`
+        : '';
 
     contentArea.innerHTML = `
-        <div style="padding: 30px; background-color: var(--secondary);">
-            <h2>Game Data</h2>
-            <p>Date: ${data.game_data.date}</p>
-            <p>Home Team: ${data.game_data.home_team}</p>
-            <p>Away Team: ${data.game_data.away_team}</p>
+        <div class="bubble" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+            <div>
+                <h2>${game_data.away_team} @ ${game_data.home_team}</h2>
+                <p>${game_data.date}</p>
+                <p>${message}</p>
+            </div>
+            ${downloadButton}
         </div>
     `;
 }
@@ -46,7 +34,7 @@ async function handleFileSelect(event) {
 
     const reportOutput = document.querySelector('#report-output');
     if (reportOutput) {
-        reportOutput.innerHTML = '<p style="margin: 32px;">Processing file and generating reports...</p>';
+        reportOutput.innerHTML = '<p style="margin: 32px; color: var(--text-muted);">Processing file and generating reports...</p>';
     }
 
     const formData = new FormData();
@@ -68,13 +56,11 @@ async function handleFileSelect(event) {
             updateDownloadLink(true, result.merged_pdf_url);
         }
 
-        displayUploadData({
+        displayGameData({
+            game_data: result.game_data,
             message: result.message,
-            num_reports: result.num_reports,
             merged_pdf_url: result.merged_pdf_url
         });
-
-        displayGameData({ game_data: result.game_data });
 
         if (reportOutput) reportOutput.innerHTML = '';
 
@@ -123,13 +109,16 @@ function generateReport(data) {
         `;
     }
 
+    const currentTheme = document.documentElement.getAttribute('data-theme') ?? 'light';
+
     const heatmapContainer = clone.querySelector('.pitcher-heatmap');
     if (heatmapContainer) {
         const img = document.createElement('img');
-        img.src = data.heatmap_url;
+        img.dataset.lightSrc = data.heatmap_url;
+        img.dataset.darkSrc = data.heatmap_dark_url;
+        img.src = currentTheme === 'dark' ? data.heatmap_dark_url : data.heatmap_url;
         img.alt = `${data.pitcher_name} Heat Map`;
         img.className = 'report-img report-img-heatmap';
-        // onerror fires when the image 404s (school subscription inactive = no charts generated)
         img.onerror = function() {
             this.parentElement.innerHTML = '<p style="color: red;">Heatmap image not available. Update your subscription.</p>';
         };
@@ -139,7 +128,9 @@ function generateReport(data) {
     const breakmapContainer = clone.querySelector('.pitcher-breakmap');
     if (breakmapContainer) {
         const img = document.createElement('img');
-        img.src = data.breakmap_url;
+        img.dataset.lightSrc = data.breakmap_url;
+        img.dataset.darkSrc = data.breakmap_dark_url;
+        img.src = currentTheme === 'dark' ? data.breakmap_dark_url : data.breakmap_url;
         img.alt = `${data.pitcher_name} Break Map`;
         img.className = 'report-img report-img-breakmap';
         img.onerror = function() {

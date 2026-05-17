@@ -23,30 +23,23 @@
     </style>
     {% endif %}
 </head>
-<body onload="loadHeader('{{current_user.school.slug|upper}} Baseball Analytics', '/static/resources/HomePlate.png', '/storage/schools/{{current_user.school.slug}}/assets/logo.png');  loadNavbar(); loadFooter();">
+<body onload="loadNavbar(); loadFooter();">
     <!-- Navbar Placeholder -->
     <div id="navbar-placeholder"></div>
 
     <!-- Header Placeholder -->
-    <div id="header-placeholder"></div>
     
     <!-- Main Content -->
     <main class="main-content">
-        <div class="bubble">
-            <h2>Welcome to {{current_user.school.slug|upper}} Baseball Analytics</h2>
-            <p>Upload your data file to generate pitcher reports.</p>
-            
-            <!-- Hidden file input -->
+        <div class="bubble" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+            <div>
+                <h2>Welcome to {{current_user.school.slug|upper}} Baseball Analytics</h2>
+                <p>Upload your data file to generate pitcher reports.</p>
+            </div>
             <input type="file" id="fileUpload" accept=".csv,.xlsx,.xls" onchange="handleFileSelect(event)" style="display: none;">
-            
-            <!-- Upload button -->
             <button onclick="uploadFile()" class="upload-btn">Upload File</button>
         </div>
         
-        <!-- Upload data display area -->
-        <div id="uploadDataDisplay"></div>
-
-        <!-- Game Info -->
         <div id="gameDataDisplay"></div>
 
         <!-- Report Output Container -->

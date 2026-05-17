@@ -21,12 +21,11 @@
     </style>
     {% endif %}
 </head>
-<body onload="loadHeader('{{ current_user.school.slug|upper }} Baseball Analytics', '/static/resources/HomePlate.png', '{{ logo_path }}'); loadFooter(); loadNavbar();">
+<body onload="loadFooter(); loadNavbar('{{ logo_path }}');">
     <!-- Navbar Placeholder -->
     <div id="navbar-placeholder"></div>
     
     <!-- Header Placeholder -->
-    <div id="header-placeholder"></div>
     
     <main class="main-content">
         <div class="bubble">

@@ -91,8 +91,9 @@ def upload_file():
                 continue
 
             if current_user.school.is_active:
-                report.pitch_heat_map_by_batter_side(source_df, current_user.id, school_temp_folder, pitcher_id, 0.75)
-                report.pitch_break_map(source_df, current_user.id, school_temp_folder, pitcher_id, 0.75)
+                for theme in ('light', 'dark'):
+                    report.pitch_heat_map_by_batter_side(source_df, current_user.id, school_temp_folder, pitcher_id, 0.75, theme=theme)
+                    report.pitch_break_map(source_df, current_user.id, school_temp_folder, pitcher_id, 0.75, theme=theme)
 
             # Auto-add pitchers found in the game file but missing from the roster
             if not roster.empty and pitcher_id not in roster['Trackman ID'].values:
@@ -122,8 +123,10 @@ def upload_file():
                 'pitcher_table': report_html,
                 'left_usage_table': left_usage_html,
                 'right_usage_table': right_usage_html,
-                'heatmap_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_heat_map.png',
-                'breakmap_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_break_map.png',
+                'heatmap_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_heat_map_light.png',
+                'heatmap_dark_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_heat_map_dark.png',
+                'breakmap_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_break_map_light.png',
+                'breakmap_dark_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_break_map_dark.png',
                 'pdf_url': f'/storage/schools/{current_user.school.slug}/reports/{current_user.id}_pitcher_{pitcher_id}_report.pdf'
             })
 
@@ -136,8 +139,8 @@ def upload_file():
                 'pitch_stats': table_data[4],
                 'pitch_usage_left': pitch_usage_data[0],
                 'pitch_usage_right': pitch_usage_data[1],
-                'pitch_heat_map': os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_heat_map.png'),
-                'pitch_break_map': os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_break_map.png'),
+                'pitch_heat_map': os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_heat_map_light.png'),
+                'pitch_break_map': os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_break_map_light.png'),
             }, os.path.abspath(os.path.join(school_output_folder, f'{current_user.id}_pitcher_{pitcher_id}_report.pdf')))
 
             # Release per-pitcher data before the next iteration to keep memory usage flat

@@ -22,27 +22,26 @@
     </style>
     {% endif %}
 </head>
-<body onload="loadHeader('{{ current_user.school.slug|upper }} Baseball Analytics', '/static/resources/HomePlate.png', '{{ logo_path }}'); loadFooter(); loadNavbar();">
+<body onload="loadFooter(); loadNavbar('{{ logo_path }}');">
     <div id="navbar-placeholder"></div>
-    <div id="header-placeholder"></div>
 
     <main class="main-content">
 
         <div class="bubble" style="max-width: clamp(280px, 33%, 600px);">
             <h2>Personal Information</h2>
-            <input id="update-name-input" class="bubble" type="text" value="{% if current_user.first_name %}{{ current_user.first_name }}{% endif %} {{ current_user.last_name }}" placeholder="First Last" style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px">
-            <input id="update-email-input" class="bubble" type="email" value="{% if current_user.email %}{{ current_user.email }}{% endif %}" placeholder="email@domain.com" style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px">
+            <input id="update-name-input" class="bubble" type="text" value="{% if current_user.first_name %}{{ current_user.first_name }}{% endif %} {{ current_user.last_name }}" placeholder="First Last" style="color: var(--text-primary); margin: 8px 0; background-color: var(--bg-card); border: 2px solid var(--accent); font-size: 16px; padding: 16px">
+            <input id="update-email-input" class="bubble" type="email" value="{% if current_user.email %}{{ current_user.email }}{% endif %}" placeholder="email@domain.com" style="color: var(--text-primary); margin: 8px 0; background-color: var(--bg-card); border: 2px solid var(--accent); font-size: 16px; padding: 16px">
             <p>Created at: {{ current_user.created_at }}</p>
             <button class="download-btn btn-warn" onclick="updateInformation()">Update Information</button>
         </div>
 
-        <div class="bubble" style="max-width: clamp(280px, 33%, 600px); justify-items: center;">
+<div class="bubble" style="max-width: clamp(280px, 33%, 600px); justify-items: center;">
             <div id="change-password-btn-wrap">
                 <button class="download-btn btn-warn" onclick="showPasswordForm()">Change Password</button>
             </div>
             <div id="change-password-form" class="collapsible">
-                <input id="current-password" class="bubble" type="password" placeholder="Current password" style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px">
-                <input id="new-password" class="bubble" type="password" placeholder="New password" style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px">
+                <input id="current-password" class="bubble" type="password" placeholder="Current password" style="color: var(--text-primary); margin: 8px 0; background-color: var(--bg-card); border: 2px solid var(--accent); font-size: 16px; padding: 16px">
+                <input id="new-password" class="bubble" type="password" placeholder="New password" style="color: var(--text-primary); margin: 8px 0; background-color: var(--bg-card); border: 2px solid var(--accent); font-size: 16px; padding: 16px">
                 <div style="display: flex; gap: 8px; margin-top: 8px;">
                     <button class="download-btn" onclick="updatePassword()">Update</button>
                     <button class="download-btn" onclick="hidePasswordForm()">Cancel</button>
@@ -53,7 +52,7 @@
                 <button class="download-btn btn-danger" onclick="showDeleteForm()">Delete Account</button>
             </div>
             <div id="delete-account-form" class="collapsible">
-                <input id="confirm-delete" class="bubble" type="text" placeholder="Type DELETE to confirm" style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px">
+                <input id="confirm-delete" class="bubble" type="text" placeholder="Type DELETE to confirm" style="color: var(--text-primary); margin: 8px 0; background-color: var(--bg-card); border: 2px solid var(--accent); font-size: 16px; padding: 16px">
                 <div style="display: flex; gap: 8px; margin-top: 8px;">
                     <button class="download-btn btn-danger" onclick="deleteAccount()">Confirm Delete</button>
                     <button class="download-btn" onclick="hideDeleteForm()">Cancel</button>

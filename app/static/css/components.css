@@ -4,13 +4,21 @@
 
 .bubble {
     padding: 20px;
-    background-color: var(--light);
+    background-color: var(--bg-bubble);
     border-radius: 32px;
+    border: 2px solid var(--bubble-border);
     margin: 32px;
     width: calc(100% - 64px);
     max-width: 1200px;
     justify-self: center;
     transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+@media (max-width: 768px) {
+    .bubble:not(input) {
+        margin: 0;
+        width: 100%;
+    }
 }
 
 /* ============================================================================
@@ -77,8 +85,8 @@
 .upload-btn {
     display: inline-block;
     font-family: Cambria, serif;
-    background-color: white;
-    color: var(--dark);
+    background-color: var(--bg-card);
+    color: var(--text-primary);
     padding: 12px 24px;
     border-radius: 32px;
     text-decoration: none;
@@ -115,8 +123,8 @@
 
 .download-btn-small {
     display: inline-block;
-    background-color: var(--light);
-    color: var(--dark);
+    background-color: var(--bg-card);
+    color: var(--text-primary);
     padding: 8px 16px;
     border-radius: 32px;
     text-decoration: none;
