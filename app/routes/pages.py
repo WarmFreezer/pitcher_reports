@@ -21,7 +21,8 @@ def dashboard():
 @pages_bp.route('/upload')
 @login_required
 def upload_page():
-    return render_template('index.html')
+    logo_path = f"/storage/schools/{current_user.school.slug}/assets/logo.png"
+    return render_template('index.html', logo_path=logo_path)
 
 
 @pages_bp.route('/about')

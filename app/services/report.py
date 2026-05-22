@@ -261,101 +261,93 @@ def build_table(source, pitcher_id):
         return None
 
 def pitch_heat_map_by_batter_side(source, id, output_path, pitcher_id, threshold=0.1, theme='light'):
-    fig = None
     try:
         matplotlib.rcParams.update(_THEME_COLORS.get(theme, _THEME_COLORS['light']))
 
         table = source[['Pitcher', 'PitcherId', 'TaggedPitchType', 'PlateLocHeight', 'PlateLocSide', 'BatterSide']]
         pitcher_data = table[table['PitcherId'] == pitcher_id]
 
-        fig, (ax_left, ax_right) = plt.subplots(1, 2, figsize=(18, 8))
-        
-        # Process each batter side
-        for batter_side, ax in [('Left', ax_left), ('Right', ax_right)]:
-            batter_data = pitcher_data[pitcher_data['BatterSide'] == batter_side]
-            
-            if len(batter_data) == 0:
-                ax.text(0, 2.5, f'No data for {batter_side}-handed batters', 
-                    ha='center', va='center', fontsize=14)
-                ax.set_xlim(-2.5, 2.5)
-                ax.set_ylim(0, 5)
-                continue
-            
-            # Get unique pitch types for this batter side
-            pitch_types = batter_data['TaggedPitchType'].unique()
-            pitch_types = [pt for pt in pitch_types if pt != 'n/a']
-            
-            # Plot each pitch type
-            for pitch_type in pitch_types:
-                pitch_data = batter_data[batter_data['TaggedPitchType'] == pitch_type]
-                cmap = pitch_colors.get(pitch_type, 'viridis')
-                point_color = pitch_point_colors.get(pitch_type, '#000000')
-                
-                # Use KDE for pitch types with 5 or more pitches
-                if len(pitch_data) >= 5:
-                    # Adjust bandwidth for better smoothing with sparse data
-                    bw_adjust = 1.5 if len(pitch_data) < 20 else 1.0
-                    
-                    point_color = pitch_point_colors.get(pitch_type, '#000000')
-                    sns.kdeplot(
-                        x=pitch_data['PlateLocSide'],
-                        y=pitch_data['PlateLocHeight'],
-                        fill=True,
-                        thresh=threshold,       
-                        cmap=cmap,
-                        bw_adjust=bw_adjust,
-                        ax=ax,
-                        levels=10
-                    )
+        for batter_side in ['Left', 'Right']:
+            fig = None
+            try:
+                fig, ax = plt.subplots(1, 1, figsize=(9, 8))
+                batter_data = pitcher_data[pitcher_data['BatterSide'] == batter_side]
 
-                    # Plot average pitch location for pitch type
-                    avg_side = pitch_data['PlateLocSide'].mean()
-                    avg_height = pitch_data['PlateLocHeight'].mean()
-                    ax.scatter(
-                        avg_side, 
-                        avg_height,
-                        color=point_color,
-                        marker='.',
-                        s=100,
-                        zorder=5,
-                        label=f'{pitch_order.get(pitch_type)}: {len(pitch_data)} pitches'
-                    )
+                if len(batter_data) == 0:
+                    ax.text(0, 2.5, f'No data for {batter_side}-handed batters',
+                        ha='center', va='center', fontsize=14)
+                    ax.set_xlim(-2.5, 2.5)
+                    ax.set_ylim(0, 5)
                 else:
-                    # Plot individual points
-                    ax.scatter(
-                        pitch_data['PlateLocSide'],
-                        pitch_data['PlateLocHeight'],
-                        color=point_color,
-                        alpha=0.6,
-                        s=50,
-                        zorder=5,
-                        edgecolors='black',
-                        linewidth=0.5,
-                        label=f'{pitch_order.get(pitch_type, pitch_type)}: {len(pitch_data)} pitches'
-                    )
-            
-            # Set plot properties
-            ax.set_title(f'vs {batter_side}-Handed Batters (n={len(batter_data)})', fontsize=24, fontweight='bold', pad=10)
-            ax.set_xlabel('Plate Location Side (ft)', fontsize=18, labelpad=8)
-            ax.set_ylabel('Plate Location Height (ft)', fontsize=18, labelpad=8)
-            ax.set_xlim(-2.5, 2.5)
-            ax.set_ylim(0, 5)
-            ax.set_aspect('equal', adjustable='box')
-            
-            ax.add_patch(_make_strike_zone())
-            ax.add_patch(_make_shadow_zone())
+                    pitch_types = batter_data['TaggedPitchType'].unique()
+                    pitch_types = [pt for pt in pitch_types if pt != 'n/a']
 
-        fig.subplots_adjust(left=0.06, right=0.96, top=0.88, bottom=0.1, wspace=0.2)
-        fig.savefig(os.path.join(output_path, f'{id}_pitcher_{pitcher_id}_heat_map_{theme}.png'), pad_inches=0.3, dpi=300, bbox_inches='tight', transparent=True)
+                    for pitch_type in pitch_types:
+                        pitch_data = batter_data[batter_data['TaggedPitchType'] == pitch_type]
+                        cmap = pitch_colors.get(pitch_type, 'viridis')
+                        point_color = pitch_point_colors.get(pitch_type, '#000000')
+
+                        if len(pitch_data) >= 5:
+                            bw_adjust = 1.5 if len(pitch_data) < 20 else 1.0
+                            point_color = pitch_point_colors.get(pitch_type, '#000000')
+                            sns.kdeplot(
+                                x=pitch_data['PlateLocSide'],
+                                y=pitch_data['PlateLocHeight'],
+                                fill=True,
+                                thresh=threshold,
+                                cmap=cmap,
+                                bw_adjust=bw_adjust,
+                                ax=ax,
+                                levels=10
+                            )
+                            avg_side = pitch_data['PlateLocSide'].mean()
+                            avg_height = pitch_data['PlateLocHeight'].mean()
+                            ax.scatter(
+                                avg_side,
+                                avg_height,
+                                color=point_color,
+                                marker='.',
+                                s=100,
+                                zorder=5,
+                                label=f'{pitch_order.get(pitch_type)}: {len(pitch_data)} pitches'
+                            )
+                        else:
+                            ax.scatter(
+                                pitch_data['PlateLocSide'],
+                                pitch_data['PlateLocHeight'],
+                                color=point_color,
+                                alpha=0.6,
+                                s=50,
+                                zorder=5,
+                                edgecolors='black',
+                                linewidth=0.5,
+                                label=f'{pitch_order.get(pitch_type, pitch_type)}: {len(pitch_data)} pitches'
+                            )
+
+                    ax.set_xlabel('Plate Location Side (ft)', fontsize=18, labelpad=8)
+                    ax.set_ylabel('Plate Location Height (ft)', fontsize=18, labelpad=8)
+                    ax.set_xlim(-2.5, 2.5)
+                    ax.set_ylim(0, 5)
+                    ax.set_aspect('equal', adjustable='box')
+                    ax.add_patch(_make_strike_zone())
+                    ax.add_patch(_make_shadow_zone())
+
+                side_label = batter_side.lower()
+                fig.subplots_adjust(left=0.1, right=0.96, top=0.88, bottom=0.1)
+                fig.savefig(os.path.join(output_path, f'{id}_pitcher_{pitcher_id}_heat_map_{side_label}_{theme}.png'), pad_inches=0.3, dpi=300, bbox_inches='tight', transparent=True)
+
+            except Exception as e:
+                print(f"Error generating heat map ({batter_side}) for pitcher ID {pitcher_id}: {e}")
+            finally:
+                if fig is not None:
+                    plt.close(fig)
 
     except Exception as e:
-        print(f"Error generating heat map for pitcher ID {pitcher_id}: {e}")
-    finally:
-        if fig is not None:
-            plt.close(fig)
+        print(f"Error generating heat maps for pitcher ID {pitcher_id}: {e}")
 
 def pitch_break_map(source, id, output_path, pitcher_id, threshold=0.1, theme='light'):
     fig = None
+    arm_angle = None
     try:
         matplotlib.rcParams.update(_THEME_COLORS.get(theme, _THEME_COLORS['light']))
 
@@ -433,7 +425,6 @@ def pitch_break_map(source, id, output_path, pitcher_id, threshold=0.1, theme='l
         ax.quiver(0, 0, pitcher_data['HorzBreak'].mean(), pitcher_data['InducedVertBreak'].mean(), angles='xy', scale_units='xy', scale=1, color='gray', width=0.01)
 
         # Set plot properties
-        ax.set_title(f'Pitch Break (n={len(pitcher_data)}), Arm Angle: {arm_angle:.1f}°', fontsize=24, fontweight='bold', pad=10)
         ax.set_xlabel('Horizontal Break (in)', fontsize=18, labelpad=8)
         ax.set_ylabel('Induced Vertical Break (in)', fontsize=18, labelpad=8)
         ax.set_xlim(-25, 25)
@@ -453,6 +444,7 @@ def pitch_break_map(source, id, output_path, pitcher_id, threshold=0.1, theme='l
     finally:
         if fig is not None:
             plt.close(fig)
+    return arm_angle
 
 def usage_table(source, pitcher_id):
     try:

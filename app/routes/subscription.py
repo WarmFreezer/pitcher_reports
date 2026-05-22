@@ -141,8 +141,8 @@ def rebrand_subscription():
     data = request.get_json()
     colors = data.get('colors', {})
 
-    # Validate all six tokens are present and are valid hex values
-    required = {'primary', 'secondary', 'tertiary', 'dark', 'light', 'accent'}
+    # Validate the four editable tokens are present and are valid hex values
+    required = {'primary', 'secondary', 'tertiary', 'accent'}
     if not required.issubset(colors.keys()):
         return jsonify({'error': 'Missing required color tokens.'}), 400
     hex_re = re.compile(r'^#[0-9a-fA-F]{6}$')
@@ -152,7 +152,7 @@ def rebrand_subscription():
 
     try:
         branding = BrandingLoader.get_branding(current_user.school.slug)
-        branding['colors'] = colors
+        branding['colors'].update(colors)
         BrandingLoader.update_branding(current_user.school.slug, branding)
         return jsonify({'message': 'Branding updated successfully.'}), 200
     except Exception as e:

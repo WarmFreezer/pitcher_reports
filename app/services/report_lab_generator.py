@@ -49,21 +49,15 @@ class PDF_Generator:
 
         # Always resolve logo from local storage; fall back to the app icon if not yet uploaded
         logo_path = os.path.join(STORAGE_SCHOOLS, current_user.school.slug, 'assets', 'logo.png')
-        self.school_logo = logo_path if os.path.exists(logo_path) else os.path.join(STATIC_RESOURCES, 'HomePlate.png')
+        self.school_logo = logo_path if os.path.exists(logo_path) else os.path.join(STATIC_RESOURCES, 'statline-logo.png')
 
         self.primary_color = colors.HexColor(branding['colors']['primary'])
         self.secondary_color = colors.HexColor(branding['colors']['secondary'])
         self.tertiary_color = colors.HexColor(branding['colors']['tertiary'])
         self.accent_color = colors.HexColor(branding['colors']['accent'])
-        self.light_color = colors.HexColor(branding['colors']['light'])
-        self.dark_color = colors.HexColor(branding['colors']['dark'])
-
-        '''if is_dark(self.tertiary_color.hexval()):
-            self.text_color = self.light_color
-        else:
-            self.text_color = self.dark_color'''
-        
-        self.text_color = self.light_color
+        self.text_color = self.primary_color
+        self.dark_color = colors.HexColor(branding['colors'].get('dark', '#000000'))
+        self.light_color = colors.HexColor(branding['colors'].get('light', '#FFFFFF'))
 
         self.styles = {
             "title": ParagraphStyle(
@@ -72,9 +66,9 @@ class PDF_Generator:
                 fontName="Helvetica-Bold",
                 alignment=TA_LEFT, leading=26,
             ),
-            "subtitle": ParagraphStyle( # Possibly a problem if primary is light and text is dark? Maybe add a conditional to switch to light text if primary is dark?
+            "subtitle": ParagraphStyle(
                 "ReportSubtitle",
-                fontSize=11, textColor=self.light_color,
+                fontSize=11, textColor=self.primary_color,
                 fontName="Helvetica",
                 alignment=TA_LEFT, leading=14,
             ),
@@ -117,7 +111,7 @@ class PDF_Generator:
             ),
             "footer": ParagraphStyle(
                 "Footer",
-                fontSize=7, textColor=self.light_color,
+                fontSize=7, textColor=self.dark_color,
                 fontName="Helvetica",
                 alignment=TA_CENTER,
             ),
@@ -147,11 +141,19 @@ class PDF_Generator:
             Paragraph(f"{game_date} | {home_team} @ {away_team}", self.styles["subtitle"]),
         ]
         
+        def _fit_image(path, box=1*inch):
+            img = PILImage.open(path)
+            w, h = img.size
+            if w >= h:
+                return Image(path, width=box, height=box * h / w)
+            else:
+                return Image(path, width=box * w / h, height=box)
+
         # Create header with PFP on left, text in center, school logo on right
         header_data = [[
-            Image(player_pfp, width=1*inch, height=1*inch),
+            _fit_image(player_pfp),
             center_content,
-            Image(school_logo, width=1*inch, height=1*inch),
+            _fit_image(school_logo),
         ]]
 
         header_table = Table(header_data, colWidths=[1.25*inch, self.PAGE_W - 2.5*inch, 1.25*inch])
@@ -540,9 +542,9 @@ class PDF_Generator:
             Path to the generated PDF
         """
         
-        # Resolve player pfp from local storage; fall back to placeholder if not uploaded
+        # Resolve player pfp: player photo → school logo → statline logo
         pfp_path = os.path.join(STORAGE_SCHOOLS, self.current_user.school.slug, 'assets', 'players', str(data.get('pitcher_id')), 'pfp.png')
-        player_pfp = pfp_path if os.path.exists(pfp_path) else os.path.join(STATIC_RESOURCES, 'favicon.png')
+        player_pfp = pfp_path if os.path.exists(pfp_path) else self.school_logo
 
         # Replace SimpleDocTemplate with this in generate_pitcher_report:
         frame = Frame(
@@ -582,11 +584,15 @@ class PDF_Generator:
         ))
         print(f"[PDF] Header added. Total elements: {len(elements)}")
         
-        # Add pitch heatmap image below header if exists
-        heatmap_path = data.get('pitch_heat_map')
-        if heatmap_path and os.path.exists(heatmap_path):
-            elements.extend(self.add_image_section(heatmap_path, "Pitch Heat Map"))
-            print(f"[PDF] Added pitch heat map image: {heatmap_path}")
+        # Add pitch heatmap images (left and right) below header
+        half_width = (self.PAGE_W - 2 * self.MARGIN - 0.2 * inch) / 2
+        heatmap_left = data.get('pitch_heat_map_left')
+        heatmap_right = data.get('pitch_heat_map_right')
+        if heatmap_left or heatmap_right:
+            left_els = self.add_image_section(heatmap_left, "vs Left-Handed Batters", max_width_pts=half_width) if heatmap_left else []
+            right_els = self.add_image_section(heatmap_right, "vs Right-Handed Batters", max_width_pts=half_width) if heatmap_right else []
+            elements.extend(self.generate_two_column_layout(left_els, right_els))
+            print(f"[PDF] Added pitch heat map images: {heatmap_left}, {heatmap_right}")
 
         # Add pitch break map on left below heatmap and usage tables on right if break map exists
         break_map_path = data.get('pitch_break_map')    

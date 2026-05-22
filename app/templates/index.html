@@ -23,7 +23,7 @@
     </style>
     {% endif %}
 </head>
-<body onload="loadNavbar(); loadFooter();">
+<body onload="loadNavbar('{{ logo_path }}'); loadFooter();">
     <!-- Navbar Placeholder -->
     <div id="navbar-placeholder"></div>
 
@@ -36,8 +36,16 @@
                 <h2>Welcome to {{current_user.school.slug|upper}} Baseball Analytics</h2>
                 <p>Upload your data file to generate pitcher reports.</p>
             </div>
-            <input type="file" id="fileUpload" accept=".csv,.xlsx,.xls" onchange="handleFileSelect(event)" style="display: none;">
-            <button onclick="uploadFile()" class="upload-btn">Upload File</button>
+            <div style="display: flex; align-items: center; gap: 24px; flex-wrap: wrap;">
+                <label class="switch-field" style="gap: 10px;">
+                    <span class="switch-text">Own Team</span>
+                    <input type="checkbox" id="targetToggle" class="switch-input">
+                    <span class="switch-slider"></span>
+                    <span class="switch-text">Opponent</span>
+                </label>
+                <input type="file" id="fileUpload" accept=".csv,.xlsx,.xls" onchange="handleFileSelect(event)" style="display: none;">
+                <button onclick="uploadFile()" class="upload-btn">Upload File</button>
+            </div>
         </div>
         
         <div id="gameDataDisplay"></div>
@@ -49,22 +57,33 @@
     <!-- Pitcher Report Template -->
     <template id="pitcher-report-template">
         <div class="pitcher-report">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; height: 100px; background-color: var(--tertiary); padding: 10px;">
-                <h2 class="user-name" style="margin: 0; color: white; height: 100px; padding-left: 20px; align-content: center;">Pitcher Name</h2>
-                <div class="download-container" style="padding-right: 20px;"></div>
-            </div>
-            <div class="pitcher-heatmap" style="display: flex; justify-content: center; align-items: center;"></div>
-            <div class="report-lower-row">
-                <div class="pitcher-breakmap"></div>
-                <div class="pitcher-usage-panel">
-                    <h2>Pitch Usage</h2>
-                    <h3>LHH</h3>
-                    <div class="left-usage table-scroll"></div>
-                    <h3>RHH</h3>
-                    <div class="right-usage table-scroll"></div>
+            <div class="pitcher-report-header">
+                <h2 class="user-name">Pitcher Name</h2>
+                <div style="display: flex; align-items: center; gap: 14px;">
+                    <div class="download-container"></div>
+                    <span class="pitcher-report-chevron">▾</span>
                 </div>
             </div>
-            <div class="pitcher-table table-scroll"></div>
+            <div class="pitcher-report-body collapsible collapsible-lg">
+                <div class="pitcher-heatmap"></div>
+                <div class="report-lower-row">
+                    <div class="pitcher-breakmap"></div>
+                    <div class="pitcher-usage-panel">
+                        <p class="graph-title">Pitch Usage</p>
+                        <div class="graph-block">
+                            <p class="graph-subtitle">LHH</p>
+                            <div class="table-section"><div class="left-usage table-scroll"></div></div>
+                        </div>
+                        <div class="graph-block">
+                            <p class="graph-subtitle">RHH</p>
+                            <div class="table-section"><div class="right-usage table-scroll"></div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="table-section" style="max-width:1200px; margin: 8px auto;">
+                    <div class="pitcher-table table-scroll"></div>
+                </div>
+            </div>
         </div>
     </template>
     

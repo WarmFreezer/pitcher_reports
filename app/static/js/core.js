@@ -35,7 +35,9 @@ const _MOON_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="1
 // Load combined header + navbar
 function loadNavbar(logo = '') {
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    const avatarHTML = logo ? `<div class="avatar"><img src="${logo}" alt="School logo"></div>` : '';
+    const _logoFallback = `/static/resources/${isDark ? 'statline-logo' : 'statline-logo-light'}.svg`;
+    const _isFallback = !logo;
+    const avatarHTML = `<div class="avatar"><img src="${logo || _logoFallback}" alt="School logo" data-is-statline-fallback="${_isFallback}" onerror="this.src='${_logoFallback}'; this.dataset.isStatlineFallback='true'"></div>`;
 
     const p = window.location.pathname;
     const active = {
@@ -100,6 +102,10 @@ function loadNavbar(logo = '') {
         document.documentElement.setAttribute('data-theme', newTheme);
         localStorage.setItem('theme', newTheme);
         document.getElementById('theme-toggle').innerHTML = newTheme === 'dark' ? _SUN_ICON : _MOON_ICON;
+        const avatarImg = document.querySelector('.avatar img');
+        if (avatarImg && avatarImg.dataset.isStatlineFallback === 'true') {
+            avatarImg.src = `/static/resources/${newTheme === 'dark' ? 'statline-logo' : 'statline-logo-light'}.svg`;
+        }
         _swapChartImages(newTheme);
     });
 

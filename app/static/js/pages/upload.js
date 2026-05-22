@@ -34,11 +34,13 @@ async function handleFileSelect(event) {
 
     const reportOutput = document.querySelector('#report-output');
     if (reportOutput) {
-        reportOutput.innerHTML = '<p style="margin: 32px; color: var(--text-muted);">Processing file and generating reports...</p>';
+        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        reportOutput.innerHTML = `<img src="/static/css/statline-loading-${isDark ? 'dark' : 'light'}.svg" alt="Loading..." style="width: 48px; margin: 32px auto; display: block;">`;
     }
 
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('target', document.getElementById('targetToggle')?.checked ? 'opponent' : 'own');
 
     try {
         const response = await fetch('/api/upload', {
@@ -47,7 +49,11 @@ async function handleFileSelect(event) {
         });
 
         if (!response.ok) {
-            throw new Error('HTTP Error: ' + response.status);
+            const err = await response.json().catch(() => ({}));
+            toast(err.error || 'An error occurred while processing the file.', 'error');
+            if (reportOutput) reportOutput.innerHTML = '';
+            event.target.value = '';
+            return;
         }
 
         const result = await response.json();
@@ -74,9 +80,7 @@ async function handleFileSelect(event) {
     } catch (error) {
         console.error('Error uploading file:', error);
         toast('Error uploading file: ' + error.message, 'error');
-        if (reportOutput) {
-            reportOutput.innerHTML = `<p style="color: red; margin: 32px;">Error: ${error.message}</p>`;
-        }
+        if (reportOutput) reportOutput.innerHTML = '';
     }
 
     event.target.value = '';
@@ -113,20 +117,35 @@ function generateReport(data) {
 
     const heatmapContainer = clone.querySelector('.pitcher-heatmap');
     if (heatmapContainer) {
-        const img = document.createElement('img');
-        img.dataset.lightSrc = data.heatmap_url;
-        img.dataset.darkSrc = data.heatmap_dark_url;
-        img.src = currentTheme === 'dark' ? data.heatmap_dark_url : data.heatmap_url;
-        img.alt = `${data.pitcher_name} Heat Map`;
-        img.className = 'report-img report-img-heatmap';
-        img.onerror = function() {
-            this.parentElement.innerHTML = '<p style="color: red;">Heatmap image not available. Update your subscription.</p>';
-        };
-        heatmapContainer.appendChild(img);
+        for (const [lightSrc, darkSrc, label] of [
+            [data.heatmap_left_url,  data.heatmap_left_dark_url,  'vs Left-Handed Batters'],
+            [data.heatmap_right_url, data.heatmap_right_dark_url, 'vs Right-Handed Batters'],
+        ]) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'graph-block';
+            const title = document.createElement('p');
+            title.className = 'graph-title';
+            title.textContent = label;
+            const img = document.createElement('img');
+            img.dataset.lightSrc = lightSrc;
+            img.dataset.darkSrc = darkSrc;
+            img.src = currentTheme === 'dark' ? darkSrc : lightSrc;
+            img.alt = `${data.pitcher_name} Heat Map ${label}`;
+            img.className = 'report-img report-img-heatmap';
+            img.onerror = function() { this.style.display = 'none'; };
+            wrapper.appendChild(title);
+            wrapper.appendChild(img);
+            heatmapContainer.appendChild(wrapper);
+        }
     }
 
     const breakmapContainer = clone.querySelector('.pitcher-breakmap');
     if (breakmapContainer) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'graph-block';
+        const title = document.createElement('p');
+        title.className = 'graph-title';
+        title.textContent = data.arm_angle ? `Pitch Break — Arm Angle: ${data.arm_angle}` : 'Pitch Break';
         const img = document.createElement('img');
         img.dataset.lightSrc = data.breakmap_url;
         img.dataset.darkSrc = data.breakmap_dark_url;
@@ -136,7 +155,9 @@ function generateReport(data) {
         img.onerror = function() {
             this.parentElement.innerHTML = '<p style="color: red;">Breakmap image not available. Update your subscription.</p>';
         };
-        breakmapContainer.appendChild(img);
+        wrapper.appendChild(title);
+        wrapper.appendChild(img);
+        breakmapContainer.appendChild(wrapper);
     }
 
     const tableContainer = clone.querySelector('.pitcher-table');
@@ -154,6 +175,12 @@ function generateReport(data) {
         rightUsageContainer.innerHTML = data.right_usage_table;
     }
 
-    clone.appendChild(document.createElement('br'));
+    const header = clone.querySelector('.pitcher-report-header');
+    const body = clone.querySelector('.pitcher-report-body');
+    header.addEventListener('click', () => {
+        const isOpen = body.classList.toggle('open');
+        header.classList.toggle('open', isOpen);
+    });
+
     document.querySelector('#report-output')?.appendChild(clone);
 }

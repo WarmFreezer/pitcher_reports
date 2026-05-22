@@ -44,14 +44,14 @@
             </div>
             <div class="color-grid">
                 <div class="color-card logo-card" onclick="document.getElementById('logo-upload').click()">
-                    <img id="logo-preview" src="{{ logo_path }}" alt="School Logo" class="logo-card-img">
+                    <img id="logo-preview" src="{{ logo_path }}" alt="School Logo" class="logo-card-img" onerror="this.src='/static/resources/'+(document.documentElement.getAttribute('data-theme')==='dark'?'statline-logo':'statline-logo-light')+'.svg';this.onerror=null;">
                     <input type="file" id="logo-upload" accept=".png,.jpg,.jpeg" style="display:none" onchange="handleLogoUpload(event)">
                     <div class="color-card-footer">
                         <span class="color-card-label">Logo</span>
                         <span class="color-card-hex" style="font-family: Cambria, serif;">Click to upload</span>
                     </div>
                 </div>
-                {% for token in ['primary', 'secondary', 'tertiary', 'dark', 'light', 'accent'] %}
+                {% for token in ['primary', 'secondary', 'tertiary', 'accent'] %}
                 <div class="color-card" id="color-card-{{ token }}"
                      style="background-color: {{ branding.colors[token] }};"
                      onclick="document.getElementById('color-{{ token }}').click()">
