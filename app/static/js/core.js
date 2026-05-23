@@ -29,98 +29,124 @@ function _watchToastPosition(container) {
     update();
 }
 
-// HEAD request avoids downloading the full body — used to check logos and pfps before rendering
-async function fileExists(url) {
-    try {
-        const response = await fetch(url, { method: 'HEAD' });
-        return response.ok;
-    } catch {
-        return false;
-    }
-}
+const _SUN_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
+const _MOON_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
 
-// Load navbar
-function loadNavbar() {
-    const navbarHTML = `
-        <nav class="main-nav">
-            <ul class="nav-list">
-                <li><a href="/" class="nav-link">Home</a></li>
-                <li class="dropdown">
-                    <a href="javascript:void(0)" class="nav-link">File ▼</a>
-                    <div class="dropdown-content">
-                        <a href="/upload" onclick="uploadFile(); return false;">📤 Upload</a>
-                        <a href="#" id="nav-download-link" onclick="downloadPDFs(); return false;">📥 Download</a>
+// Load combined header + navbar
+function loadNavbar(logo = '') {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const _logoFallback = `/static/resources/${isDark ? 'statline-logo' : 'statline-logo-light'}.svg`;
+    const _isFallback = !logo;
+    const avatarHTML = `<div class="avatar"><img src="${logo || _logoFallback}" alt="School logo" data-is-statline-fallback="${_isFallback}" onerror="this.src='${_logoFallback}'; this.dataset.isStatlineFallback='true'"></div>`;
+
+    const p = window.location.pathname;
+    const active = {
+        home:     p === '/',
+        file:     p.startsWith('/upload'),
+        view:     p.startsWith('/report'),
+        settings: p.startsWith('/account') || p.startsWith('/subscription'),
+        about:    p.startsWith('/about'),
+    };
+    const a = key => active[key] ? ' active' : '';
+    const showLogout = p !== '/login' && p !== '/register';
+
+    document.getElementById('navbar-placeholder').innerHTML = `
+        <header class="site-header">
+            <div class="header-inner">
+                <a href="/" class="logo-lockup">
+                    <img src="/static/resources/statline-logo.svg" alt="Statline" class="logo-img">
+                </a>
+
+                <nav class="nav-links" id="main-nav-links">
+                    <a href="/" class="nav-link${a('home')}">Home</a>
+                    <div class="nav-dropdown">
+                        <a href="javascript:void(0)" class="nav-link${a('file')}">File ▾</a>
+                        <div class="dropdown-content">
+                            <a href="/upload" onclick="uploadFile(); return false;">Upload</a>
+                            <a href="#" id="nav-download-link" onclick="downloadPDFs(); return false;">Download</a>
+                        </div>
                     </div>
-                </li>
-                <li class="dropdown">
-                    <a href="javascript:void(0)" class="nav-link">View ▼</a>
-                    <div class="dropdown-content">
-                        <a href="/report">📋 Season Report</a>
+                    <div class="nav-dropdown">
+                        <a href="javascript:void(0)" class="nav-link${a('view')}">View ▾</a>
+                        <div class="dropdown-content">
+                            <a href="/report">Season Report</a>
+                        </div>
                     </div>
-                </li>
-                <li class="dropdown">
-                    <a href="javascript:void(0)" class="nav-link">Settings ▼</a>
-                    <div class="dropdown-content">
-                        <a href="/account">👤 Account</a>
-                        <a href="/subscription">💳 Subscription</a>
+                    <div class="nav-dropdown">
+                        <a href="javascript:void(0)" class="nav-link${a('settings')}">Settings ▾</a>
+                        <div class="dropdown-content">
+                            <a href="/account">Account</a>
+                            <a href="/subscription">Subscription</a>
+                        </div>
                     </div>
-                </li>
-                <li><a href="/about" class="nav-link">About</a></li>
-                <li style="margin-left: auto;">
-                    <a href="/logout" class="nav-link">
-                        <button style="background: none; border: none; color: white; cursor: pointer; font-size: inherit; font-family: 'Cambria', serif; padding-right: 16px;">Logout</button>
-                    </a>
-                </li>
-            </ul>
-        </nav>
+                    <a href="/about" class="nav-link${a('about')}">About</a>
+                    ${showLogout ? '<a href="/logout" class="nav-link nav-logout-mobile">Logout</a>' : ''}
+                </nav>
+
+                <div class="nav-right">
+                    <button id="theme-toggle" class="icon-btn" aria-label="Toggle theme">
+                        ${isDark ? _SUN_ICON : _MOON_ICON}
+                    </button>
+                    ${avatarHTML}
+                    ${showLogout ? '<a href="/logout" style="text-decoration: none;"><button class="logout-btn">Logout</button></a>' : ''}
+                    <button class="hamburger-btn" id="hamburger-btn" aria-label="Open navigation">☰</button>
+                </div>
+            </div>
+        </header>
     `;
-    document.getElementById('navbar-placeholder').innerHTML = navbarHTML;
 
-    // Inject hamburger button and overlay for mobile
-    const btn = document.createElement('button');
-    btn.id = 'hamburger-btn';
-    btn.className = 'hamburger-btn';
-    btn.setAttribute('aria-label', 'Open navigation');
-    btn.textContent = '☰';
-    btn.onclick = toggleMobileNav;
-    document.body.appendChild(btn);
+    // Theme toggle
+    document.getElementById('theme-toggle').addEventListener('click', () => {
+        const currentlyDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        const newTheme = currentlyDark ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem('theme', newTheme);
+        document.getElementById('theme-toggle').innerHTML = newTheme === 'dark' ? _SUN_ICON : _MOON_ICON;
+        const avatarImg = document.querySelector('.avatar img');
+        if (avatarImg && avatarImg.dataset.isStatlineFallback === 'true') {
+            avatarImg.src = `/static/resources/${newTheme === 'dark' ? 'statline-logo' : 'statline-logo-light'}.svg`;
+        }
+        _swapChartImages(newTheme);
+    });
 
+    // Hamburger
+    document.getElementById('hamburger-btn').addEventListener('click', toggleMobileNav);
+
+    // Mobile: tap dropdown triggers
+    document.querySelectorAll('.nav-dropdown .nav-link').forEach(link => {
+        link.addEventListener('click', e => {
+            if (window.innerWidth > 768) return;
+            e.preventDefault();
+            link.closest('.nav-dropdown').classList.toggle('mobile-open');
+        });
+    });
+
+    // Overlay
     const overlay = document.createElement('div');
     overlay.className = 'nav-overlay';
-    overlay.onclick = closeMobileNav;
+    overlay.addEventListener('click', closeMobileNav);
     document.body.appendChild(overlay);
-
-    document.querySelector('.main-nav').addEventListener('click', e => {
-        const link = e.target.closest('a');
-        if (!link) return;
-        const dropdownLi = link.closest('li.dropdown');
-        const inDropdownContent = link.closest('.dropdown-content');
-        if (dropdownLi && !inDropdownContent) {
-            // Toggle the dropdown; don't close the nav
-            dropdownLi.classList.toggle('mobile-open');
-        } else {
-            closeMobileNav();
-        }
-    });
 
     updateDownloadLink(false);
 }
 
 function toggleMobileNav() {
-    const nav = document.querySelector('.main-nav');
+    const nav = document.getElementById('main-nav-links');
     const overlay = document.querySelector('.nav-overlay');
     const btn = document.getElementById('hamburger-btn');
     const isOpen = nav.classList.toggle('mobile-open');
-    overlay.classList.toggle('active', isOpen);
+    overlay?.classList.toggle('active', isOpen);
     btn.textContent = isOpen ? '✕' : '☰';
     btn.setAttribute('aria-label', isOpen ? 'Close navigation' : 'Open navigation');
 }
 
 function closeMobileNav() {
-    document.querySelector('.main-nav')?.classList.remove('mobile-open');
-    document.querySelector('.nav-overlay')?.classList.remove('active');
-    document.querySelectorAll('.dropdown.mobile-open').forEach(el => el.classList.remove('mobile-open'));
+    const nav = document.getElementById('main-nav-links');
+    const overlay = document.querySelector('.nav-overlay');
     const btn = document.getElementById('hamburger-btn');
+    nav?.classList.remove('mobile-open');
+    nav?.querySelectorAll('.nav-dropdown.mobile-open').forEach(d => d.classList.remove('mobile-open'));
+    overlay?.classList.remove('active');
     if (btn) { btn.textContent = '☰'; btn.setAttribute('aria-label', 'Open navigation'); }
 }
 
@@ -159,37 +185,6 @@ function downloadPDFs() {
     return false;
 }
 
-// Load header
-async function loadHeader(title = "Pitcher Report", pfp = "/static/resources/HomePlate.png", logo = "/static/resources/HomePlate.png") {
-    if (!await fileExists(pfp)) {
-        pfp = "/static/resources/HomePlate.png";
-    }
-    if (!await fileExists(logo)) {
-        logo = "/static/resources/HomePlate.png";
-    }
-
-    const headerHTML = `
-        <header class="site-header">
-            <div class="header-container">
-                <div class="header-left">
-                    <img src=${pfp} height="128" alt="MSU Logo">
-                </div>
-                <div class="header-center">
-                    <h1>${title}</h1>
-                </div>
-                <div class="header-right">
-                    <img src=${logo} height="128" alt="App Icon">
-                </div>
-            </div>
-        </header>
-    `;
-    document.getElementById('header-placeholder').innerHTML = headerHTML;
-    setTimeout(() => {
-        const header = document.querySelector('.site-header');
-        if (header) header.classList.add('loaded');
-    }, 10);
-}
-
 // Load footer
 function loadFooter() {
     const footerHTML = `
@@ -202,3 +197,13 @@ function loadFooter() {
     `;
     document.getElementById('footer-placeholder').innerHTML = footerHTML;
 }
+
+function _swapChartImages(theme) {
+    document.querySelectorAll('img[data-light-src]').forEach(img => {
+        img.src = theme === 'dark' ? img.dataset.darkSrc : img.dataset.lightSrc;
+    });
+}
+
+// On page load, restore saved preference (default: light)
+const saved = localStorage.getItem('theme') ?? 'light';
+document.documentElement.setAttribute('data-theme', saved);

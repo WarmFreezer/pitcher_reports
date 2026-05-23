@@ -49,21 +49,15 @@ class PDF_Generator:
 
         # Always resolve logo from local storage; fall back to the app icon if not yet uploaded
         logo_path = os.path.join(STORAGE_SCHOOLS, current_user.school.slug, 'assets', 'logo.png')
-        self.school_logo = logo_path if os.path.exists(logo_path) else os.path.join(STATIC_RESOURCES, 'HomePlate.png')
+        self.school_logo = logo_path if os.path.exists(logo_path) else os.path.join(STATIC_RESOURCES, 'statline-logo.png')
 
         self.primary_color = colors.HexColor(branding['colors']['primary'])
         self.secondary_color = colors.HexColor(branding['colors']['secondary'])
         self.tertiary_color = colors.HexColor(branding['colors']['tertiary'])
         self.accent_color = colors.HexColor(branding['colors']['accent'])
-        self.light_color = colors.HexColor(branding['colors']['light'])
-        self.dark_color = colors.HexColor(branding['colors']['dark'])
-
-        '''if is_dark(self.tertiary_color.hexval()):
-            self.text_color = self.light_color
-        else:
-            self.text_color = self.dark_color'''
-        
-        self.text_color = self.light_color
+        self.text_color = self.primary_color
+        self.dark_color = colors.HexColor(branding['colors'].get('dark', '#000000'))
+        self.light_color = colors.HexColor(branding['colors'].get('light', '#FFFFFF'))
 
         self.styles = {
             "title": ParagraphStyle(
@@ -72,9 +66,9 @@ class PDF_Generator:
                 fontName="Helvetica-Bold",
                 alignment=TA_LEFT, leading=26,
             ),
-            "subtitle": ParagraphStyle( # Possibly a problem if primary is light and text is dark? Maybe add a conditional to switch to light text if primary is dark?
+            "subtitle": ParagraphStyle(
                 "ReportSubtitle",
-                fontSize=11, textColor=self.light_color,
+                fontSize=11, textColor=self.primary_color,
                 fontName="Helvetica",
                 alignment=TA_LEFT, leading=14,
             ),
@@ -117,7 +111,7 @@ class PDF_Generator:
             ),
             "footer": ParagraphStyle(
                 "Footer",
-                fontSize=7, textColor=self.light_color,
+                fontSize=7, textColor=self.dark_color,
                 fontName="Helvetica",
                 alignment=TA_CENTER,
             ),
@@ -147,11 +141,19 @@ class PDF_Generator:
             Paragraph(f"{game_date} | {home_team} @ {away_team}", self.styles["subtitle"]),
         ]
         
+        def _fit_image(path, box=1*inch):
+            img = PILImage.open(path)
+            w, h = img.size
+            if w >= h:
+                return Image(path, width=box, height=box * h / w)
+            else:
+                return Image(path, width=box * w / h, height=box)
+
         # Create header with PFP on left, text in center, school logo on right
         header_data = [[
-            Image(player_pfp, width=1*inch, height=1*inch),
+            _fit_image(player_pfp),
             center_content,
-            Image(school_logo, width=1*inch, height=1*inch),
+            _fit_image(school_logo),
         ]]
 
         header_table = Table(header_data, colWidths=[1.25*inch, self.PAGE_W - 2.5*inch, 1.25*inch])
@@ -228,8 +230,6 @@ class PDF_Generator:
             ('FONTSIZE', (0, 1), (-1, -1), 7),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
             ('TOPPADDING', (0, 0), (-1, 0), 8),
-            ('TOPPADDING', (0, 1), (-1, -1), 5),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 5),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [self.WHITE, self.light_color]),
         ]
@@ -240,7 +240,7 @@ class PDF_Generator:
         
         return elements
 
-    def generate_usage_table(self, usage_df, batter_side: str = "Right") -> list:
+    def generate_usage_table(self, usage_df, batter_side: str = "Right", available_width: float = None) -> list:
         """
         Generate a table displaying pitch usage by count.
         
@@ -275,7 +275,9 @@ class PDF_Generator:
             table_data.append(row_data)
         
         # Create table with adjusted column widths
-        col_widths = ((self.PAGE_W - 2 * self.MARGIN) / 2) / len(usage_df.columns)
+        if available_width is None:
+            available_width = (self.PAGE_W - 2 * self.MARGIN) / 2
+        col_widths = available_width / len(usage_df.columns)
         usage_table = Table(table_data, colWidths=col_widths)
         
         # Style the table
@@ -289,8 +291,6 @@ class PDF_Generator:
             ('FONTSIZE', (0, 1), (-1, -1), 7),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
             ('TOPPADDING', (0, 0), (-1, 0), 8),
-            ('TOPPADDING', (0, 1), (-1, -1), 5),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 5),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [self.WHITE, self.light_color]),
         ]
@@ -542,9 +542,9 @@ class PDF_Generator:
             Path to the generated PDF
         """
         
-        # Resolve player pfp from local storage; fall back to placeholder if not uploaded
+        # Resolve player pfp: player photo → school logo → statline logo
         pfp_path = os.path.join(STORAGE_SCHOOLS, self.current_user.school.slug, 'assets', 'players', str(data.get('pitcher_id')), 'pfp.png')
-        player_pfp = pfp_path if os.path.exists(pfp_path) else os.path.join(STATIC_RESOURCES, 'favicon.png')
+        player_pfp = pfp_path if os.path.exists(pfp_path) else self.school_logo
 
         # Replace SimpleDocTemplate with this in generate_pitcher_report:
         frame = Frame(
@@ -584,11 +584,15 @@ class PDF_Generator:
         ))
         print(f"[PDF] Header added. Total elements: {len(elements)}")
         
-        # Add pitch heatmap image below header if exists
-        heatmap_path = data.get('pitch_heat_map')
-        if heatmap_path and os.path.exists(heatmap_path):
-            elements.extend(self.add_image_section(heatmap_path, "Pitch Heat Map"))
-            print(f"[PDF] Added pitch heat map image: {heatmap_path}")
+        # Add pitch heatmap images (left and right) below header
+        half_width = (self.PAGE_W - 2 * self.MARGIN - 0.2 * inch) / 2
+        heatmap_left = data.get('pitch_heat_map_left')
+        heatmap_right = data.get('pitch_heat_map_right')
+        if heatmap_left or heatmap_right:
+            left_els = self.add_image_section(heatmap_left, "vs Left-Handed Batters", max_width_pts=half_width) if heatmap_left else []
+            right_els = self.add_image_section(heatmap_right, "vs Right-Handed Batters", max_width_pts=half_width) if heatmap_right else []
+            elements.extend(self.generate_two_column_layout(left_els, right_els))
+            print(f"[PDF] Added pitch heat map images: {heatmap_left}, {heatmap_right}")
 
         # Add pitch break map on left below heatmap and usage tables on right if break map exists
         break_map_path = data.get('pitch_break_map')    
@@ -632,6 +636,77 @@ class PDF_Generator:
         except Exception as e:
             print(f"Error generating PDF: {str(e)}")
             raise
+
+    def generate_color_preview(self, output_path: str) -> str:
+        """
+        Generate a one-page sample PDF with placeholder data so users can preview
+        how their branding colors will look in a real report.
+        """
+        frame = Frame(
+            self.MARGIN, 0,
+            self.PAGE_W - 2 * self.MARGIN, self.PAGE_H,
+            leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0,
+        )
+        doc = BaseDocTemplate(
+            output_path,
+            pagesize=letter,
+            rightMargin=self.MARGIN, leftMargin=self.MARGIN,
+            topMargin=0, bottomMargin=0,
+        )
+        doc.addPageTemplates([PageTemplate(id='main', frames=[frame])])
+
+        player_pfp = os.path.join(STATIC_RESOURCES, 'favicon.png')
+
+        elements = []
+        elements.extend(self.generate_header(
+            player_pfp, 'Sample Pitcher', self.school_logo,
+            '01/01/2025', 'HOME', 'AWAY',
+        ))
+
+        stats_df = pd.DataFrame({
+            'Pitch':  ['Fastball', 'Slider', 'Curveball', 'Changeup'],
+            'Count':  [45,          20,        15,           10],
+            'Thrown': [50.0,        22.2,      16.7,         11.1],
+            'Vel.':   [93.2,        84.1,      77.5,         85.0],
+            'IVB':    [14.5,         2.1,      -8.3,          7.2],
+            'HB':     [ 8.3,        -5.6,       6.1,         -3.4],
+            'Spin':   [2345.0,     2567.0,    2789.0,       1876.0],
+            'VAA':    [-4.2,        -5.1,      -6.8,         -4.9],
+            'HAA':    [ 0.3,        -1.2,       0.8,         -0.5],
+            'RelH':   [ 6.1,         6.0,       5.9,          6.1],
+            'RelS':   [-2.1,        -2.0,      -2.2,         -2.0],
+            'Ext.':   [ 6.8,         6.5,       6.3,          6.7],
+            'Axis':   [212.0,        45.0,     315.0,        190.0],
+            'Zone':   [45.6,        38.2,      52.1,         41.3],
+            'Chase':  [32.1,        41.5,      35.8,         28.9],
+            'CSW':    [28.4,        35.2,      31.6,         25.7],
+        })
+        elements.extend(self.generate_pitcher_stats_table(stats_df))
+
+        usage_cols = ['Pitch', 'Count', 'Strike', '0-0', "Hitter's", "Pitcher's", '2k', 'Whiff']
+        lhh = pd.DataFrame([
+            ['Fastball',  24, 65.2, 55.0, 52.0, 62.0, 58.0, 18.5],
+            ['Slider',    10, 70.1, 30.0, 28.0, 38.0, 45.0, 32.4],
+            ['Curveball',  8, 62.5, 25.0, 22.0, 35.0, 48.0, 28.6],
+            ['Changeup',   5, 60.0, 20.0, 18.0, 28.0, 35.0, 22.1],
+        ], columns=usage_cols)
+        rhh = pd.DataFrame([
+            ['Fastball',  21, 63.8, 52.0, 49.0, 60.0, 55.0, 20.1],
+            ['Slider',    10, 68.4, 32.0, 30.0, 40.0, 43.0, 30.8],
+            ['Curveball',  7, 60.0, 23.0, 20.0, 32.0, 46.0, 26.4],
+            ['Changeup',   5, 58.2, 18.0, 16.0, 26.0, 33.0, 21.5],
+        ], columns=usage_cols)
+
+        half_width = (self.PAGE_W - 2 * self.MARGIN - 0.2 * inch) / 2
+        # Subtract the 5pt left+right cell padding from generate_two_column_layout
+        usage_width = half_width - 10
+        left_els = self.generate_usage_table(lhh, batter_side="Left", available_width=usage_width)
+        right_els = self.generate_usage_table(rhh, batter_side="Right", available_width=usage_width)
+        elements.extend(self.generate_two_column_layout(left_els, right_els))
+
+        doc.build(elements)
+        return output_path
+
 
 def find_image_with_extensions(base_path, extensions=None):
     """Find an image file with any of the given extensions"""

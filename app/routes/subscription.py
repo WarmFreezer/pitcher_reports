@@ -1,11 +1,13 @@
 import os
 import re
+import tempfile
 import stripe
 import unicodedata
 import pandas as pd
+from io import BytesIO
 from datetime import datetime
 from PIL import Image
-from flask import Blueprint, request, jsonify, render_template, redirect, url_for, flash, current_app
+from flask import Blueprint, request, jsonify, render_template, redirect, url_for, flash, current_app, send_file
 from flask_login import login_required, current_user
 
 from app.db.models import db
@@ -139,8 +141,8 @@ def rebrand_subscription():
     data = request.get_json()
     colors = data.get('colors', {})
 
-    # Validate all six tokens are present and are valid hex values
-    required = {'primary', 'secondary', 'tertiary', 'dark', 'light', 'accent'}
+    # Validate the four editable tokens are present and are valid hex values
+    required = {'primary', 'secondary', 'tertiary', 'accent'}
     if not required.issubset(colors.keys()):
         return jsonify({'error': 'Missing required color tokens.'}), 400
     hex_re = re.compile(r'^#[0-9a-fA-F]{6}$')
@@ -150,12 +152,42 @@ def rebrand_subscription():
 
     try:
         branding = BrandingLoader.get_branding(current_user.school.slug)
-        branding['colors'] = colors
+        branding['colors'].update(colors)
         BrandingLoader.update_branding(current_user.school.slug, branding)
         return jsonify({'message': 'Branding updated successfully.'}), 200
     except Exception as e:
         current_app.logger.error(f"Error updating branding: {e}")
         return jsonify({'error': 'Failed to update branding.'}), 500
+
+
+# ── Branding PDF preview ─────────────────────────────────────────────────────
+
+@subscription_bp.route('/api/subscription/preview-pdf', methods=['GET'])
+@login_required
+def preview_branding_pdf():
+    from app.services.report_lab_generator import PDF_Generator
+
+    branding = BrandingLoader.get_branding(current_user.school.slug)
+    gen = PDF_Generator(current_user, branding)
+
+    with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
+        tmp_path = f.name
+
+    try:
+        gen.generate_color_preview(tmp_path)
+        with open(tmp_path, 'rb') as f:
+            pdf_bytes = BytesIO(f.read())
+    except Exception as e:
+        current_app.logger.error(f"Error generating branding preview: {e}")
+        return jsonify({'error': 'Failed to generate preview.'}), 500
+    finally:
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
+
+    pdf_bytes.seek(0)
+    return send_file(pdf_bytes, mimetype='application/pdf', download_name='branding_preview.pdf')
 
 
 # ── Logo upload ───────────────────────────────────────────────────────────────

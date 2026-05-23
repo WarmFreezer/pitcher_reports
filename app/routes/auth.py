@@ -99,7 +99,7 @@ def schools():
                 metadata=session['pending_school'],
                 customer_email=session['pending_school']['admin_email']
             )
-            return redirect(url_for('embedded_checkout', client_secret=checkout_session.client_secret))
+            return redirect(url_for('payment.embedded_checkout', client_secret=checkout_session.client_secret))
         except Exception as e:
             print(str(e))
             flash('Could not start checkout. Please try again.', 'danger')

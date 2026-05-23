@@ -12,10 +12,11 @@
             h1, h2, h3 {
                 margin-top: 0.5rem;
                 font-family: 'Graduate';
+                color: var(--text-primary)
             }
 
             p {
-                color: var(--tertiary);
+                color: var(--text-secondary);
                 font-family: 'Cambria', monospace;
                 line-height: 1.6;
                 text-indent: 0; /* remove academic indent */
@@ -28,15 +29,15 @@
             li {
                 margin-bottom: 0.5rem;
                 font-family: 'Cambria', monospace;
+                color: var(--text-secondary);
             }
         </style>
     </head> 
-    <body onload="loadNavbar(); loadHeader('Pitcher Reports - Baseball Analytics', '/static/resources/HomePlate.png'); loadFooter();">
+    <body onload="loadNavbar(); loadFooter();">
         <!-- Navbar Placeholder -->
         <div id="navbar-placeholder"></div>
         
         <!-- Header Placeholder -->
-        <div id="header-placeholder"></div>
 
         <main class="main-content">
             <div class="bubble">

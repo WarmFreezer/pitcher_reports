@@ -17,12 +17,11 @@
         }
     </style>
 </head>
-<body onload="loadNavbar(); loadHeader('Create Account'); loadFooter();">
+<body onload="loadNavbar(); loadFooter();">
     <!-- Navbar Placeholder -->
     <div id="navbar-placeholder"></div>
 
     <!-- Header Placeholder -->
-    <div id="header-placeholder"></div>
     
     <!-- Main Content -->
     <main class="auth-page main-content">
@@ -39,13 +38,13 @@
                 <h2>Create an Account</h2>
                 <p>To access the full features of MSU Baseball Analytics, please create an account.</p>
                 <form method="POST" class="auth-form">
-                    <input class="bubble" type="name" name="name" placeholder="Name" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
-                    <input class="bubble" type="email" name="email" placeholder="Email" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
-                    <input class="bubble" type="password" name="password" placeholder="Password" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
-                    <input class="bubble" type="password" name="confirm_password" placeholder="Confirm Password" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
+                    <input class="bubble" type="name" name="name" placeholder="Name" required style="color: var(--text-primary); margin: 8px 0; background-color: var(--bg-card); border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
+                    <input class="bubble" type="email" name="email" placeholder="Email" required style="color: var(--text-primary); margin: 8px 0; background-color: var(--bg-card); border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
+                    <input class="bubble" type="password" name="password" placeholder="Password" required style="color: var(--text-primary); margin: 8px 0; background-color: var(--bg-card); border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
+                    <input class="bubble" type="password" name="confirm_password" placeholder="Confirm Password" required style="color: var(--text-primary); margin: 8px 0; background-color: var(--bg-card); border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
                     <div class="school-picker dropdown">
                         <input type="hidden" name="school" id="school-value" required>
-                        <button class="bubble" type="button" id="school-trigger" class="school-trigger" style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px; width: 100%;">
+                        <button class="bubble" type="button" id="school-trigger" class="school-trigger" style="color: var(--text-primary); margin: 8px 0; background-color: var(--bg-card); border: 2px solid var(--accent); font-size: 16px; padding: 16px; width: 100%;">
                             Select School ▼
                         </button>
                         <div id="school-menu" class="dropdown-content school-menu">
@@ -59,7 +58,7 @@
                     <button type="submit" class="upload-btn" style="max-width: 750px; width: 100%;">Create Account</button>
                 </form>
                 <div style="display: flex;">
-                    <a href="/schools" style="color: var(--tertiary); font-size: 16px; text-align: left;">Dont See Your School?</a>
+                    <a href="/schools" style="color: var(--text-secondary); font-size: 16px; text-align: left;">Dont See Your School?</a>
                 </div>
             </div>
             <div class="auth-visual-panel">

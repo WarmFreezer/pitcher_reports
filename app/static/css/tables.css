@@ -20,6 +20,12 @@
     min-width: 0;
 }
 
+.table-section {
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 8px 0;
+}
+
 .pitcher-usage-panel {
     display: flex;
     flex-direction: column;
@@ -27,6 +33,7 @@
     text-align: center;
     min-width: 0;
     flex: 1;
+    max-width: 450px;
 }
 
 .pitcher-table {
@@ -51,18 +58,82 @@
 .pitcher-data-table th,
 .pitch-usage-table th {
     background-color: var(--tertiary);
-    color: white;
+    color: var(--text-on-accent);
     font-weight: bold;
 }
 
 .pitcher-data-table tr:nth-child(even),
 .pitch-usage-table tr:nth-child(even) {
-    background-color: #f9f9f9;
+    background-color: var(--bg-card);
 }
 
 .pitcher-data-table tr:hover,
 .pitch-usage-table tr:hover {
-    background-color: #f0f0f0;
+    background-color: var(--bg-hover);
+}
+
+/* ============================================================================
+   PITCHER REPORT CARD
+   ============================================================================ */
+
+.pitcher-report {
+    max-width: 1200px;
+    margin: 0 auto;
+    width: calc(100% - 64px);
+    border: 2px solid var(--bubble-border);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: border-color 0.3s ease;
+}
+
+.pitcher-report + .pitcher-report {
+    margin-top: 16px;
+}
+
+.pitcher-report:last-child {
+    margin-bottom: 48px;
+}
+
+.pitcher-report-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px 16px 20px;
+    border-bottom: 2px solid var(--bubble-border);
+    background-color: var(--bg-bubble);
+    border-left: 4px solid var(--accent);
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.pitcher-report-header:hover {
+    background-color: var(--bg-card);
+}
+
+.pitcher-report-header h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    color: var(--text-primary);
+}
+
+.pitcher-report-chevron {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    display: inline-block;
+    transition: transform 0.3s ease;
+}
+
+.pitcher-report-header.open .pitcher-report-chevron {
+    transform: rotate(180deg);
+}
+
+
+@media (max-width: 768px) {
+    .pitcher-report {
+        margin: 0;
+        width: 100%;
+    }
 }
 
 /* ============================================================================
@@ -75,8 +146,12 @@
     display: block;
 }
 
-.report-img-heatmap { width: 800px; }
-.report-img-breakmap { width: 400px; }
+.report-img-heatmap { width: 100%; max-width: 400px; }
+
+.graph-block { display: flex; flex-direction: column; align-items: center; }
+.graph-title { margin: 0 0 4px; font-weight: bold; text-align: center; }
+.graph-subtitle { margin: 8px 0 4px; font-weight: bold; text-align: center; color: var(--text-secondary); font-size: 0.85rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.report-img-breakmap { width: 100%; max-width: 400px; }
 
 .report-lower-row {
     display: flex;
@@ -84,6 +159,9 @@
     justify-content: center;
     flex-wrap: wrap;
     gap: 16px;
+    max-width: 1200px;
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .pitcher-heatmap {
@@ -100,7 +178,8 @@
     align-items: center;
     overflow: hidden;
     flex: 0 0 auto;
-    max-width: 100%;
+    min-width: 200px;
+    max-width: 450px;
 }
 
 @media (max-width: 900px) {
@@ -117,10 +196,12 @@
     .pitcher-breakmap {
         flex: none;
         width: 100%;
+        max-width: 100%;
     }
 
     .pitcher-usage-panel {
         width: 100%;
+        min-width: 0;
     }
 }
 
@@ -141,7 +222,7 @@
 
 .roster-table th {
     background-color: var(--tertiary);
-    color: white;
+    color: var(--text-primary);
     padding: 10px 12px;
     text-align: left;
     white-space: nowrap;
@@ -154,7 +235,7 @@
 }
 
 .roster-table tr:hover td {
-    background-color: var(--light);
+    background-color: var(--bg-hover);
 }
 
 .roster-input {
@@ -162,7 +243,7 @@
     background: transparent;
     font-size: 14px;
     font-family: Cambria, serif;
-    color: var(--dark);
+    color: var(--text-primary);
     width: 100%;
     min-width: 80px;
     padding: 4px 0;
@@ -195,7 +276,7 @@
     bottom: 4px;
     right: 4px;
     background: var(--secondary);
-    color: white;
+    color: var(--text-secondary);
     border-radius: 50%;
     width: 16px;
     height: 16px;
@@ -222,5 +303,5 @@
 }
 
 .roster-delete-btn:hover {
-    color: #a01f35;
+    color: var(--danger);
 }

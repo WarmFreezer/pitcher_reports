@@ -24,7 +24,7 @@
 }
 
 .comparison-toggle {
-    background: white;
+    background: var(--bg-card);
     border: 2px solid var(--accent);
     border-radius: 16px;
     overflow: hidden;
@@ -45,7 +45,7 @@
     font-size: 1rem;
     font-weight: bold;
     font-family: 'Graduate', Arial, sans-serif;
-    color: var(--dark);
+    color: var(--text-primary);
     transition: background 0.2s, color 0.2s;
 }
 
@@ -54,12 +54,12 @@
 }
 
 .toggle-tab--active {
-    background: var(--tertiary);
+    background: var(--accent);
     color: white;
 }
 
 .toggle-tab:not(.toggle-tab--active):hover {
-    background: var(--light);
+    background: var(--bg-page);
 }
 
 .toggle-panel {
@@ -78,7 +78,7 @@
 }
 
 .comparison-card {
-    background-color: white;
+    background-color: var(--bg-card);
     border: 2px solid var(--accent);
     border-radius: 16px;
     padding: 20px;
@@ -89,12 +89,12 @@
 
 .comparison-card h2 {
     font-family: 'Graduate', Arial, sans-serif;
-    color: var(--tertiary);
+    color: var(--text-secondary);
     margin-bottom: 4px;
 }
 
 .comparison-subtitle {
-    color: var(--dark);
+    color: var(--text-secondary);
     margin-bottom: 12px;
     font-size: 0.95rem;
 }
@@ -129,14 +129,38 @@
     overflow-y: auto;
     border: 1px solid var(--accent);
     border-radius: 10px;
-    background-color: #fff;
+    background-color: var(--bg-card);
 }
 
-.comparison-iframe {
-    width: 100%;
-    height: 100%;
-    border: none;
-    display: block;
+#trackman-table-container table {
+    border-collapse: collapse;
+    font-size: 12px;
+    font-family: Cambria, serif;
+    color: var(--text-primary);
+    width: max-content;
+}
+
+#trackman-table-container td,
+#trackman-table-container th {
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    white-space: nowrap;
+    text-align: center;
+    vertical-align: middle;
+}
+
+#trackman-table-container th {
+    background-color: var(--tertiary);
+    color: white;
+    font-weight: bold;
+}
+
+#trackman-table-container tr:nth-child(even) td {
+    background-color: var(--bg-hover);
+}
+
+#trackman-table-container tr:hover td {
+    background-color: var(--bg-card);
 }
 
 .comparison-dialogue {
@@ -145,19 +169,13 @@
     justify-content: center;
     align-items: center;
     background-color: var(--primary);
-    color: var(--accent);
+    color: var(--text-primary);
     border-radius: 16px;
     padding: 16px 14px;
     min-width: 170px;
     text-align: center;
     font-weight: bold;
     gap: 8px;
-}
-
-.comparison-arrow {
-    color: var(--secondary);
-    font-size: 1.6rem;
-    line-height: 1;
 }
 
 /* ============================================================================

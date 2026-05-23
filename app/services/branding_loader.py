@@ -2,7 +2,6 @@ import json
 import os
 from pathlib import Path
 
-
 class BrandingLoader:
     # Resolved at import time relative to this file so it works regardless of cwd
     SCHOOLS = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'storage', 'schools')

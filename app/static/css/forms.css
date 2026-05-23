@@ -9,7 +9,7 @@ select {
     background: transparent;
     padding: 10px;
     font-size: 12px;
-    color: var(--tertiary);
+    color: var(--text-primary);
     width: stretch;
     max-width: 750px;
     transition: 0.3s;
@@ -21,22 +21,22 @@ input.bubble {
 }
 
 input::placeholder {
-    color: var(--dark);
+    color: var(--text-muted);
 }
 
 input:focus,
 select:focus {
     outline: none;
-    border-bottom: 2px solid #ffffff;
+    border-bottom: 2px solid var(--secondary);
 }
 
 input:-webkit-autofill,
 input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
 input:-webkit-autofill:active {
-    -webkit-box-shadow: 0 0 0 30px #ffffff inset !important;
-    box-shadow: 0 0 0 30px #ffffff inset !important;
-    -webkit-text-fill-color: #000000 !important;
+    -webkit-box-shadow: 0 0 0 30px var(--bg-card) inset !important;
+    box-shadow: 0 0 0 30px var(--bg-card) inset !important;
+    -webkit-text-fill-color: var(--text-primary) !important;
 }
 
 /* ============================================================================
@@ -99,7 +99,7 @@ input:-webkit-autofill:active {
 }
 
 .switch-text {
-    color: var(--tertiary);
+    color: var(--text-primary);
     font-size: 16px;
 }
 
@@ -131,8 +131,8 @@ input:-webkit-autofill:active {
 .school-option {
     width: 100%;
     border: 0;
-    background-color: #fff;
-    color: var(--dark);
+    background-color: var(--bg-bubble);
+    color: var(--text-primary);
     text-align: left;
     padding: 12px 16px;
     cursor: pointer;

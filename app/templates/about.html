@@ -9,12 +9,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/about.css') }}">
 </head>
-<body onload="loadNavbar(); loadHeader('About - Baseball Analytics', '/static/resources/HomePlate.png');loadFooter();">
-    <!-- Navbar Placeholder -->
-    <div id="navbar-placeholder" style="background-color: var(--accent);"></div>
-
-    <!-- Header Placeholder -->
-    <div id="header-placeholder"></div>
+<body onload="loadNavbar(); loadFooter();">
+    <div id="navbar-placeholder"></div>
 
     <main class="main-content">
         <div class="bubble about-bubble">
@@ -31,8 +27,8 @@
 
                 <div class="toggle-panel toggle-panel--active" id="tab-before" role="tabpanel">
                     <p class="comparison-subtitle">Scroll to see the full scale of raw TrackMan output</p>
-                    <div class="comparison-scroll">
-                        <iframe src="{{ url_for('static', filename='resources/TrackMan.htm') }}" title="TrackMan report example" class="comparison-iframe"></iframe>
+                    <div class="comparison-scroll" id="trackman-table-container">
+                        <p style="padding: 16px; color: var(--text-muted);">Loading…</p>
                     </div>
                 </div>
 
@@ -69,5 +65,28 @@
     <div id="footer-placeholder"></div>
 
     <script src="{{ url_for('static', filename='js/core.js') }}"></script>
+    <script>
+        fetch("{{ url_for('static', filename='resources/TrackMan_files/sheet001.htm') }}")
+            .then(res => res.text())
+            .then(html => {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const table = doc.querySelector('table');
+                const container = document.getElementById('trackman-table-container');
+                if (table) {
+                    table.removeAttribute('style');
+                    table.querySelectorAll('[style]').forEach(el => el.removeAttribute('style'));
+                    table.querySelectorAll('[class]').forEach(el => el.removeAttribute('class'));
+                    container.innerHTML = '';
+                    container.appendChild(table);
+                } else {
+                    container.innerHTML = '<p style="padding: 16px; color: var(--text-muted);">Could not load table.</p>';
+                }
+            })
+            .catch(() => {
+                document.getElementById('trackman-table-container').innerHTML =
+                    '<p style="padding: 16px; color: var(--text-muted);">Failed to load TrackMan data.</p>';
+            });
+    </script>
 </body>
 </html>

@@ -24,9 +24,8 @@
     </style>
     {% endif %}
 </head>
-<body data-school-slug="{{ current_user.school.slug }}" onload="loadHeader('{{ current_user.school.slug|upper }} Baseball Analytics', '/static/resources/HomePlate.png', '{{ logo_path }}'); loadFooter(); loadNavbar();">
+<body data-school-slug="{{ current_user.school.slug }}" onload="loadFooter(); loadNavbar('{{ logo_path }}');">
     <div id="navbar-placeholder"></div>
-    <div id="header-placeholder"></div>
 
     <main class="main-content">
 
@@ -34,22 +33,25 @@
             <h2>Subscription Status</h2>
             <p>Current Plan: {{ current_user.school.stripe_subscription_status }}</p>
             <p>Admin Email:</p>
-            <input id="admin-email" type="email" class="bubble" value="{{ current_user.school.admin_email }}" style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px">
+            <input id="admin-email" type="email" class="bubble" value="{{ current_user.school.admin_email }}" style="color: var(--text-primary); margin: 8px 0; background-color: var(--bg-card); border: 2px solid var(--accent); font-size: 16px; padding: 16px">
         </div>
 
         <div class="bubble">
             <h2>School Branding</h2>
-            <p>Scroll through this page before saving to make sure you can see all of the text</p>
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
+                <p>Check out the preview to see how your branding will look</p>
+                <a href="/api/subscription/preview-pdf" target="_blank" class="download-btn-small">Preview PDF</a>
+            </div>
             <div class="color-grid">
                 <div class="color-card logo-card" onclick="document.getElementById('logo-upload').click()">
-                    <img id="logo-preview" src="{{ logo_path }}" alt="School Logo" class="logo-card-img">
+                    <img id="logo-preview" src="{{ logo_path }}" alt="School Logo" class="logo-card-img" onerror="this.src='/static/resources/'+(document.documentElement.getAttribute('data-theme')==='dark'?'statline-logo':'statline-logo-light')+'.svg';this.onerror=null;">
                     <input type="file" id="logo-upload" accept=".png,.jpg,.jpeg" style="display:none" onchange="handleLogoUpload(event)">
                     <div class="color-card-footer">
                         <span class="color-card-label">Logo</span>
                         <span class="color-card-hex" style="font-family: Cambria, serif;">Click to upload</span>
                     </div>
                 </div>
-                {% for token in ['primary', 'secondary', 'tertiary', 'dark', 'light', 'accent'] %}
+                {% for token in ['primary', 'secondary', 'tertiary', 'accent'] %}
                 <div class="color-card" id="color-card-{{ token }}"
                      style="background-color: {{ branding.colors[token] }};"
                      onclick="document.getElementById('color-{{ token }}').click()">
@@ -127,7 +129,7 @@
             <div id="cancel-subscription-form" class="collapsible">
                 <p style="margin: 8px 0;">Access continues until the end of the current billing period. Type <strong>CANCEL</strong> to confirm.</p>
                 <input id="cancel-confirm-input" class="bubble" type="text" placeholder="CANCEL"
-                       style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px">
+                       style="color: var(--text-primary); margin: 8px 0; background-color: var(--bg-card); border: 2px solid var(--accent); font-size: 16px; padding: 16px">
                 <div style="display: flex; gap: 8px; margin-top: 8px;">
                     <button class="download-btn btn-danger" onclick="cancelSubscription()">Confirm Cancel</button>
                     <button class="download-btn" onclick="hideCancelForm()">Back</button>

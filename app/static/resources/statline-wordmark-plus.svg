@@ -1,0 +1,33 @@
+<svg viewBox="0 0 300 90" xmlns="http://www.w3.org/2000/svg">
+
+  <!-- Diamond mark — centered at 45,45 with enough padding for rotated tips -->
+  <rect x="14" y="14" width="62" height="62"
+    fill="none" stroke="#ececec" stroke-width="2.2"
+    transform="rotate(45 45 45)"/>
+  <rect x="20" y="20" width="50" height="50"
+    fill="#ececec" opacity="0.3" 
+    transform="rotate(45 45 45)"/>
+
+  <!-- Stitch lines -->
+  <line x1="26" y1="47" x2="64" y2="47"
+    stroke="#8B1A1A" stroke-width="1.8" stroke-linecap="round"/>
+  <line x1="30" y1="53" x2="60" y2="53"
+    stroke="#8B1A1A" stroke-width="1" stroke-linecap="round" opacity="0.5"/>
+
+  <!-- Wordmark -->
+  <text x="90" y="56"
+    font-family="Cambria"
+    font-size="50"
+    font-weight="500"
+    letter-spacing="-2.5"
+    fill="#ececec">stat_<tspan fill="#8B1A1A">line</tspan></text>
+
+  <!-- Subtext -->
+  <text x="91" y="80"
+    font-family="Cambria"
+    font-size="16"
+    font-weight="400"
+    letter-spacing="3"
+    fill="#777777">BASEBALL ANALYTICS</text>
+
+</svg>

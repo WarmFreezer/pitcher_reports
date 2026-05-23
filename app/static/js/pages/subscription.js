@@ -1,6 +1,6 @@
 // ── Color picker ─────────────────────────────────────────────────────────────
 
-const COLOR_TOKENS = ['primary', 'secondary', 'tertiary', 'dark', 'light', 'accent'];
+const COLOR_TOKENS = ['primary', 'secondary', 'tertiary', 'accent'];
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
 function syncColor(token, value) {
@@ -164,7 +164,7 @@ function buildRosterRow(row, columns) {
 
     const pfpCell = `
         <td class="pfp-cell">
-            <img class="player-pfp" src="${pfpUrl}" onerror="this.src='/static/resources/HomePlate.png'">
+            <img class="player-pfp" src="${pfpUrl}" onerror="if(!this._triedSchool){this._triedSchool=true;this.src='/storage/schools/'+window._schoolSlug+'/assets/logo.png';}else{this.onerror=null;this.src='/static/resources/'+(document.documentElement.getAttribute('data-theme')==='dark'?'statline-logo':'statline-logo-light')+'.svg';}">
             <input type="file" accept=".png,.jpg,.jpeg" style="display:none"
                    onchange="uploadPlayerPfp('${trackmanId}', this)">
             <span class="pfp-edit" onclick="this.previousElementSibling.click()">✎</span>
