@@ -68,7 +68,7 @@ class PDF_Generator:
             ),
             "subtitle": ParagraphStyle(
                 "ReportSubtitle",
-                fontSize=11, textColor=self.primary_color,
+                fontSize=11, textColor=self.secondary_color,
                 fontName="Helvetica",
                 alignment=TA_LEFT, leading=14,
             ),

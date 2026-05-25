@@ -9,7 +9,7 @@ from flask_login import login_required, current_user
 from app.services import report, report_lab_generator, file_validator
 from app.services.branding_loader import BrandingLoader
 from app.services.report_lab_generator import PDF_Generator, merge_pdfs
-from app.routes.utils import get_school_directories
+from app.routes.utils import get_school_directories, flash_toast
 
 upload_bp = Blueprint('upload_api', __name__)
 
@@ -97,77 +97,85 @@ def upload_file():
             else:
                 return jsonify({'error': f'No pitching data found for your team (TrackMan ID: {current_user.school.trackman_id}). Make sure you uploaded the correct game file.'}), 400
 
+        raw_date = source_df['Date'].mode().iloc[0]
+        parts = str(raw_date).split('-')
+        date = f"{parts[1]}/{parts[2]}/{parts[0]}" if len(parts) == 3 else str(raw_date)
+        away_team = source_df['AwayTeam'].mode().iloc[0]
+        home_team = source_df['HomeTeam'].mode().iloc[0]
+
         reports = []
         for pitcher_id in source_df['PitcherId'].unique():
-            pitcher_team = source_df.loc[source_df['PitcherId'] == pitcher_id, 'PitcherTeam'].iloc[0]
-            is_own = pitcher_team == current_user.school.trackman_id
-            if target == 'opponent' and is_own:
+            try:
+                pitcher_team = source_df.loc[source_df['PitcherId'] == pitcher_id, 'PitcherTeam'].iloc[0]
+                is_own = pitcher_team == current_user.school.trackman_id
+                if target == 'opponent' and is_own:
+                    continue
+                if target != 'opponent' and not is_own:
+                    continue
+
+                arm_angle = None
+                if current_user.school.is_active:
+                    for theme in ('light', 'dark'):
+                        report.pitch_heat_map_by_batter_side(source_df, current_user.id, school_temp_folder, pitcher_id, 0.75, theme=theme)
+                        result = report.pitch_break_map(source_df, current_user.id, school_temp_folder, pitcher_id, 0.75, theme=theme)
+                        if arm_angle is None and result is not None:
+                            arm_angle = result
+
+                # Auto-add pitchers found in the game file but missing from the roster
+                if not roster.empty and pitcher_id not in roster['Trackman ID'].values and target != 'opponent':
+                    last_name, first_name = source_df.loc[source_df['PitcherId'] == pitcher_id, 'Pitcher'].iloc[0].split(', ', 1)
+                    roster = pd.concat([roster, pd.DataFrame([{'Trackman ID': pitcher_id, 'First Name': first_name, 'Last Name': last_name}])], ignore_index=True)
+
+                # Build pitch stat tables for both the web view and the PDF
+                table_data = report.build_table(source_df, pitcher_id)
+                if not table_data or len(table_data) < 2 or table_data[1] is None:
+                    raise ValueError(f'Failed to build table data for pitcher ID {pitcher_id}')
+                report_html = table_data[4].to_html(index=False, float_format='%.2f', border=0, classes='pitcher-data-table', escape=False, justify='left', na_rep='')
+
+                pitch_usage_data = report.usage_table(source_df, pitcher_id)
+                if not pitch_usage_data or len(pitch_usage_data) < 2 or pitch_usage_data[1] is None:
+                    raise ValueError(f'Failed to build pitch usage table data for pitcher ID {pitcher_id}')
+                left_usage_html = pitch_usage_data[0].to_html(index=False, float_format='%.2f', border=0, classes='pitch-usage-table', escape=False, justify='left', na_rep='')
+                right_usage_html = pitch_usage_data[1].to_html(index=False, float_format='%.2f', border=0, classes='pitch-usage-table', escape=False, justify='left', na_rep='')
+
+                reports.append({
+                    'pitcher_id': str(pitcher_id),
+                    'pitcher_name': table_data[3],
+                    'pitcher_table': report_html,
+                    'left_usage_table': left_usage_html,
+                    'right_usage_table': right_usage_html,
+                    'heatmap_left_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_heat_map_left_light.png',
+                    'heatmap_right_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_heat_map_right_light.png',
+                    'heatmap_left_dark_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_heat_map_left_dark.png',
+                    'heatmap_right_dark_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_heat_map_right_dark.png',
+                    'breakmap_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_break_map_light.png',
+                    'breakmap_dark_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_break_map_dark.png',
+                    'arm_angle': f'{arm_angle:.1f}°' if arm_angle is not None else '',
+                    'pdf_url': f'/storage/schools/{current_user.school.slug}/reports/{current_user.id}_pitcher_{pitcher_id}_report.pdf'
+                })
+
+                gen.generate_pitcher_report({
+                    'pitcher_name': table_data[3],
+                    'pitcher_id': str(pitcher_id),
+                    'date': date,
+                    'home_team': home_team,
+                    'away_team': away_team,
+                    'pitch_stats': table_data[4],
+                    'pitch_usage_left': pitch_usage_data[0],
+                    'pitch_usage_right': pitch_usage_data[1],
+                    'pitch_heat_map_left': os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_heat_map_left_light.png'),
+                    'pitch_heat_map_right': os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_heat_map_right_light.png'),
+                    'pitch_break_map': os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_break_map_light.png'),
+                }, os.path.abspath(os.path.join(school_output_folder, f'{current_user.id}_pitcher_{pitcher_id}_report.pdf')))
+
+            except Exception as e:
+                print(f"Error processing pitcher ID {pitcher_id}: {e}")
+                flash_toast(f"Error processing pitcher {pitcher_id}: {str(e)}", type='error')   
                 continue
-            if target != 'opponent' and not is_own:
-                continue
-
-            arm_angle = None
-            if current_user.school.is_active:
-                for theme in ('light', 'dark'):
-                    report.pitch_heat_map_by_batter_side(source_df, current_user.id, school_temp_folder, pitcher_id, 0.75, theme=theme)
-                    result = report.pitch_break_map(source_df, current_user.id, school_temp_folder, pitcher_id, 0.75, theme=theme)
-                    if arm_angle is None and result is not None:
-                        arm_angle = result
-
-            # Auto-add pitchers found in the game file but missing from the roster
-            if not roster.empty and pitcher_id not in roster['Trackman ID'].values:
-                last_name, first_name = source_df.loc[source_df['PitcherId'] == pitcher_id, 'Pitcher'].iloc[0].split(', ', 1)
-                roster = pd.concat([roster, pd.DataFrame([{'Trackman ID': pitcher_id, 'First Name': first_name, 'Last Name': last_name}])], ignore_index=True)
-
-            # Build pitch stat tables for both the web view and the PDF
-            table_data = report.build_table(source_df, pitcher_id)
-            if not table_data or len(table_data) < 2 or table_data[1] is None:
-                raise ValueError(f'Failed to build table data for pitcher ID {pitcher_id}')
-            report_html = table_data[4].to_html(index=False, float_format='%.2f', border=0, classes='pitcher-data-table', escape=False, justify='left', na_rep='')
-
-            pitch_usage_data = report.usage_table(source_df, pitcher_id)
-            if not pitch_usage_data or len(pitch_usage_data) < 2 or pitch_usage_data[1] is None:
-                raise ValueError(f'Failed to build pitch usage table data for pitcher ID {pitcher_id}')
-            left_usage_html = pitch_usage_data[0].to_html(index=False, float_format='%.2f', border=0, classes='pitch-usage-table', escape=False, justify='left', na_rep='')
-            right_usage_html = pitch_usage_data[1].to_html(index=False, float_format='%.2f', border=0, classes='pitch-usage-table', escape=False, justify='left', na_rep='')
-
-            parts = table_data[0].split('-')
-            date = f"{parts[1]}/{parts[2]}/{parts[0]}"
-            away_team = table_data[2]
-            home_team = table_data[1]
-
-            reports.append({
-                'pitcher_id': str(pitcher_id),
-                'pitcher_name': table_data[3],
-                'pitcher_table': report_html,
-                'left_usage_table': left_usage_html,
-                'right_usage_table': right_usage_html,
-                'heatmap_left_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_heat_map_left_light.png',
-                'heatmap_right_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_heat_map_right_light.png',
-                'heatmap_left_dark_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_heat_map_left_dark.png',
-                'heatmap_right_dark_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_heat_map_right_dark.png',
-                'breakmap_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_break_map_light.png',
-                'breakmap_dark_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_break_map_dark.png',
-                'arm_angle': f'{arm_angle:.1f}°' if arm_angle is not None else '',
-                'pdf_url': f'/storage/schools/{current_user.school.slug}/reports/{current_user.id}_pitcher_{pitcher_id}_report.pdf'
-            })
-
-            gen.generate_pitcher_report({
-                'pitcher_name': table_data[3],
-                'pitcher_id': str(pitcher_id),
-                'date': date,
-                'home_team': home_team,
-                'away_team': away_team,
-                'pitch_stats': table_data[4],
-                'pitch_usage_left': pitch_usage_data[0],
-                'pitch_usage_right': pitch_usage_data[1],
-                'pitch_heat_map_left': os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_heat_map_left_light.png'),
-                'pitch_heat_map_right': os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_heat_map_right_light.png'),
-                'pitch_break_map': os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_break_map_light.png'),
-            }, os.path.abspath(os.path.join(school_output_folder, f'{current_user.id}_pitcher_{pitcher_id}_report.pdf')))
 
             # Release per-pitcher data before the next iteration to keep memory usage flat
             del table_data, report_html
+                
             gc.collect()
 
         # Persist any new roster entries discovered during this upload

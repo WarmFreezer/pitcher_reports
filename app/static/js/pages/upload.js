@@ -35,7 +35,7 @@ async function handleFileSelect(event) {
     const reportOutput = document.querySelector('#report-output');
     if (reportOutput) {
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-        reportOutput.innerHTML = `<img src="/static/css/statline-loading-${isDark ? 'dark' : 'light'}.svg" alt="Loading..." style="width: 48px; margin: 32px auto; display: block;">`;
+        reportOutput.innerHTML = `<img src="/static/css/statline-loading-${isDark ? 'dark' : 'light'}.svg" data-light-src="/static/css/statline-loading-light.svg" data-dark-src="/static/css/statline-loading-dark.svg" alt="Loading..." style="width: 48px; margin: 32px auto; display: block;">`;
     }
 
     const formData = new FormData();

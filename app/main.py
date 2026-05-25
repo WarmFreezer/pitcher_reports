@@ -68,6 +68,10 @@ def inject_branding():
     return {}
 
 # Static file serving
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(app.static_folder, 'resources'), 'statline-logo.png', mimetype='image/png')
+
 @app.route('/storage/schools/<school_slug>/assets/<path:filename>')
 def school_files(school_slug, filename):
     return send_from_directory(os.path.join(app.config['STORAGE'], 'schools', school_slug, 'assets'), filename)

@@ -87,7 +87,7 @@ function loadNavbar(logo = '') {
                     <button id="theme-toggle" class="icon-btn" aria-label="Toggle theme">
                         ${isDark ? _SUN_ICON : _MOON_ICON}
                     </button>
-                    ${avatarHTML}
+                    ${logo ? avatarHTML : ''}
                     ${showLogout ? '<a href="/logout" style="text-decoration: none;"><button class="logout-btn">Logout</button></a>' : ''}
                     <button class="hamburger-btn" id="hamburger-btn" aria-label="Open navigation">☰</button>
                 </div>
@@ -207,3 +207,10 @@ function _swapChartImages(theme) {
 // On page load, restore saved preference (default: light)
 const saved = localStorage.getItem('theme') ?? 'light';
 document.documentElement.setAttribute('data-theme', saved);
+
+document.addEventListener('DOMContentLoaded', async () => {
+    const res = await fetch('/api/toasts');
+    if (!res.ok) return;
+    const toasts = await res.json();
+    toasts.forEach(t => toast(t.message, t.type));
+});

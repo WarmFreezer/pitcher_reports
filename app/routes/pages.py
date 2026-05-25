@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for
+from flask import Blueprint, render_template, redirect, url_for, jsonify, session
 from flask_login import login_required, current_user
 
 pages_bp = Blueprint('pages', __name__)
@@ -33,3 +33,9 @@ def about():
 @pages_bp.route('/terms')
 def terms():
     return render_template('terms.html')
+
+
+@pages_bp.route('/api/toasts')
+def get_toasts():
+    toasts = session.pop('_toasts', [])
+    return jsonify(toasts)

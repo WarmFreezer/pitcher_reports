@@ -19,6 +19,8 @@ class School(db.Model):
 
     users = db.relationship('User', backref='school', lazy=True)
 
+    players = db.relationship('Player', backref='school', lazy=True)
+
     @property
     def branding_path(self):
         return f'storage/schools/{self.slug}/assets/branding.json'
@@ -40,3 +42,17 @@ class User(UserMixin, db.Model):
     role = db.Column(db.String(20), nullable=False, default='student')
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+
+
+class Player(db.Model):
+    __tablename__ = 'players'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    name = db.Column(db.String(100), nullable=False)
+    trackman_id = db.Column(db.String(20), unique=True, nullable=True)
+    school_id = db.Column(db.Integer, db.ForeignKey('schools.id'), nullable=False)
+    birthdate = db.Column(db.Date, nullable=True)
+    height = db.Column(db.String(10), nullable=True)
+    weight = db.Column(db.String(10), nullable=True)
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())
+    

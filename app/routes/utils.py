@@ -1,6 +1,12 @@
 import os
-from flask import current_app
+from flask import current_app, session
 from flask_login import current_user
+
+
+def flash_toast(message, type='info'):
+    toasts = session.get('_toasts', [])
+    toasts.append({'message': message, 'type': type})
+    session['_toasts'] = toasts
 
 
 def get_school_directories():
