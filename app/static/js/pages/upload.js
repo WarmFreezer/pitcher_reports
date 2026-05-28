@@ -33,6 +33,7 @@ async function handleFileSelect(event) {
     if (!file) return;
 
     const reportOutput = document.querySelector('#report-output');
+    const spinnerStart = Date.now();
     if (reportOutput) {
         const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
         reportOutput.innerHTML = `<img src="/static/css/statline-loading-${isDark ? 'dark' : 'light'}.svg" data-light-src="/static/css/statline-loading-light.svg" data-dark-src="/static/css/statline-loading-dark.svg" alt="Loading..." style="width: 48px; margin: 32px auto; display: block;">`;
@@ -42,6 +43,8 @@ async function handleFileSelect(event) {
     formData.append('file', file);
     formData.append('target', document.getElementById('targetToggle')?.checked ? 'opponent' : 'own');
 
+    const minDisplay = 600;
+
     try {
         const response = await fetch('/api/upload', {
             method: 'POST',
@@ -50,6 +53,8 @@ async function handleFileSelect(event) {
 
         if (!response.ok) {
             const err = await response.json().catch(() => ({}));
+            const elapsed = Date.now() - spinnerStart;
+            if (elapsed < minDisplay) await new Promise(r => setTimeout(r, minDisplay - elapsed));
             toast(err.error || 'An error occurred while processing the file.', 'error');
             if (reportOutput) reportOutput.innerHTML = '';
             event.target.value = '';
@@ -57,6 +62,8 @@ async function handleFileSelect(event) {
         }
 
         const result = await response.json();
+        const elapsed = Date.now() - spinnerStart;
+        if (elapsed < minDisplay) await new Promise(r => setTimeout(r, minDisplay - elapsed));
 
         if (result.merged_pdf_url) {
             updateDownloadLink(true, result.merged_pdf_url);

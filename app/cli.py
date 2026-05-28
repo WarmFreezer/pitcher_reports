@@ -4,6 +4,7 @@ from flask.cli import with_appcontext
 
 from app.db import models
 from app.services import auth, branding_loader
+from app.services.report import pitch_order
 
 Auth = auth.Auth
 db = models.db
@@ -27,6 +28,18 @@ def register_cli_commands(app):
             models.db.drop_all()
             models.db.create_all()
             click.echo("Database reset complete.")
+
+    @app.cli.command("seed-pitch-types")
+    @with_appcontext
+    def seed_pitch_types():
+        """Seed the pitch_types table from the pitch_order dictionary in report.py."""
+        added = 0
+        for name, abbreviation in pitch_order.items():
+            if not models.Pitch_Types.query.filter_by(name=name).first():
+                models.db.session.add(models.Pitch_Types(name=name, abbreviation=abbreviation))
+                added += 1
+        models.db.session.commit()
+        click.echo(f"Seeded {added} pitch type(s). ({len(pitch_order) - added} already existed.)")
 
     @app.cli.command("create-user-func")
     @click.argument("email")
