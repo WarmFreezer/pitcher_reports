@@ -54,7 +54,7 @@ function loadNavbar(logo = '') {
         <header class="site-header">
             <div class="header-inner">
                 <a href="/" class="logo-lockup">
-                    <img src="/static/resources/${isDark ? 'statline-logo' : 'statline-logo-light'}.svg" alt="Statline" class="logo-img" data-light-src="/static/resources/statline-logo-light.svg" data-dark-src="/static/resources/statline-logo.svg">
+                    <img src="/static/resources/statline-logo.svg" alt="Statline" class="logo-img">
                 </a>
 
                 <nav class="nav-links" id="main-nav-links">

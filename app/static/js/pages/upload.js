@@ -35,8 +35,15 @@ async function handleFileSelect(event) {
     const reportOutput = document.querySelector('#report-output');
     const spinnerStart = Date.now();
     if (reportOutput) {
-        const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-        reportOutput.innerHTML = `<img src="/static/css/statline-loading-${isDark ? 'dark' : 'light'}.svg" data-light-src="/static/css/statline-loading-light.svg" data-dark-src="/static/css/statline-loading-dark.svg" alt="Loading..." style="width: 48px; margin: 32px auto; display: block;">`;
+        reportOutput.innerHTML = `<svg viewBox="0 0 90 90" xmlns="http://www.w3.org/2000/svg" style="width: 48px; margin: 32px auto; display: block;" aria-label="Loading...">
+  <rect x="20" y="20" width="50" height="50" fill="var(--bg-bubble)" transform="rotate(45 45 45)"/>
+  <line x1="26" y1="47" x2="64" y2="47" stroke="#8B1A1A" stroke-width="1.8" stroke-linecap="round"/>
+  <line x1="30" y1="53" x2="60" y2="53" stroke="#8B1A1A" stroke-width="1" stroke-linecap="round" opacity="0.5"/>
+  <path d="M 45,90 L 90,45 L 45,0.5 L 0.5,45 L 45,90" fill="none" stroke="var(--text-primary)" stroke-width="2.2" stroke-linecap="butt" stroke-dasharray="0 253.44" stroke-dashoffset="253.44">
+    <animate attributeName="stroke-dasharray" values="0 253.44; 126.72 126.72; 0 253.44" keyTimes="0;0.5;1" dur="5s" calcMode="spline" keySplines="0.5 0 0.5 1;0.5 0 0.5 1" repeatCount="indefinite"/>
+    <animate attributeName="stroke-dashoffset" values="253.44;253.44;0" keyTimes="0;0.5;1" dur="5s" calcMode="spline" keySplines="0.5 0 0.5 1;0.5 0 0.5 1" repeatCount="indefinite"/>
+  </path>
+</svg>`;
     }
 
     const formData = new FormData();
