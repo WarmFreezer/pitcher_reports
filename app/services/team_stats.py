@@ -81,7 +81,7 @@ def update_outing(outing_id, **kwargs):
                 setattr(outing, key, value)
         db.session.commit()
 
-def add_outing_pitch_stats(pitcher_id, outing_content_hash, source):
+def add_outing_pitch_stats(pitcher_id, outing_id, source):
     pitch_type_map = {pt.name: pt.id for pt in models.Pitch_Types.query.all()}
     undefined_id = pitch_type_map.get('Undefined', None)
 
@@ -101,7 +101,7 @@ def add_outing_pitch_stats(pitcher_id, outing_content_hash, source):
 
         new_stat  =  models.Outing_Pitch_Stat(
             pitcher_id = pitcher_id,
-            outing_content_hash = outing_content_hash,
+            outing_id = outing_id,
             pitch_type_id = pitch_type_id,
             count = _native(count),
             percentage = _native(count/source.shape[0]*100),
@@ -118,10 +118,10 @@ def add_outing_pitch_stats(pitcher_id, outing_content_hash, source):
         db.session.add(new_stat)
     db.session.flush()
 
-def update_outing_pitch_stats(pitcher_id, outing_content_hash, source):
-    models.Outing_Pitch_Stat.query.filter_by(outing_content_hash=outing_content_hash).delete()
+def update_outing_pitch_stats(pitcher_id, outing_id, source):
+    models.Outing_Pitch_Stat.query.filter_by(outing_id=outing_id).delete()
     db.session.flush()
-    add_outing_pitch_stats(pitcher_id, outing_content_hash, source)
+    add_outing_pitch_stats(pitcher_id, outing_id, source)
     db.session.commit()
 
 def add_report(school_id, trackman_id, file):
@@ -147,7 +147,7 @@ def add_report(school_id, trackman_id, file):
                 pitcher_data)
             add_outing_pitch_stats(
                 db_pitcher_id,
-                content_hash,
+                outing_id,
                 pitcher_data)
 
             db.session.commit()
@@ -157,7 +157,7 @@ def add_report(school_id, trackman_id, file):
 def remove_report(content_hash):
     outings = models.Outing.query.filter_by(content_hash=content_hash).all()
     for outing in outings:
-        models.Outing_Pitch_Stat.query.filter_by(outing_content_hash=outing.content_hash).delete()
+        models.Outing_Pitch_Stat.query.filter_by(outing_id=outing.id).delete()
         db.session.delete(outing)
     if outings:
         db.session.commit()

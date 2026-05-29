@@ -58,7 +58,7 @@ class Outing(db.Model):
     __tablename__ = 'outings'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    content_hash = db.Column(db.String(200), unique=True, nullable=True)
+    content_hash = db.Column(db.String(200), nullable=True)
     pitcher_id = db.Column(db.Integer, db.ForeignKey('pitchers.id'), nullable=False)
     date = db.Column(db.String(20), nullable=False)
     opponent = db.Column(db.String(100), nullable=True)
@@ -114,7 +114,7 @@ class Outing_Pitch_Stat(db.Model):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     pitcher_id = db.Column(db.Integer, db.ForeignKey('pitchers.id'), nullable=False)
-    outing_content_hash = db.Column(db.String(200), db.ForeignKey('outings.content_hash'), nullable=False)
+    outing_id = db.Column(db.Integer, db.ForeignKey('outings.id'), nullable=False)
     pitch_type_id = db.Column(db.Integer, db.ForeignKey('pitch_types.id'), nullable=False)
 
     count = db.Column(db.Float, nullable=True)
