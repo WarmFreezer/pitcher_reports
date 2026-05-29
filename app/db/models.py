@@ -58,7 +58,7 @@ class Outing(db.Model):
     __tablename__ = 'outings'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    content_hash = db.Column(db.String(200), nullable=True)
+    content_hash = db.Column(db.String(200), unique=True, nullable=True)
     pitcher_id = db.Column(db.Integer, db.ForeignKey('pitchers.id'), nullable=False)
     date = db.Column(db.String(20), nullable=False)
     opponent = db.Column(db.String(100), nullable=True)
