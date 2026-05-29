@@ -23,6 +23,9 @@ from app.db import models
 STRIKES  =  ['StrikeCalled', 'StrikeSwinging', 'FoulBallNotFieldable']
 SWINGS  =  ['StrikeSwinging', 'FoulBallNotFieldable', 'InPlay']
 
+def _native(val):
+    return val.item() if hasattr(val, 'item') else val
+
 def hash_file(file) -> str:
     file.seek(0)  # Ensure we're at the start of the file
     h = hashlib.md5(file.read()).hexdigest()[:128]
@@ -97,20 +100,20 @@ def add_outing_pitch_stats(pitcher_id, outing_content_hash, source):
             continue
 
         new_stat  =  models.Outing_Pitch_Stat(
-            pitcher_id = pitcher_id, 
-            outing_content_hash = outing_content_hash, 
+            pitcher_id = pitcher_id,
+            outing_content_hash = outing_content_hash,
             pitch_type_id = pitch_type_id,
-            count = count,
-            percentage = count/source.shape[0]*100,
-            strike_count = pitch_data['PitchCall'].isin(STRIKES).sum(),
-            strike_percentage = pitch_data['PitchCall'].isin(STRIKES).sum()/count*100,
-            sw_percentage = pitch_data['PitchCall'].isin(SWINGS).sum()/count*100,
-            sw_miss_count = (pitch_data['PitchCall'] == 'StrikeSwinging').sum(),
-            sw_miss_percentage = (pitch_data['PitchCall'] == 'StrikeSwinging').sum()/count*100,
-            ip_count = 0, #TODO
-            low_quartile_speed = low_quartile_speed,
-            median_speed = median_speed,
-            high_quartile_speed = high_quartile_speed
+            count = _native(count),
+            percentage = _native(count/source.shape[0]*100),
+            strike_count = _native(pitch_data['PitchCall'].isin(STRIKES).sum()),
+            strike_percentage = _native(pitch_data['PitchCall'].isin(STRIKES).sum()/count*100),
+            sw_percentage = _native(pitch_data['PitchCall'].isin(SWINGS).sum()/count*100),
+            sw_miss_count = _native((pitch_data['PitchCall'] == 'StrikeSwinging').sum()),
+            sw_miss_percentage = _native((pitch_data['PitchCall'] == 'StrikeSwinging').sum()/count*100),
+            ip_count = 0,
+            low_quartile_speed = _native(low_quartile_speed),
+            median_speed = _native(median_speed),
+            high_quartile_speed = _native(high_quartile_speed)
         )
         db.session.add(new_stat)
     db.session.flush()
