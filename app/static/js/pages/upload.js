@@ -1,3 +1,5 @@
+let currentUploadResult = null;
+
 // Display game data and upload summary combined
 function displayGameData(data) {
     const contentArea = document.getElementById('gameDataDisplay');
@@ -17,9 +19,46 @@ function displayGameData(data) {
                 <p>${game_data.date}</p>
                 <p>${message}</p>
             </div>
-            ${downloadButton}
+            <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+                ${downloadButton}
+                <button id="save-to-db-btn" class="upload-btn" onclick="saveToDb()">Save to DB</button>
+            </div>
         </div>
     `;
+}
+
+async function saveToDb() {
+    if (!currentUploadResult) {
+        toast('No file loaded.', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('save-to-db-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Saving...';
+    }
+
+    try {
+        const res = await fetch('/api/save-game', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+            toast(data.message || 'Game saved.', 'success');
+            if (btn) btn.textContent = 'Saved';
+        } else {
+            toast(data.error || 'Failed to save game.', 'error');
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Save to DB';
+            }
+        }
+    } catch (e) {
+        toast('Error saving game: ' + e.message, 'error');
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Save to DB';
+        }
+    }
 }
 
 // Trigger file upload
@@ -76,6 +115,7 @@ async function handleFileSelect(event) {
             updateDownloadLink(true, result.merged_pdf_url);
         }
 
+        currentUploadResult = result;
         displayGameData({
             game_data: result.game_data,
             message: result.message,

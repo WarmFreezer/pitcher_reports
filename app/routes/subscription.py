@@ -11,6 +11,7 @@ from flask import Blueprint, request, jsonify, render_template, redirect, url_fo
 from flask_login import login_required, current_user
 
 from app.db.models import db
+from app.db import models as db_models
 from app.services import file_validator
 from app.services.branding_loader import BrandingLoader
 
@@ -225,41 +226,77 @@ def upload_logo():
         return jsonify({'error': 'Failed to save logo.'}), 500
 
 
+# ── Roster helpers ───────────────────────────────────────────────────────────
+
+def _upsert_roster_rows(rows):
+    for row in rows:
+        trackman_id = str(row.get('Trackman ID', '')).strip()
+        if not trackman_id:
+            continue
+        first  = str(row.get('First Name', '')).strip()
+        last   = str(row.get('Last Name',  '')).strip()
+        name   = f'{first} {last}'.strip()
+        height = str(row.get('Height', '')).strip() or None
+        weight = str(row.get('Weight', '')).strip() or None
+        birthdate = None
+        bday_str = str(row.get('Birthday', '')).strip()
+        if bday_str:
+            try:
+                birthdate = pd.to_datetime(bday_str).date()
+            except Exception:
+                pass
+        pitcher = db_models.Pitcher.query.filter_by(
+            trackman_id=trackman_id, school_id=current_user.school_id
+        ).first()
+        if pitcher:
+            if name:
+                pitcher.name = name
+            pitcher.birthdate = birthdate
+            pitcher.height    = height
+            pitcher.weight    = weight
+        else:
+            db.session.add(db_models.Pitcher(
+                school_id=current_user.school_id,
+                trackman_id=trackman_id,
+                name=name,
+                birthdate=birthdate,
+                height=height,
+                weight=weight,
+            ))
+
+
 # ── Roster ────────────────────────────────────────────────────────────────────
 
 @subscription_bp.route('/api/subscription/roster', methods=['GET'])
 @login_required
 def get_roster():
-    roster_path = os.path.join(current_app.config['STORAGE'], 'schools', current_user.school.slug, 'assets', 'roster.csv')
-    if not os.path.exists(roster_path):
-        return jsonify({'roster': [], 'columns': []}), 200
-    try:
-        df = pd.read_csv(roster_path).fillna('')
-        # Normalize Trackman IDs that pandas may have read as floats (e.g. 811788.0 → "811788")
-        if 'Trackman ID' in df.columns:
-            df['Trackman ID'] = df['Trackman ID'].apply(lambda x: str(int(float(x))) if x != '' else '')
-        return jsonify({'roster': df.to_dict(orient='records'), 'columns': list(df.columns)}), 200
-    except Exception as e:
-        current_app.logger.error(f"Error reading roster: {e}")
-        return jsonify({'error': 'Failed to read roster.'}), 500
+    pitchers = db_models.Pitcher.query.filter_by(school_id=current_user.school_id).all()
+    roster = []
+    for p in pitchers:
+        parts = (p.name or '').split(' ', 1)
+        roster.append({
+            'Trackman ID': p.trackman_id or '',
+            'First Name':  parts[0] if parts else '',
+            'Last Name':   parts[1] if len(parts) > 1 else '',
+            'Birthday':    p.birthdate.isoformat() if p.birthdate else '',
+            'Height':      p.height or '',
+            'Weight':      p.weight or '',
+        })
+    columns = ['Trackman ID', 'First Name', 'Last Name', 'Birthday', 'Height', 'Weight']
+    return jsonify({'roster': roster, 'columns': columns}), 200
 
 
 @subscription_bp.route('/api/subscription/roster', methods=['PUT'])
 @login_required
 def save_roster():
-    # Accepts inline edits from the roster table UI
     data = request.get_json()
     rows = data.get('rows', [])
-    columns = data.get('columns', [])
-    if not columns:
-        return jsonify({'error': 'No columns provided.'}), 400
     try:
-        df = pd.DataFrame(rows if rows else [], columns=columns)
-        assets_dir = os.path.join(current_app.config['STORAGE'], 'schools', current_user.school.slug, 'assets')
-        os.makedirs(assets_dir, exist_ok=True)
-        df.to_csv(os.path.join(assets_dir, 'roster.csv'), index=False)
+        _upsert_roster_rows(rows)
+        db.session.commit()
         return jsonify({'message': 'Roster saved successfully.'}), 200
     except Exception as e:
+        db.session.rollback()
         current_app.logger.error(f"Error saving roster: {e}")
         return jsonify({'error': 'Failed to save roster.'}), 500
 
@@ -278,7 +315,6 @@ def upload_roster():
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
 
-    # Save to temp before parsing so file_validator can inspect it on disk
     filename = secure_filename(file.filename)
     filepath = os.path.join(school_temp_folder, f'{current_user.id}_roster_{filename}')
     file.save(filepath)
@@ -308,13 +344,17 @@ def upload_roster():
         return jsonify({'error': result}), 400
 
     try:
-        assets_dir = os.path.join(current_app.config['STORAGE'], 'schools', current_user.school.slug, 'assets')
-        os.makedirs(assets_dir, exist_ok=True)
-        df.to_csv(os.path.join(assets_dir, 'roster.csv'), index=False)
+        _upsert_roster_rows(df.fillna('').to_dict(orient='records'))
+        db.session.commit()
         os.remove(filepath)
-        return jsonify({'message': 'Roster uploaded and processed successfully.', 'roster_url': f'/storage/schools/{current_user.school.slug}/assets/roster.csv'}), 200
+        return jsonify({'message': 'Roster uploaded successfully.'}), 200
     except Exception as e:
-        current_app.logger.error(f"Error saving roster: {e}")
+        db.session.rollback()
+        current_app.logger.error(f"Error saving roster to DB: {e}")
+        try:
+            os.remove(filepath)
+        except Exception:
+            pass
         return jsonify({'error': 'Failed to save roster.'}), 500
 
 
@@ -367,17 +407,16 @@ def upload_player_pfp_bulk():
     if not files:
         return jsonify({'error': 'No files provided.'}), 400
 
-    roster_path = os.path.join(current_app.config['STORAGE'], 'schools', current_user.school.slug, 'assets', 'roster.csv')
-    if not os.path.exists(roster_path):
+    pitchers = db_models.Pitcher.query.filter_by(school_id=current_user.school_id).all()
+    if not pitchers:
         return jsonify({'error': 'No roster found. Please upload a roster first.'}), 400
 
-    # Build a lookup of both firstlast and lastfirst → Trackman ID
-    roster_df = pd.read_csv(roster_path)
     name_to_id = {}
-    for _, row in roster_df.iterrows():
-        first = normalize(row.get('First Name', ''))
-        last = normalize(row.get('Last Name', ''))
-        player_id = str(row.get('Trackman ID', '')).strip()
+    for p in pitchers:
+        parts = (p.name or '').split(' ', 1)
+        first = normalize(parts[0] if parts else '')
+        last  = normalize(parts[1] if len(parts) > 1 else '')
+        player_id = str(p.trackman_id or '').strip()
         if first and last and player_id:
             name_to_id[first + last] = player_id
             name_to_id[last + first] = player_id

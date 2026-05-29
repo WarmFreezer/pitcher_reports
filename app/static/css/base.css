@@ -7,7 +7,7 @@
   --danger: #d22d49;
   --warn: #d9a22d;
   --good: #4CAF50;
-  --border: #ddd;
+  --border: #ccc;
 
   --primary: #0B1F3A;
   --secondary: #E8B84B;
@@ -33,7 +33,8 @@
     --bg-bubble: #2a2a2a;
     --bubble-border: #383838;
     --bg-card: #333;
-    --bg-hover: #404040;
+    --bg-hover: #282828;
+    --border: #484848;
 
     --text-primary: #f5f3ed;
     --text-secondary: #aaa;

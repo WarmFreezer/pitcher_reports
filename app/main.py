@@ -61,7 +61,7 @@ def load_user(user_id):
 # Context processor
 @app.context_processor
 def inject_branding():
-    if current_user.is_authenticated:
+    if current_user.is_authenticated and current_user.school:
         branding = BrandingLoader.get_branding(current_user.school.slug)
         logo_path = BrandingLoader.get_logo_path(current_user.school.slug)
         return {'branding': branding, 'logo_path': logo_path}
@@ -70,7 +70,7 @@ def inject_branding():
 # Static file serving
 @app.route('/favicon.ico')
 def favicon():
-    return send_from_directory(os.path.join(app.static_folder, 'resources'), 'statline-logo.png', mimetype='image/png')
+    return send_from_directory(os.path.join(app.static_folder, 'resources'), 'favicon.ico', mimetype='image/x-icon')
 
 @app.route('/storage/schools/<school_slug>/assets/<path:filename>')
 def school_files(school_slug, filename):

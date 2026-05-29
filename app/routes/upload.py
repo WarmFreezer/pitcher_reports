@@ -199,3 +199,18 @@ def upload_file():
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'Failed to process file: {str(e)}'}), 500
+
+
+@upload_bp.route('/api/save-game', methods=['POST'])
+@login_required
+def save_game():
+    from app.services.team_stats import add_report
+    school_temp_folder, _ = get_school_directories()
+    matches = glob.glob(os.path.join(school_temp_folder, f'{current_user.id}_*.csv'))
+    matches += glob.glob(os.path.join(school_temp_folder, f'{current_user.id}_*.xlsx'))
+    if not matches:
+        return jsonify({'error': 'No uploaded file found. Please upload a file first.'}), 400
+    filepath = matches[0]
+    with open(filepath, 'rb') as f:
+        add_report(school_id=current_user.school_id, trackman_id=current_user.school.trackman_id, file=f)
+    return jsonify({'message': 'Game data saved successfully.'})

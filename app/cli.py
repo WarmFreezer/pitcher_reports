@@ -80,7 +80,7 @@ def register_cli_commands(app):
             'logo': 'logo.png'
         }
         
-        branding_loader.create_school_directory(slug, branding_data)
+        branding_loader.create_school_dir(slug, branding_data)
         click.echo(f'✓ School "{name}" created!')
         click.echo(f'  Add logo to: storage/schools/{slug}/logo.png')
 

@@ -67,9 +67,24 @@
     background-color: var(--bg-card);
 }
 
+.pitcher-data-table tr.row-alt {
+    background-color: var(--bg-card);
+}
+
 .pitcher-data-table tr:hover,
 .pitch-usage-table tr:hover {
     background-color: var(--bg-hover);
+}
+
+.pitcher-data-table tr.pitcher-row:hover {
+    background-color: var(--bg-hover);
+}
+
+.pitcher-data-table tr.dropdown-row,
+.pitcher-data-table tr.dropdown-row:hover,
+.pitcher-data-table tr.dropdown-row td {
+    background-color: transparent !important;
+    cursor: default;
 }
 
 /* ============================================================================
