@@ -571,8 +571,7 @@ class PDF_Generator:
         elements = []
         
         print(f"[PDF] Starting report generation")
-        print(f"[PDF] Data keys: {list(data.keys())}")
-        
+
         # Add header
         elements.extend(self.generate_header(
             player_pfp,
@@ -582,8 +581,6 @@ class PDF_Generator:
             data.get('home_team', ''),
             data.get('away_team', '')
         ))
-        print(f"[PDF] Header added. Total elements: {len(elements)}")
-        
         # Add pitch heatmap images (left and right) below header
         half_width = (self.PAGE_W - 2 * self.MARGIN - 0.2 * inch) / 2
         heatmap_left = data.get('pitch_heat_map_left')
@@ -592,7 +589,6 @@ class PDF_Generator:
             left_els = self.add_image_section(heatmap_left, "vs Left-Handed Batters", max_width_pts=half_width) if heatmap_left else []
             right_els = self.add_image_section(heatmap_right, "vs Right-Handed Batters", max_width_pts=half_width) if heatmap_right else []
             elements.extend(self.generate_two_column_layout(left_els, right_els))
-            print(f"[PDF] Added pitch heat map images: {heatmap_left}, {heatmap_right}")
 
         # Add pitch break map on left below heatmap and usage tables on right if break map exists
         break_map_path = data.get('pitch_break_map')    
@@ -606,21 +602,16 @@ class PDF_Generator:
                 right_elements.extend(self.generate_usage_table(data['pitch_usage_right'], batter_side="Right"))
             
             elements.extend(self.generate_two_column_layout(left_elements, right_elements))
-            print(f"[PDF] Added pitch break map and usage tables")
         else:
             # If no break map, add usage tables in single column
             if 'pitch_usage_left' in data and isinstance(data['pitch_usage_left'], pd.DataFrame):
                 elements.extend(self.generate_usage_table(data['pitch_usage_left'], batter_side="Left"))
             if 'pitch_usage_right' in data and isinstance(data['pitch_usage_right'], pd.DataFrame):
                 elements.extend(self.generate_usage_table(data['pitch_usage_right'], batter_side="Right"))
-            print(f"[PDF] Added usage tables without break map")
 
         # Add pitch stats table
         if 'pitch_stats' in data and isinstance(data['pitch_stats'], pd.DataFrame):
             elements.extend(self.generate_pitcher_stats_table(data['pitch_stats']))
-            print(f"[PDF] Added pitch stats table")
-        
-        print(f"[PDF] Building PDF with {len(elements)} elements")
         
         # Build PDF
         try:

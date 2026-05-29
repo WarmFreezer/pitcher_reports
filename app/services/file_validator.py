@@ -61,7 +61,6 @@ class file_validator:
         ext = filename.rsplit('.', 1)[1].lower()
         if ext not in ALLOWED_EXTENSIONS:
             return False, 'Unsupported file extension: {}'.format(ext)
-        print('Extension:', ext)
         return True, ext
 
     @staticmethod
