@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en" style="height: 100%;">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Privacy Policy - Stat_Line</title>
+        <link rel="icon" href="{{ url_for('static', filename='resources/favicon.ico') }}" type="image/x-icon">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+
+        <style>
+            h1, h2, h3 {
+                margin-top: 0.5rem;
+                font-family: 'Graduate';
+                color: var(--text-primary)
+            }
+
+            p {
+                color: var(--text-secondary);
+                font-family: 'Cambria', monospace;
+                line-height: 1.6;
+                text-indent: 0;
+            }
+
+            ul {
+                padding-left: 1.5rem;
+            }
+
+            li {
+                margin-bottom: 0.5rem;
+                font-family: 'Cambria', monospace;
+                color: var(--text-secondary);
+            }
+        </style>
+    </head>
+    <body onload="loadNavbar(); loadFooter();">
+        <div id="navbar-placeholder"></div>
+
+        <main class="main-content">
+            <div class="bubble">
+                <section class="terms-section">
+                    <h2>Privacy Policy</h2>
+                    <p>Last updated: May 2026</p>
+                    <p>This Privacy Policy describes how Stat_Line ("we", "us", or "our") collects, uses, and stores information when you use our service. By using Stat_Line, you agree to the practices described here.</p>
+
+                    <h3>1. Information We Collect</h3>
+                    <p>We collect the following types of information:</p>
+                    <ul>
+                        <li><strong>Account information:</strong> Your email address and school or organization name when you register.</li>
+                        <li><strong>Roster data:</strong> Player names, birthdays, heights, and weights entered by coaches. This data may include players under 18 years of age.</li>
+                        <li><strong>Game and pitch data:</strong> Statistical data uploaded from Trackman and similar systems, including pitch metrics and game logs.</li>
+                        <li><strong>Payment information:</strong> Billing is processed by Stripe. We do not store your credit card number or payment credentials — only a subscription status returned by Stripe.</li>
+                    </ul>
+
+                    <h3>2. How We Use Your Information</h3>
+                    <ul>
+                        <li>To provide and operate the Stat_Line service for your school or organization.</li>
+                        <li>To process subscription payments via Stripe.</li>
+                        <li>To generate pitcher reports and analytics.</li>
+                        <li>To monitor site performance using Google Search Console (aggregated, non-identifying search data only).</li>
+                    </ul>
+
+                    <h3>3. Data Sharing</h3>
+                    <p>We do not sell, trade, or rent your data to third parties. Data is shared only with:</p>
+                    <ul>
+                        <li><strong>Stripe</strong> — for payment processing. See <a href="https://stripe.com/privacy" target="_blank" style="color: var(--secondary);">Stripe's Privacy Policy</a>.</li>
+                        <li><strong>Railway</strong> — our hosting provider, where all data is stored on US-based servers.</li>
+                    </ul>
+
+                    <h3>4. Data Storage and Security</h3>
+                    <p>All data is stored on servers located in the United States via Railway. We take reasonable technical measures to protect your data, but no system is completely secure and we cannot guarantee absolute security.</p>
+
+                    <h3>5. Minor Athletes</h3>
+                    <p>Roster data uploaded to Stat_Line may include players under 18 years of age. This data (names, birthday, height, weight) is entered directly by authorized coaches and is used solely to provide the service to their school. We do not knowingly collect personal information from minors for any purpose beyond operating the service for their institution.</p>
+
+                    <h3>6. Data Retention</h3>
+                    <p>Your data is retained while your account is active. If you cancel your subscription or your account is inactive for an extended period, your data may be deleted. You may request deletion of your account and associated data at any time by contacting us.</p>
+
+                    <h3>7. Your Rights</h3>
+                    <p>You may request access to, correction of, or deletion of your data at any time by contacting us at the address below. We will respond within a reasonable timeframe.</p>
+
+                    <h3>8. Changes to This Policy</h3>
+                    <p>We may update this Privacy Policy from time to time. Changes will be posted on this page with an updated date. Continued use of the service after changes are posted constitutes your acceptance.</p>
+
+                    <h3>9. Contact</h3>
+                    <p>If you have any questions about this Privacy Policy, please contact us at thomas.eubank516@gmail.com.</p>
+                </section>
+            </div>
+        </main>
+
+        <div id="footer-placeholder"></div>
+
+        <script src="{{ url_for('static', filename='js/core.js') }}"></script>
+    </body>
+</html>

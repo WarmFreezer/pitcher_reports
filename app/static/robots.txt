@@ -1,0 +1,14 @@
+# Academic or research crawlers: contact thomas.eubank516@gmail.com for access arrangements.
+
+User-agent: *
+Allow: /
+Allow: /about
+Allow: /terms
+Allow: /privacy
+
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /upload
+Disallow: /account
+Disallow: /subscription
+Disallow: /storage/

@@ -1,0 +1,6 @@
+Contact: mailto:thomas.eubank516@gmail.com
+Expires: 2027-05-28T00:00:00.000Z
+Preferred-Languages: en
+Scope: https://stat-line.app
+Policy: Please report any security vulnerabilities responsibly by emailing the contact address above. 
+We will respond within a reasonable timeframe.

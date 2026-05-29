@@ -11,7 +11,7 @@ Purpose: Generates pitcher performance reports from game datasets exported from 
 '''
 
 import os
-from flask import Flask, send_from_directory
+from flask import Flask, send_from_directory, render_template
 from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_login import LoginManager, current_user
@@ -71,6 +71,22 @@ def inject_branding():
 @app.route('/favicon.ico')
 def favicon():
     return send_from_directory(os.path.join(app.static_folder, 'resources'), 'favicon.ico', mimetype='image/x-icon')
+
+@app.route('/robots.txt')
+def robots():
+    return send_from_directory(app.static_folder, 'robots.txt', mimetype='text/plain')
+
+@app.route('/.well-known/security.txt')
+def security():
+    return send_from_directory(app.static_folder, 'security.txt', mimetype='text/plain')
+
+@app.errorhandler(404)
+def not_found(e):
+    return render_template('404.html'), 404
+
+@app.errorhandler(500)
+def server_error(e):
+    return render_template('500.html'), 500
 
 @app.route('/storage/schools/<school_slug>/assets/<path:filename>')
 def school_files(school_slug, filename):

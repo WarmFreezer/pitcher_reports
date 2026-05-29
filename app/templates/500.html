@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en" style="height: 100%;">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>500 - Server Error</title>
+        <link rel="icon" href="{{ url_for('static', filename='resources/favicon.ico') }}" type="image/x-icon">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+        <style>
+            .error-box {
+                text-align: center;
+                padding: 48px 24px;
+            }
+            .error-code {
+                font-size: 6rem;
+                font-family: 'Graduate', serif;
+                color: var(--accent);
+                margin: 0;
+                line-height: 1;
+            }
+            .error-msg {
+                font-size: 1.25rem;
+                color: var(--text-secondary);
+                margin: 16px 0 32px;
+            }
+        </style>
+    </head>
+    <body onload="loadNavbar(); loadFooter();">
+        <div id="navbar-placeholder"></div>
+
+        <main class="main-content">
+            <div class="bubble error-box">
+                <p class="error-code">500</p>
+                <p class="error-msg">Something went wrong on our end. Please try again in a moment.</p>
+                <a style="color: white; margin-left: 16px; font-family: 'Cambria', serif;" href="/" class="btn">Go Home</a>
+            </div>
+        </main>
+
+        <div id="footer-placeholder"></div>
+        <script src="{{ url_for('static', filename='js/core.js') }}"></script>
+    </body>
+</html>

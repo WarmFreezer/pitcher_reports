@@ -193,6 +193,7 @@ function loadFooter() {
             <br>
             <a href=/about style="color: white; font-family: 'Cambria', serif;">About</a>
             <a href=/terms style="color: white; margin-left: 16px; font-family: 'Cambria', serif;">Terms</a>
+            <a href=/privacy style="color: white; margin-left: 16px; font-family: 'Cambria', serif;">Privacy Policy</a>
         </footer>
     `;
     document.getElementById('footer-placeholder').innerHTML = footerHTML;

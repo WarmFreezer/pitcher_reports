@@ -125,6 +125,11 @@ def terms():
     return render_template('terms.html')
 
 
+@pages_bp.route('/privacy')
+def privacy():
+    return render_template('privacy.html')
+
+
 @pages_bp.route('/sitemap.xml')
 def sitemap():
     base = request.host_url.rstrip('/')
