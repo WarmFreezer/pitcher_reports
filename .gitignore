@@ -9,5 +9,4 @@ instance/pitcher_reports.db
 .env
 instance/pitcher_reports.db-shm
 instance/pitcher_reports.db-wal
-migrations/
 CLAUDE.md
