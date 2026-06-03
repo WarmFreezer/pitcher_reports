@@ -10,8 +10,8 @@
     table-layout: auto;
 }
 
-.pitcher-data-table { margin: 20px 0; }
-.pitch-usage-table  { margin: 10px 0; }
+.pitcher-data-table { margin: 0 0; }
+.pitch-usage-table  { margin: 0 0; }
 
 .table-scroll {
     overflow-x: auto;
@@ -23,7 +23,7 @@
 .table-section {
     border-radius: 10px;
     overflow: hidden;
-    margin: 8px 0;
+    margin: 0;
 }
 
 .pitcher-usage-panel {

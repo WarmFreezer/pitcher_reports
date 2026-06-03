@@ -287,7 +287,7 @@ def pitch_heat_map_by_batter_side(source, id, output_path, pitcher_id, threshold
                         cmap = pitch_colors.get(pitch_type, 'viridis')
                         point_color = pitch_point_colors.get(pitch_type, '#000000')
 
-                        if len(pitch_data) >= 5:
+                        if len(pitch_data) >= 8:
                             bw_adjust = 1.5 if len(pitch_data) < 20 else 1.0
                             point_color = pitch_point_colors.get(pitch_type, '#000000')
                             sns.kdeplot(

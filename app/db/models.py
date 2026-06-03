@@ -124,7 +124,6 @@ class Outing_Pitch_Stat(db.Model):
     sw_percentage = db.Column(db.Float, nullable=True)
     sw_miss_count = db.Column(db.Float, nullable=True)
     sw_miss_percentage = db.Column(db.Float, nullable=True)
-    ip_count = db.Column(db.Float, nullable=True)
     
     low_quartile_speed = db.Column(db.Float, nullable=True)
     median_speed = db.Column(db.Float, nullable=True)

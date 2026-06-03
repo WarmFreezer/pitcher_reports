@@ -16,24 +16,33 @@ depends_on = None
 
 
 def upgrade():
+    import sqlalchemy as sa_inspect
+    bind = op.get_bind()
+    inspector = sa_inspect.inspect(bind)
+
+    # Drop unique constraint on outings.content_hash (skip if not present — SQLite may not store it by name)
+    outings_constraints = {c['name'] for c in inspector.get_unique_constraints('outings')}
+    if 'uq_outings_content_hash' in outings_constraints:
+        with op.batch_alter_table('outings') as batch_op:
+            batch_op.drop_constraint('uq_outings_content_hash', type_='unique')
+
     # Clear existing pitch stats — outing_id cannot be backfilled
     op.execute('DELETE FROM outing_pitch_stats')
 
-    # Drop FK from outing_pitch_stats.outing_content_hash -> outings.content_hash
-    op.drop_constraint('outing_pitch_stats_outing_content_hash_fkey', 'outing_pitch_stats', type_='foreignkey')
-
-    # Drop unique constraint on outings.content_hash (multiple pitchers share a game file)
-    op.drop_constraint('uq_outings_content_hash', 'outings', type_='unique')
-
-    # Replace outing_content_hash with outing_id FK to outings.id
-    op.drop_column('outing_pitch_stats', 'outing_content_hash')
-    op.add_column('outing_pitch_stats', sa.Column('outing_id', sa.Integer(), nullable=False))
-    op.create_foreign_key('outing_pitch_stats_outing_id_fkey', 'outing_pitch_stats', 'outings', ['outing_id'], ['id'])
+    # Swap outing_content_hash for outing_id FK
+    pitch_stat_cols = {c['name'] for c in inspector.get_columns('outing_pitch_stats')}
+    with op.batch_alter_table('outing_pitch_stats') as batch_op:
+        if 'outing_content_hash' in pitch_stat_cols:
+            batch_op.drop_column('outing_content_hash')
+        if 'outing_id' not in pitch_stat_cols:
+            batch_op.add_column(sa.Column('outing_id', sa.Integer(), nullable=False))
+            batch_op.create_foreign_key('outing_pitch_stats_outing_id_fkey', 'outings', ['outing_id'], ['id'])
 
 
 def downgrade():
-    op.drop_constraint('outing_pitch_stats_outing_id_fkey', 'outing_pitch_stats', type_='foreignkey')
-    op.drop_column('outing_pitch_stats', 'outing_id')
-    op.add_column('outing_pitch_stats', sa.Column('outing_content_hash', sa.String(length=200), nullable=False))
-    op.create_foreign_key('outing_pitch_stats_outing_content_hash_fkey', 'outing_pitch_stats', 'outings', ['outing_content_hash'], ['content_hash'])
-    op.create_unique_constraint('uq_outings_content_hash', 'outings', ['content_hash'])
+    with op.batch_alter_table('outing_pitch_stats') as batch_op:
+        batch_op.drop_column('outing_id')
+        batch_op.add_column(sa.Column('outing_content_hash', sa.String(length=200), nullable=False))
+
+    with op.batch_alter_table('outings') as batch_op:
+        batch_op.create_unique_constraint('uq_outings_content_hash', ['content_hash'])

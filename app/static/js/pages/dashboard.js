@@ -36,7 +36,7 @@ function renderTeamOverview(pitchers) {
         </tr>
         <tr id="pitch-types-${i}" class="dropdown-row" style="display: none;">
             <td colspan="6" style="padding: 0;">
-                <div id="pitch-types-content-${i}" style="padding: 4px 8px 8px 8px;">
+                <div id="pitch-types-content-${i}" style="padding: 0 8px 8px 8px;">
                     <p style="color: var(--text-secondary);">Loading...</p>
                 </div>
             </td>
@@ -44,7 +44,7 @@ function renderTeamOverview(pitchers) {
     `).join('');
 
     container.innerHTML = `
-        <div class="table-section" style="margin-top: 8px;">
+        <div class="table-section">
             <div class="table-scroll">
                 <table class="pitcher-data-table">
                     <thead>
@@ -81,7 +81,7 @@ async function togglePitchTypes(index, pitcherId) {
             const res = await fetch(`/api/pitcher/${pitcherId}/averages`);
             const data = await res.json();
             if (res.ok && data.length) {
-                content.innerHTML = renderPitchTypeTable(data);
+                content.innerHTML = renderPitchTypeTable(data, pitcherId);
             } else {
                 content.innerHTML = '<p style="color: var(--text-secondary);">No pitch data.</p>';
             }
@@ -91,7 +91,7 @@ async function togglePitchTypes(index, pitcherId) {
     }
 }
 
-function renderPitchTypeTable(pitchTypes) {
+function renderPitchTypeTable(pitchTypes, pitcherId) {
     const rows = pitchTypes.map(pt => `
         <tr>
             <td>${pt.pitch_type}</td>
@@ -103,6 +103,9 @@ function renderPitchTypeTable(pitchTypes) {
         </tr>
     `).join('');
     return `
+        <div style="display: flex; justify-content: flex-end;">
+            <a href="/api/pitcher/${pitcherId}/averages/download" class="download-btn-small">Download Excel</a>
+        </div>
         <div class="table-section">
             <div class="table-scroll">
                 <table class="pitcher-data-table">

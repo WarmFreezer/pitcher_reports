@@ -97,7 +97,7 @@
     cursor: pointer;
 }
 
-.download-btn { margin: 10px 0; }
+.download-btn { margin: 4px; }
 .upload-btn   { margin: 8px 0; }
 
 .download-btn:hover,
@@ -133,6 +133,7 @@
     transition: background-color 0.3s;
     border: none;
     cursor: pointer;
+    margin: 4px;
 }
 
 .download-btn-small:hover {

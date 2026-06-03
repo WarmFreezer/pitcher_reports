@@ -1,6 +1,8 @@
+import io
 from datetime import date
 from flask import Blueprint, render_template, redirect, url_for, jsonify, session, request, make_response
 from flask_login import login_required, current_user
+from openpyxl import Workbook
 from sqlalchemy import func
 
 from app.db.models import db
@@ -66,6 +68,69 @@ def team_overview():
 
     return jsonify(results)
 
+
+@pages_bp.route('/api/team/overview/download')
+@login_required
+def team_overview_download():
+    rows = db.session.query(
+        models.Pitcher.name.label("pitcher_name"),
+        func.sum(models.Outing.pitch_count).label("total_pitches"),
+        func.sum(models.Outing.lo_inning_count).label("lo_inning_count"),
+        func.sum(models.Outing.lo_reach).label("lo_reach"),
+        (func.sum(models.Outing.lo_reach) / func.nullif(func.sum(models.Outing.lo_inning_count), 0)).label("lo_obp"),
+        func.sum(models.Outing.lo_bb_count).label("lo_bb_count"),
+        (func.sum(models.Outing.lo_bb_count) / func.nullif(func.sum(models.Outing.lo_inning_count), 0)).label("lo_bb_pct"),
+        func.sum(models.Outing.two_out_ab_count).label("two_out_ab_count"),
+        func.sum(models.Outing.two_out_reach).label("two_out_reach"),
+        (func.sum(models.Outing.two_out_reach) / func.nullif(func.sum(models.Outing.two_out_ab_count), 0)).label("two_out_eff_pct"),
+        func.sum(models.Outing.two_out_bb_count).label("two_out_bb_count"),
+        (func.sum(models.Outing.two_out_bb_count) / func.nullif(func.sum(models.Outing.two_out_ab_count), 0)).label("two_out_bb_pct"),
+    ).join(models.Outing, models.Outing.pitcher_id == models.Pitcher.id
+    ).filter(
+        models.Pitcher.school_id == current_user.school_id
+    ).group_by(
+        models.Pitcher.id, models.Pitcher.name
+    ).all()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Team Overview"
+    ws.append([
+        'Pitcher', 'Pitches',
+        'LO Innings', 'LO Reach', 'LO OBP', 'LO BB Count', 'LO BB%',
+        '2-Out AB', '2-Out Reach', '2-Out Eff%', '2-Out BB Count', '2-Out BB%',
+    ])
+    for row in rows:
+        def pct(v):
+            return round(float(v) * 100, 1) if v is not None else None
+        def dec(v, d=3):
+            return round(float(v), d) if v is not None else None
+        ws.append([
+            row.pitcher_name,
+            row.total_pitches,
+            row.lo_inning_count,
+            row.lo_reach,
+            dec(row.lo_obp),
+            row.lo_bb_count,
+            pct(row.lo_bb_pct),
+            row.two_out_ab_count,
+            row.two_out_reach,
+            pct(row.two_out_eff_pct),
+            row.two_out_bb_count,
+            pct(row.two_out_bb_pct),
+        ])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    school = current_user.school.slug.upper()
+    response = make_response(buf.read())
+    response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    response.headers['Content-Disposition'] = f'attachment; filename="{school}_team_overview.xlsx"'
+    return response
+
+
 @pages_bp.route('/api/pitcher/<int:pitcher_id>/averages')
 @login_required
 def pitcher_averages(pitcher_id):
@@ -80,7 +145,6 @@ def pitcher_averages(pitcher_id):
         (func.sum(models.Outing_Pitch_Stat.strike_count) / func.nullif(func.sum(models.Outing_Pitch_Stat.count), 0)).label("strike_percentage"),
         (func.sum(models.Outing_Pitch_Stat.sw_miss_count) / func.nullif(func.sum(models.Outing_Pitch_Stat.count), 0)).label("sw_percentage"),
         (func.sum(models.Outing_Pitch_Stat.sw_miss_count) / func.nullif(func.sum(models.Outing_Pitch_Stat.sw_percentage * models.Outing_Pitch_Stat.count), 0)).label("sw_miss_percentage"),
-        (func.sum(models.Outing_Pitch_Stat.ip_count) / func.nullif(func.sum(models.Outing_Pitch_Stat.count), 0)).label("ip_percentage"),
         func.avg(models.Outing_Pitch_Stat.low_quartile_speed).label("avg_low_quartile_speed"),
         func.avg(models.Outing_Pitch_Stat.median_speed).label("avg_median_speed"),
         func.avg(models.Outing_Pitch_Stat.high_quartile_speed).label("avg_high_quartile_speed"),
@@ -99,13 +163,75 @@ def pitcher_averages(pitcher_id):
         'strike_percentage':     row.strike_percentage,
         'sw_percentage':         row.sw_percentage,
         'sw_miss_percentage':    row.sw_miss_percentage,
-        'ip_percentage':         row.ip_percentage,
         'avg_low_quartile_speed': row.avg_low_quartile_speed,
         'avg_median_speed':      row.avg_median_speed,
         'avg_high_quartile_speed': row.avg_high_quartile_speed,
     } for row in rows]
 
     return jsonify(results)
+
+
+@pages_bp.route('/api/pitcher/<int:pitcher_id>/averages/download')
+@login_required
+def pitcher_averages_download(pitcher_id):
+    pitcher = db.session.get(models.Pitcher, pitcher_id)
+    if not pitcher or pitcher.school_id != current_user.school_id:
+        return jsonify({'error': 'Not found'}), 404
+
+    rows = db.session.query(
+        models.Pitch_Types.abbreviation.label("pitch_type"),
+        func.sum(models.Outing_Pitch_Stat.count).label("tot_count"),
+        func.sum(models.Outing_Pitch_Stat.strike_count).label("tot_strike_count"),
+        (func.sum(models.Outing_Pitch_Stat.strike_count) / func.nullif(func.sum(models.Outing_Pitch_Stat.count), 0)).label("strike_pct"),
+        (func.sum(models.Outing_Pitch_Stat.sw_miss_count) / func.nullif(func.sum(models.Outing_Pitch_Stat.count), 0)).label("sw_pct"),
+        func.sum(models.Outing_Pitch_Stat.sw_miss_count).label("tot_sw_miss_count"),
+        (func.sum(models.Outing_Pitch_Stat.sw_miss_count) / func.nullif(func.sum(models.Outing_Pitch_Stat.sw_percentage * models.Outing_Pitch_Stat.count), 0)).label("sw_miss_pct"),
+        func.avg(models.Outing_Pitch_Stat.low_quartile_speed).label("avg_low_quartile_speed"),
+        func.avg(models.Outing_Pitch_Stat.median_speed).label("avg_median_speed"),
+        func.avg(models.Outing_Pitch_Stat.high_quartile_speed).label("avg_high_quartile_speed"),
+    ).join(models.Pitch_Types, models.Outing_Pitch_Stat.pitch_type_id == models.Pitch_Types.id
+    ).filter(
+        models.Outing_Pitch_Stat.pitcher_id == pitcher_id
+    ).group_by(
+        models.Outing_Pitch_Stat.pitch_type_id,
+        models.Pitch_Types.abbreviation
+    ).all()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = pitcher.name[:31]
+    ws.append([
+        'Pitch', 'Count', 'Strike Count', 'Strike%', 'Swing%', 'Whiff Count', 'Whiff%',
+        'Velo Low', 'Velo Med', 'Velo Hi',
+    ])
+    for row in rows:
+        def pct(v):
+            return round(float(v) * 100, 1) if v is not None else None
+        def velo(v):
+            return round(float(v), 1) if v is not None else None
+        ws.append([
+            row.pitch_type,
+            row.tot_count,
+            row.tot_strike_count,
+            pct(row.strike_pct),
+            pct(row.sw_pct),
+            row.tot_sw_miss_count,
+            pct(row.sw_miss_pct),
+            velo(row.avg_low_quartile_speed),
+            velo(row.avg_median_speed),
+            velo(row.avg_high_quartile_speed),
+        ])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    school = current_user.school.slug.upper()
+    safe_name = pitcher.name.replace(' ', '_')
+    response = make_response(buf.read())
+    response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    response.headers['Content-Disposition'] = f'attachment; filename="{school}_{safe_name}_pitches.xlsx"'
+    return response
 
 
 @pages_bp.route('/upload')

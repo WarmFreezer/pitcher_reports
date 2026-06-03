@@ -23,6 +23,14 @@ from app.db import models
 STRIKES  =  ['StrikeCalled', 'StrikeSwinging', 'FoulBallNotFieldable']
 SWINGS  =  ['StrikeSwinging', 'FoulBallNotFieldable', 'InPlay']
 
+def _reach(source):
+    return_me = source[
+        source['KorBB'].isin(['Walk', 'HitByPitch']) |
+        source['PlayResult'].isin(['Single', 'Double', 'Triple', 'HomeRun', 'Error'])
+    ]
+
+    return return_me
+
 def _native(val):
     return val.item() if hasattr(val, 'item') else val
 
@@ -50,6 +58,21 @@ def update_pitcher(pitcher_id, **kwargs):
         db.session.commit()
 
 def add_outing(pitcher_id, date, content_hash, is_home, pitch_count, source):
+    lead_off_df = source[source['Outs'] == 0]
+    two_outs_df = source[source['Outs'] == 2]
+
+    lo_inning_count = source[source['Outs'] == 0]['Inning'].nunique()
+    lo_reach = len(_reach(source[source['Outs'] == 0]))
+    lo_obp = lo_reach / lo_inning_count if lo_inning_count > 0 else 0
+    lo_bb_count = lead_off_df['KorBB'].isin(['Walk']).sum()
+    lo_bb_percentage = lo_bb_count / lo_inning_count * 100 if lo_inning_count > 0 else 0
+
+    two_out_ab_count = len(two_outs_df)
+    two_out_reach = len(_reach(source[source['Outs'] == 2]))
+    two_out_eff_percentage = (two_out_ab_count - two_out_reach) / two_out_ab_count * 100 if two_out_ab_count > 0 else 0
+    two_out_bb_count = two_outs_df['KorBB'].isin(['Walk']).sum()
+    two_out_bb_percentage = two_out_bb_count / two_out_ab_count * 100 if two_out_ab_count > 0 else 0
+
     new_outing  =  models.Outing(
         pitcher_id = pitcher_id, 
         date = date, 
@@ -57,18 +80,19 @@ def add_outing(pitcher_id, date, content_hash, is_home, pitch_count, source):
         is_home = is_home, 
         pitch_count = pitch_count, 
         opponent = source['BatterTeam'].mode().iloc[0],
-        
-        lo_inning_count = 0,
-        lo_reach = 0,
-        lo_obp = 0,
-        lo_bb_count = 0,
-        lo_bb_percentage = 0,
-        
-        two_out_ab_count = 0,
-        two_out_reach = 0,
-        two_out_eff_percentage = 0,
-        two_out_bb_count = 0,
-        two_out_bb_percentage = 0)
+
+        lo_inning_count = _native(lo_inning_count),
+        lo_reach = _native(lo_reach),
+        lo_obp = _native(lo_obp),
+        lo_bb_count = _native(lo_bb_count),
+        lo_bb_percentage = _native(lo_bb_percentage),
+
+        two_out_ab_count = _native(two_out_ab_count),
+        two_out_reach = _native(two_out_reach),
+        two_out_eff_percentage = _native(two_out_eff_percentage),
+        two_out_bb_count = _native(two_out_bb_count),
+        two_out_bb_percentage = _native(two_out_bb_percentage)
+    )
     db.session.add(new_outing)
     db.session.flush()
     return new_outing.id
@@ -110,7 +134,6 @@ def add_outing_pitch_stats(pitcher_id, outing_id, source):
             sw_percentage = _native(pitch_data['PitchCall'].isin(SWINGS).sum()/count*100),
             sw_miss_count = _native((pitch_data['PitchCall'] == 'StrikeSwinging').sum()),
             sw_miss_percentage = _native((pitch_data['PitchCall'] == 'StrikeSwinging').sum()/count*100),
-            ip_count = 0,
             low_quartile_speed = _native(low_quartile_speed),
             median_speed = _native(median_speed),
             high_quartile_speed = _native(high_quartile_speed)
@@ -150,7 +173,7 @@ def add_report(school_id, trackman_id, file):
                 outing_id,
                 pitcher_data)
 
-            db.session.commit()
+            db.session.commit() 
     else: 
         print("Report with this content hash already exists. No new data added.")
 
