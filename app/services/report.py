@@ -59,6 +59,10 @@ def _make_shadow_zone():
         1.66 + 2 * baseball_width, 2.0 + 2 * baseball_width,
         linewidth=1, edgecolor=matplotlib.rcParams['xtick.color'], facecolor='none', linestyle=(0, (1, 10)))
 
+def _make_homeplate():
+    return patches.Polygon([(-0.35, 0.025), (0.35, 0.025), (0.35, 0.45), (0, 0.8), (-0.35, 0.45)],
+        linewidth=1, edgecolor=matplotlib.rcParams['xtick.color'], facecolor='none', linestyle='-')
+
 def _cmap(hex_color, name):
     # Build a transparency gradient from fully transparent to the pitch color,
     # so overlapping KDE fills blend cleanly on the white plot background
@@ -331,6 +335,7 @@ def pitch_heat_map_by_batter_side(source, id, output_path, pitcher_id, threshold
                     ax.set_aspect('equal', adjustable='box')
                     ax.add_patch(_make_strike_zone())
                     ax.add_patch(_make_shadow_zone())
+                    ax.add_patch(_make_homeplate())
 
                 side_label = batter_side.lower()
                 fig.subplots_adjust(left=0.1, right=0.96, top=0.88, bottom=0.1)

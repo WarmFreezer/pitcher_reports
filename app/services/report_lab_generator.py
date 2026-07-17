@@ -117,7 +117,7 @@ class PDF_Generator:
             ),
         }
 
-    def generate_header(self, player_pfp: str, pitcher_name: str, school_logo: str, game_date: str, home_team: str, away_team: str) -> list:
+    def generate_header(self, player_pfp: str, pitcher_name: str, school_logo: str, game_date: str, home_team: str, away_team: str, pitcher_height: str = '', pitcher_weight: str = '', age: int = None) -> list:
         """
         Generate document header with pitcher info and game details.
 
@@ -128,6 +128,9 @@ class PDF_Generator:
             game_date: Game date in MM/DD/YYYY format
             home_team: Home team name
             away_team: Away team name
+            pitcher_height: Pitcher's height
+            pitcher_weight: Pitcher's weight
+            age: Pitcher's age
             
         Returns:
             List of document elements for the header
@@ -139,6 +142,7 @@ class PDF_Generator:
             Paragraph(f"<b>{pitcher_name}</b>", self.styles["title"]),
             Spacer(1, 0.05 * inch),
             Paragraph(f"{game_date} | {home_team} @ {away_team}", self.styles["subtitle"]),
+            Paragraph(f"{pitcher_height} {f'| {pitcher_weight}' if pitcher_weight else ''} {f'| {age}' if age else ''}", self.styles["subtitle"]),
         ]
         
         def _fit_image(path, box=1*inch):
@@ -529,6 +533,9 @@ class PDF_Generator:
                   - date: str (MM/DD/YYYY)
                   - home_team: str
                   - away_team: str
+                  - pitcher_height: str
+                  - pitcher_weight: str
+                  - pitcher_age: int
                   - pitch_stats: pandas DataFrame with pitch statistics
                   - pitch_usage_left: pandas DataFrame for left-handed batters usage
                   - pitch_usage_right: pandas DataFrame for right-handed batters usage
@@ -579,7 +586,10 @@ class PDF_Generator:
             self.school_logo,
             data.get('date', ''),
             data.get('home_team', ''),
-            data.get('away_team', '')
+            data.get('away_team', ''),
+            data.get('pitcher_height', ''),
+            data.get('pitcher_weight', ''),
+            data.get('pitcher_age', '')
         ))
         # Add pitch heatmap images (left and right) below header
         half_width = (self.PAGE_W - 2 * self.MARGIN - 0.2 * inch) / 2

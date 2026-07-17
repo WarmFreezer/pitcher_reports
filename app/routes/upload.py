@@ -2,10 +2,12 @@ import gc
 import os
 import glob
 import pandas as pd
+from datetime import date, datetime
 from werkzeug.utils import secure_filename
 from flask import Blueprint, request, jsonify, current_app
 from flask_login import login_required, current_user
 
+from app.db import models
 from app.services import report, report_lab_generator, file_validator
 from app.services.branding_loader import BrandingLoader
 from app.services.report_lab_generator import PDF_Generator, merge_pdfs
@@ -15,6 +17,12 @@ upload_bp = Blueprint('upload_api', __name__)
 
 required_columns = report.required_columns
 
+def calculate_age(birthdate):
+    if birthdate is None:
+        return None
+    today = datetime.today()
+    age = today.year - birthdate.year - ((today.month, today.day) < (birthdate.month, birthdate.day))
+    return age
 
 @upload_bp.route('/api/upload', methods=['POST'])
 @login_required
@@ -154,12 +162,28 @@ def upload_file():
                     'pdf_url': f'/storage/schools/{current_user.school.slug}/reports/{current_user.id}_pitcher_{pitcher_id}_report.pdf'
                 })
 
+                pitcher = models.Pitcher.query.filter_by(trackman_id=str(pitcher_id), school_id=current_user.school_id).first()
+            
+                if pitcher is None: 
+                    height = ''
+                    weight = ''
+                    birthdate = ''
+                else: 
+                    height = pitcher.height if pitcher.height else ''
+                    weight = pitcher.weight if pitcher.weight else ''
+                    birthdate = pitcher.birthdate if pitcher.birthdate else ''
+
+                age = calculate_age(birthdate) if birthdate else None
+
                 gen.generate_pitcher_report({
                     'pitcher_name': table_data[3],
                     'pitcher_id': str(pitcher_id),
                     'date': date,
                     'home_team': home_team,
                     'away_team': away_team,
+                    'pitcher_height': height,
+                    'pitcher_weight': weight,
+                    'pitcher_age': age,
                     'pitch_stats': table_data[4],
                     'pitch_usage_left': pitch_usage_data[0],
                     'pitch_usage_right': pitch_usage_data[1],
