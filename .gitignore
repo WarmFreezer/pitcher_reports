@@ -10,3 +10,5 @@ instance/pitcher_reports.db
 instance/pitcher_reports.db-shm
 instance/pitcher_reports.db-wal
 CLAUDE.md
+.pytest_cache/
+.coverage

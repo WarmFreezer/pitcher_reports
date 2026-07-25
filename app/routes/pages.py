@@ -135,7 +135,7 @@ def team_overview_download():
 @login_required
 def pitcher_averages(pitcher_id):
     pitcher = db.session.get(models.Pitcher, pitcher_id)
-    if not pitcher:
+    if not pitcher or pitcher.school_id != current_user.school_id:
         return jsonify({'error': 'Pitcher not found'}), 404
 
     rows = db.session.query(

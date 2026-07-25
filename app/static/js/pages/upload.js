@@ -88,6 +88,7 @@ async function handleFileSelect(event) {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('target', document.getElementById('targetToggle')?.checked ? 'opponent' : 'own');
+    formData.append('statType', document.getElementById('statTypeToggle')?.checked ? 'pitcher' : 'hitter');
 
     const minDisplay = 600;
 
@@ -142,7 +143,17 @@ async function handleFileSelect(event) {
 
 // Build all reports from array of report data
 function buildAllReports(reports) {
-    reports.forEach(reportData => generateReport(reportData));
+    reports.forEach(reportData => {
+        if (reportData.statType === 'pitcher') {
+            generateReport(reportData);
+        } else {
+            generateHitterReport(reportData);
+        }
+    });
+}
+
+function generateHitterReport(data) {
+    //Stub function for future hitter report generation
 }
 
 // Stamps one pitcher's data into the hidden <template> element and appends the clone to the output area
