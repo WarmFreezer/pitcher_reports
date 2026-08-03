@@ -1,97 +1,525 @@
+'''
+Hitting analysis built from raw TrackMan rows.
+
+Unlike the pitcher module this is fed by app.services.game_archive.load_range, so the
+incoming frame usually spans several games. Nothing here assumes a single game; the
+only per-row requirement is the TrackMan schema below.
+'''
+
 import os
+
 import numpy as np
 import pandas as pd
-import seaborn as sns
 import matplotlib
 
-from app.services.plot_theme import (
-    baseball_width,
+from app.services.report_theme import (
+    EV_MAX_MPH,
+    EV_MIN_MPH,
     THEME_COLORS,
-    make_strike_zone,
-    make_shadow_zone,
-    make_homeplate,
-    cmap,
+    ev_colormap,
+    in_zone,
     pitch_order,
-    pitch_point_colors
 )
 
 from matplotlib import pyplot as plt
+from matplotlib.cm import ScalarMappable
+from matplotlib.colors import Normalize
+from matplotlib.lines import Line2D
+
+# Launch-angle ceilings, in order, defining batted-ball buckets
+hit_types = {
+    'Ground': 10,
+    'Line': 25,
+    'Fly': 50,
+    'Pop': 180,
+}
+
+hit_types_markers = {
+    'Ground': 'o',     # Circle
+    'Line': '*',       # Star
+    'Fly': 'X',        # X
+    'Pop': 'P',        # Filled plus
+}
+
+# TrackMan writes fouls as FoulBallNotFieldable or FoulBallFieldable depending on
+# export version, and older files just say FoulBall -- match on the prefix so whiff
+# and swing rates stay correct across all three.
+FOUL_PREFIX = 'Foul'
+SWING_CALLS = ['StrikeSwinging', 'InPlay']
+HIT_RESULTS = ['Single', 'Double', 'Triple', 'HomeRun']
+TOTAL_BASES = {'Single': 1, 'Double': 2, 'Triple': 3, 'HomeRun': 4}
+
+HARD_HIT_MPH = 95.0
 
 # Define required columns and their types
 required_columns = {
-    'Batter': 'string', 
-    'BatterId': 'numeric', 
-    'TaggedPitchType': 'string', 
-    'PlateLocHeight': 'numeric', 
-    'PlateLocSide': 'numeric', 
-    'PitcherSide': 'string',
+    'Batter': 'string',
+    'BatterId': 'numeric',
+    'TaggedPitchType': 'string',
+    'PlateLocHeight': 'numeric',
+    'PlateLocSide': 'numeric',
+    'PitcherThrows': 'string',
     'PitchCall': 'string',
+    'PlayResult': 'string',
+    'KorBB': 'string',
     'PitcherTeam': 'string',
     'BatterTeam': 'string',
     'Date': 'string',
     'Inning': 'numeric',
     'Balls': 'numeric',
-    'Strikes': 'numeric'
+    'Strikes': 'numeric',
+    'ExitSpeed': 'numeric',
+    'Angle': 'numeric',
+    'Bearing': 'numeric',
+    'Distance': 'numeric',
 }
 
-def build_hitter_table(source, batter_id):
-    # placeholder
-    print(f"Building hitter table for batter_id: {batter_id} from source: {source}")
 
-def hitter_heat_map_by_pitcher_side(source, batter_id):
+def calculate_x_y_coordinates(magnitude, angle):
+    """
+    Polar TrackMan landing data to cartesian feet.
+
+    Bearing is degrees off centre field, negative toward the left-field line, so a
+    pulled ball from a right-handed hitter lands at negative x. Works on Series or
+    scalars.
+    """
+    angle_rad = np.radians(angle)
+    x = magnitude * np.sin(angle_rad)
+    y = magnitude * np.cos(angle_rad)
+    return x, y
+
+
+def calculate_marker(angle):
+    """Map a launch angle to its batted-ball marker. Scalar helper; plots use classify_hit_type."""
+    for hit_type, threshold in hit_types.items():
+        if angle <= threshold:
+            return hit_types_markers[hit_type]
+    return hit_types_markers['Pop']
+
+
+def classify_hit_type(angles):
+    """Vectorized launch angle to batted-ball bucket. Returns a Categorical."""
+    return pd.cut(
+        angles,
+        bins=[-np.inf] + list(hit_types.values()),
+        labels=list(hit_types.keys()),
+    )
+
+
+def _numeric(source, column):
+    """Column as float, or an all-NaN column when the export omitted it."""
+    if column not in source.columns:
+        return pd.Series(np.nan, index=source.index, dtype='float64')
+    return pd.to_numeric(source[column], errors='coerce')
+
+
+def _text(source, column):
+    if column not in source.columns:
+        return pd.Series('', index=source.index, dtype='object')
+    return source[column].fillna('').astype(str)
+
+
+def batter_rows(source, batter_id):
+    """Every pitch seen by one batter. Ids are compared numerically to dodge int/float/str drift."""
+    if source.empty or 'BatterId' not in source.columns:
+        return source.iloc[0:0]
+
+    ids = pd.to_numeric(source['BatterId'], errors='coerce')
+    try:
+        target = float(batter_id)
+    except (TypeError, ValueError):
+        return source.iloc[0:0]
+
+    return source[ids == target]
+
+
+def batter_name(source, batter_id):
+    rows = batter_rows(source, batter_id)
+    if rows.empty or 'Batter' not in rows.columns:
+        return str(batter_id)
+    names = rows['Batter'].dropna()
+    return str(names.iloc[0]) if not names.empty else str(batter_id)
+
+
+def _swings(pitch_calls):
+    return pitch_calls.isin(SWING_CALLS) | pitch_calls.str.startswith(FOUL_PREFIX)
+
+
+def build_hitter_summary(source, batter_id):
+    """
+    Slash line and batted-ball profile for one hitter, as a label -> display-string dict
+    suitable for PDF_Generator.generate_stats_grid and for direct rendering on the page.
+
+    A plate appearance ends on a strikeout, a walk, a hit by pitch, or a ball in play,
+    so those are the rows counted rather than every pitch seen.
+    """
+    rows = batter_rows(source, batter_id)
+    if rows.empty:
+        return {}
+
+    pitch_call = _text(rows, 'PitchCall')
+    play_result = _text(rows, 'PlayResult')
+    kor_bb = _text(rows, 'KorBB')
+
+    walks = int((kor_bb == 'Walk').sum())
+    strikeouts = int((kor_bb == 'Strikeout').sum())
+    hbp = int((pitch_call == 'HitByPitch').sum())
+    in_play = int((pitch_call == 'InPlay').sum())
+
+    plate_appearances = walks + strikeouts + hbp + in_play
+    sacrifices = int((play_result == 'Sacrifice').sum())
+
+    hits = int(play_result.isin(HIT_RESULTS).sum())
+    doubles = int((play_result == 'Double').sum())
+    triples = int((play_result == 'Triple').sum())
+    homers = int((play_result == 'HomeRun').sum())
+    total_bases = int(play_result.map(TOTAL_BASES).fillna(0).sum())
+
+    at_bats = plate_appearances - walks - hbp - sacrifices
+    on_base_chances = at_bats + walks + hbp + sacrifices
+
+    average = hits / at_bats if at_bats > 0 else 0.0
+    on_base = (hits + walks + hbp) / on_base_chances if on_base_chances > 0 else 0.0
+    slugging = total_bases / at_bats if at_bats > 0 else 0.0
+
+    batted = pitch_call == 'InPlay'
+    exit_speed = _numeric(rows, 'ExitSpeed')[batted].dropna()
+    launch_angle = _numeric(rows, 'Angle')[batted].dropna()
+    hard_hit = int((exit_speed >= HARD_HIT_MPH).sum())
+
+    def rate(value):
+        # Baseball convention drops the leading zero on sub-1.000 rate stats
+        return f"{value:.3f}".lstrip('0') if value < 1 else f"{value:.3f}"
+
+    return {
+        'PA': str(plate_appearances),
+        'AB': str(at_bats),
+        'H': str(hits),
+        'AVG': rate(average),
+        'OBP': rate(on_base),
+        'SLG': rate(slugging),
+        'OPS': rate(on_base + slugging),
+        '2B': str(doubles),
+        '3B': str(triples),
+        'HR': str(homers),
+        'BB%': f"{walks / plate_appearances * 100:.1f}%" if plate_appearances else '-',
+        'K%': f"{strikeouts / plate_appearances * 100:.1f}%" if plate_appearances else '-',
+        'Avg EV': f"{exit_speed.mean():.1f}" if not exit_speed.empty else '-',
+        'Max EV': f"{exit_speed.max():.1f}" if not exit_speed.empty else '-',
+        'Hard-Hit%': f"{hard_hit / len(exit_speed) * 100:.1f}%" if not exit_speed.empty else '-',
+        'Avg LA': f"{launch_angle.mean():.1f}" if not launch_angle.empty else '-',
+    }
+
+
+def build_hitter_discipline_table(source, batter_id):
+    """
+    Plate discipline per pitch type.
+
+    Whiff% is misses over swings and Chase% is swings over pitches outside the zone --
+    the standard denominators, which differ from the per-pitch rates report.build_table
+    uses for pitchers.
+    """
+    rows = batter_rows(source, batter_id)
+    if rows.empty:
+        return pd.DataFrame()
+
+    pitch_call = _text(rows, 'PitchCall')
+    pitch_types = _text(rows, 'TaggedPitchType')
+
+    plate_side = _numeric(rows, 'PlateLocSide')
+    plate_height = _numeric(rows, 'PlateLocHeight')
+
+    # in_zone reads a NaN location as "not in the zone", which is the safe answer
+    # for a single pitch but the wrong one for a denominator -- an untracked pitch
+    # is not evidence of a pitch off the plate. Counting it as such inflates the
+    # chase denominator and deflates Zone%, and a swing at one would post as a
+    # chase. Zone and Chase are therefore rated over located pitches only; Seen,
+    # Usage, Swing, Whiff and Contact still cover every pitch.
+    located = plate_side.notna() & plate_height.notna()
+    zone = in_zone(plate_side, plate_height)
+
+    swing = _swings(pitch_call)
+    whiff = pitch_call == 'StrikeSwinging'
+
+    table = []
+    total = len(rows)
+
+    for pitch_type in pitch_types.unique():
+        if pitch_type in ('', 'n/a', 'Other'):
+            continue
+
+        mask = pitch_types == pitch_type
+        seen = int(mask.sum())
+        if seen == 0:
+            continue
+
+        swings = int((swing & mask).sum())
+        whiffs = int((whiff & mask).sum())
+
+        tracked = int((mask & located).sum())
+        in_strike_zone = int((zone & mask).sum())
+        out_of_zone = int((~zone & mask & located).sum())
+        chases = int((swing & ~zone & mask & located).sum())
+
+        table.append({
+            'Pitch': pitch_order.get(pitch_type, pitch_type),
+            'Seen': seen,
+            'Usage': seen / total * 100,
+            'Zone': in_strike_zone / tracked * 100 if tracked else 0.0,
+            'Swing': swings / seen * 100,
+            'Whiff': whiffs / swings * 100 if swings else 0.0,
+            'Chase': chases / out_of_zone * 100 if out_of_zone else 0.0,
+            'Contact': (swings - whiffs) / swings * 100 if swings else 0.0,
+        })
+
+    if not table:
+        return pd.DataFrame()
+
+    report_df = pd.DataFrame(table)
+    for column in ('Usage', 'Zone', 'Swing', 'Whiff', 'Chase', 'Contact'):
+        report_df[column] = report_df[column].map(lambda x: f"{x:.1f}%")
+
+    # Sort by the shared pitch order so tables read the same as the pitcher reports.
+    #
+    # Anything TrackMan tags outside that order -- Sweeper and TwoSeamFastBall turn
+    # up in real exports -- is appended as its own category rather than left out.
+    # A value missing from the categories becomes NaN, which is not a sort quirk
+    # but data loss: the row keeps its numbers and renders with a blank Pitch cell,
+    # since to_html writes NaN as ''. Appending keeps the raw tag visible and lands
+    # the unknowns after the known types.
+    order = list(pitch_order.values())
+    order += [p for p in report_df['Pitch'] if p not in order]
+    report_df['Pitch'] = pd.Categorical(report_df['Pitch'], categories=order, ordered=True)
+    report_df = report_df.sort_values('Pitch').reset_index(drop=True)
+
+    return report_df
+
+
+def build_batted_ball_table(source, batter_id):
+    """Batted-ball mix with exit velocity and launch angle per bucket."""
+    rows = batter_rows(source, batter_id)
+    if rows.empty:
+        return pd.DataFrame()
+
+    batted = rows[_text(rows, 'PitchCall') == 'InPlay'].copy()
+    if batted.empty:
+        return pd.DataFrame()
+
+    batted['_Angle'] = _numeric(batted, 'Angle')
+    batted['_ExitSpeed'] = _numeric(batted, 'ExitSpeed')
+    batted['_Distance'] = _numeric(batted, 'Distance')
+    batted['_HitType'] = classify_hit_type(batted['_Angle'])
+
+    total = len(batted)
+    table = []
+
+    for hit_type in hit_types:
+        bucket = batted[batted['_HitType'] == hit_type]
+        if bucket.empty:
+            continue
+
+        exit_speed = bucket['_ExitSpeed'].dropna()
+        table.append({
+            'Type': hit_type,
+            'Count': len(bucket),
+            'Rate': f"{len(bucket) / total * 100:.1f}%",
+            'Avg EV': f"{exit_speed.mean():.1f}" if not exit_speed.empty else '-',
+            'Max EV': f"{exit_speed.max():.1f}" if not exit_speed.empty else '-',
+            'Avg LA': f"{bucket['_Angle'].mean():.1f}" if bucket['_Angle'].notna().any() else '-',
+            'Avg Dist': f"{bucket['_Distance'].mean():.0f}" if bucket['_Distance'].notna().any() else '-',
+        })
+
+    return pd.DataFrame(table)
+
+
+def _draw_field(ax):
+    """Foul lines, outfield arc and infield diamond, for orientation."""
+    edge = matplotlib.rcParams['axes.edgecolor']
+
+    foul_x, foul_y = calculate_x_y_coordinates(400, 45)
+    ax.plot([0, -foul_x], [0, foul_y], color=edge, linewidth=1, alpha=0.5)
+    ax.plot([0, foul_x], [0, foul_y], color=edge, linewidth=1, alpha=0.5)
+
+    arc_angles = np.linspace(-45, 45, 120)
+    arc_x, arc_y = calculate_x_y_coordinates(400, arc_angles)
+    ax.plot(arc_x, arc_y, color=edge, linewidth=1, alpha=0.5)
+
+    base_x, base_y = calculate_x_y_coordinates(90, 45)
+    ax.plot(
+        [0, base_x, 0, -base_x, 0],
+        [0, base_y, base_y * 2, base_y, 0],
+        color=edge, linewidth=1, alpha=0.35,
+    )
+
+    _draw_distance_markers(ax, edge)
+
+
+# Every 100 ft out to the 400 ft arc the field already draws.
+DISTANCE_MARKERS_FT = (100, 200, 300, 400)
+
+
+def _draw_distance_markers(ax, edge):
+    """
+    Distance rings across fair territory, ticked and labelled on the first-base line.
+
+    Without them a landing spot reads as a direction only -- the axes carry no
+    ticks, so nothing else in the chart states a scale. The labels go on the
+    first-base line because that side is clear: the batted-ball legend sits upper
+    right but well above the arc, and the exit-velocity colorbar is outside the axes.
+
+    Ticks straddle the line and labels sit just off it along the outward normal,
+    which puts them in foul ground where no batted ball can plot, so they never
+    collide with the markers.
+    """
+    along = np.array(calculate_x_y_coordinates(1, 45))   # unit vector up the line
+    normal = np.array([along[1], -along[0]])             # 90 deg out into foul ground
+
+    # Same span as the outfield arc, so the rings stop dead on the foul lines
+    # instead of trailing off into foul ground.
+    arc_angles = np.linspace(-45, 45, 120)
+
+    for feet in DISTANCE_MARKERS_FT:
+        point = np.array(calculate_x_y_coordinates(feet, 45))
+
+        # The outermost ring is the outfield arc _draw_field already drew solid;
+        # a dotted one on top of it would just fight with it.
+        if feet != DISTANCE_MARKERS_FT[-1]:
+            arc_x, arc_y = calculate_x_y_coordinates(feet, arc_angles)
+            # Dotted and fainter than the field outline: these are a background
+            # reference, and at full weight four of them read as the field itself.
+            ax.plot(arc_x, arc_y, color=edge, linewidth=0.9,
+                    linestyle=':', alpha=0.3, zorder=1)
+
+        tick_start, tick_end = point - normal * 9, point + normal * 9
+        ax.plot([tick_start[0], tick_end[0]], [tick_start[1], tick_end[1]],
+                color=edge, linewidth=1, alpha=0.5)
+
+        # 'ft' on the outermost label only -- repeating it on all four is noise
+        # once the unit is established. The offset clears the longer tick and the
+        # taller text; at 26 ft the label still reads as belonging to its tick.
+        label_at = point + normal * 26
+        ax.text(label_at[0], label_at[1],
+                f'{feet} ft' if feet == DISTANCE_MARKERS_FT[-1] else f'{feet}',
+                color=edge, fontsize=13, alpha=0.85,
+                ha='center', va='center',
+                rotation=45, rotation_mode='anchor')
+
+
+def hitter_spray_chart_by_pitcher_side(source, id, output_path, batter_id, theme='light'):
+    """
+    Batted-ball spray charts for one hitter, split by the handedness of the pitcher.
+
+    Landing spots come from Bearing and Distance. PitchLastMeasuredX/Z look like the
+    obvious choice but TrackMan leaves them empty, which plots as nothing at all.
+
+    Writes {id}_hitter_{batter_id}_spray_{side}_{theme}.png into output_path, matching
+    the naming the pitcher charts use.
+    """
     try:
         matplotlib.rcParams.update(THEME_COLORS.get(theme, THEME_COLORS['light']))
 
-        table = source[['Batter', 'BatterId', 'TaggedPitchType', 'PlateLocHeight', 'PlateLocSide', 'PitcherSide']]
-        # Batter Data is the data for the batter identified by batter_id
-        batter_data = table[table['BatterId'] == batter_id]
+        batter_data = batter_rows(source, batter_id)
 
-        for pitcher_side in ['L', 'R']:
+        for pitcher_side in ['Left', 'Right']:
             fig = None
-            try: 
-                fig, ax = plt.subplots(figsize=(8, 6))
-                # Pitcher Data is the data for the batter identified, filtered by the current pitcher side (L or R)
-                # You can further sort it by the type of ball thrown, etc.
-                pitcher_data = batter_data[batter_data['PitcherSide'] == pitcher_side]
-                
-                if len(pitcher_data) == 0:
-                    ax.text(0, 2.5, f'No data for {pitcher_side}-handed pitches',
-                        ha='center', va='center', fontsize=14)
-                    ax.set_xlim(-2.5, 2.5)
-                    ax.set_ylim(0, 5)
+            try:
+                fig, ax = plt.subplots(figsize=(8, 8))
+                ax.set_xlim(-350, 350)
+                ax.set_ylim(-20, 450)
+                ax.set_aspect('equal')
+                ax.set_xticks([])
+                ax.set_yticks([])
+                for spine in ax.spines.values():
+                    spine.set_visible(False)
+
+                _draw_field(ax)
+
+                side_data = batter_data[_text(batter_data, 'PitcherThrows') == pitcher_side].copy()
+
+                # Only balls in play carry a landing spot; takes and whiffs have none
+                side_data['_Bearing'] = _numeric(side_data, 'Bearing')
+                side_data['_Distance'] = _numeric(side_data, 'Distance')
+                side_data['_ExitSpeed'] = _numeric(side_data, 'ExitSpeed')
+                side_data['_Angle'] = _numeric(side_data, 'Angle')
+                side_data = side_data.dropna(subset=['_Bearing', '_Distance'])
+
+                if side_data.empty:
+                    ax.text(0, 215, f'No batted balls vs {pitcher_side}-handed pitching',
+                            ha='center', va='center', fontsize=14)
                 else:
-                    pitch_types = pitcher_data['TaggedPitchType'].unique()
-                    pitch_types = [pt for pt in pitch_types if pt != 'n/a']
+                    x_coords, y_coords = calculate_x_y_coordinates(
+                        side_data['_Distance'], side_data['_Bearing'])
+                    # Color by exit velocity. Values outside the ramp's range clamp
+                    # to its ends rather than dropping out.
+                    colors = side_data['_ExitSpeed'].clip(EV_MIN_MPH, EV_MAX_MPH)
 
-                    for pitch_type in pitch_types:
-                        # Strike data is the pitcher data filtered by the current pitch type and a strike is called
-                        swing_data = pitcher_data[pitcher_data['TaggedPitchType'] == pitch_type \
-                            and pitcher_data['PitchCall'] == 'Strike']
-                        ball_data
-                        cmap = pitch_colors.get(pitch_type, 'viridis')
-                        point_color = pitch_point_colors.get(pitch_type, '#000000')
+                    hit_type = classify_hit_type(side_data['_Angle'])
 
-                        bw_adjust = 1.5 if len(pitch_data) < 20 else 1.0
-                        point_color = pitch_point_colors.get(pitch_type, '#000000')
+                    # Charts save transparent, so a marker's only separation from
+                    # whatever sits behind it is its outline. The theme's own edge
+                    # colour is by definition the high-contrast choice there, and it
+                    # keeps the pale end of the ramp locatable on a light page.
+                    edge = matplotlib.rcParams['axes.edgecolor']
+                    cmap = ev_colormap(theme)
+                    norm = Normalize(vmin=EV_MIN_MPH, vmax=EV_MAX_MPH)
+
+                    # One scatter per marker shape -- matplotlib takes a single marker
+                    # per call, so grouping here avoids a per-point plotting loop.
+                    # Every call shares one norm; left to themselves each would
+                    # rescale to its own group and the same speed would land on a
+                    # different colour in each.
+                    for label, marker in hit_types_markers.items():
+                        mask = (hit_type == label).to_numpy()
+                        if not mask.any():
+                            continue
                         ax.scatter(
-                            avg_side,
-                            avg_height,
-                            color=point_color,
-                            marker='.',
+                            x_coords[mask],
+                            y_coords[mask],
+                            c=colors[mask],
+                            cmap=cmap,
+                            norm=norm,
+                            marker=marker,
                             s=100,
-                            zorder=5,
-                            label=f'{pitch_order.get(pitch_type)}: {len(pitch_data)} pitches'
+                            edgecolors=edge,
+                            linewidths=0.9,
+                            alpha=0.9,
+                            zorder=3,
                         )
 
+                    # Colour now carries a measurement, so it needs a scale to be
+                    # readable at all. Built from a standalone mappable rather than
+                    # a scatter handle, so it renders the full range even when only
+                    # some batted-ball types are present.
+                    bar = fig.colorbar(
+                        ScalarMappable(norm=norm, cmap=cmap), ax=ax,
+                        fraction=0.030, pad=0.01, shrink=0.55,
+                    )
+                    bar.set_label('Exit Velocity (mph)', fontsize=9)
+                    bar.ax.tick_params(labelsize=8)
+                    bar.outline.set_edgecolor(edge)
+
+                    # Marker shape still encodes batted-ball type, so that key stays.
+                    # The pitch-type key is gone -- colour means exit velocity now.
+                    ax.legend(
+                        handles=[Line2D([], [], marker=marker, linestyle='none',
+                                        color=matplotlib.rcParams['text.color'], label=label)
+                                 for label, marker in hit_types_markers.items()],
+                        loc='upper right', fontsize=9, frameon=False,
+                    )
+
+                # No axes title -- both the PDF section header and the page's
+                # graph-subtitle already name the split, so one here reads as a duplicate
+
+                fig.savefig(
+                    os.path.join(output_path,
+                                 f'{id}_hitter_{batter_id}_spray_{pitcher_side.lower()}_{theme}.png'),
+                    pad_inches=0.3, dpi=300, bbox_inches='tight', transparent=True)
+
             except Exception as e:
-                print(f"Error generating heat map ({batter_side}) for pitcher ID {pitcher_id}: {e}")
+                print(f"Error generating spray chart ({pitcher_side}) for batter ID {batter_id}: {e}")
             finally:
                 if fig is not None:
                     plt.close(fig)
 
     except Exception as e:
-        print(f"Error generating heat maps for pitcher ID {pitcher_id}: {e}")
-
-def hitter_spray_chart_by_pitcher_side(source, batter_id):
-    # placeholder
-    print(f"Generating hit spray chart by pitcher side for batter_id: {batter_id} from source: {source}")
+        print(f"Error generating spray chart for batter ID {batter_id}: {e}")

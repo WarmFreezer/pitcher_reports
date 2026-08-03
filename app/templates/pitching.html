@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en" style="height: 100%;">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{current_user.school.slug|upper}} Stat_Line - Pitching</title>
+    <link rel="icon" href="{{ url_for('static', filename='resources/favicon.ico') }}" type="image/x-icon">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/forms.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tables.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/reports.css') }}">
+
+    {% if branding %}
+    <style>
+        :root {
+            --primary: {{branding.colors.primary}};
+            --secondary: {{branding.colors.secondary}};
+            --tertiary: {{branding.colors.tertiary}};
+            --dark: {{branding.colors.dark}};
+            --light: {{branding.colors.light}};
+            --accent: {{branding.colors.accent}};
+        }
+    </style>
+    {% endif %}
+</head>
+<body onload="loadFooter(); loadNavbar('{{ logo_path }}');">
+    <!-- Navbar Placeholder -->
+    <div id="navbar-placeholder"></div>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="bubble">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+                <div>
+                    <h2>Pitching Reports</h2>
+                    <p>Choose a time frame, then pick the games to generate.</p>
+                </div>
+                <label class="switch-field">
+                    <span class="switch-text">Own Team</span>
+                    <input type="checkbox" id="targetToggle" class="switch-input">
+                    <span class="switch-slider"></span>
+                    <span class="switch-text">Opponent</span>
+                </label>
+            </div>
+
+            <div class="filter-row">
+                <div class="filter-field">
+                    <label for="startDate">From</label>
+                    <input type="date" id="startDate">
+                </div>
+                <div class="filter-field">
+                    <label for="endDate">To</label>
+                    <input type="date" id="endDate">
+                </div>
+                <p id="archiveInfo" class="filter-note"></p>
+            </div>
+
+            <div class="selection-panel">
+                <div class="selection-panel-head">
+                    <p class="graph-subtitle" style="margin: 0;">Games in range</p>
+                    <div class="selection-actions">
+                        <button type="button" class="link-btn" onclick="setAllGames(true)">Select all</button>
+                        <button type="button" class="link-btn" onclick="setAllGames(false)">Clear</button>
+                    </div>
+                </div>
+                <div id="gameList" class="checkbox-grid checkbox-grid-wide">
+                    <p class="filter-note">Loading…</p>
+                </div>
+            </div>
+
+            <div class="generate-row">
+                <button onclick="generatePitchingReports()" class="upload-btn" id="generateBtn">Generate</button>
+                <span id="selectionCount" class="filter-note"></span>
+            </div>
+        </div>
+
+        <div id="pitchingSummary"></div>
+
+        <!-- Report Output Container -->
+        <div id="report-output" style="margin: 0px;"></div>
+    </main>
+
+    <!-- Pitcher Report Template -->
+    <template id="pitcher-report-template">
+        <div class="report-card">
+            <div class="report-card-header">
+                <h2 class="user-name">Pitcher Name</h2>
+                <div style="display: flex; align-items: center; gap: 14px;">
+                    <div class="download-container"></div>
+                    <span class="report-card-chevron">▾</span>
+                </div>
+            </div>
+            <div class="report-card-body collapsible collapsible-lg">
+                <div class="report-card-inner">
+                    <div class="pitcher-heatmap"></div>
+                    <div class="report-lower-row">
+                        <div class="pitcher-breakmap"></div>
+                        <div class="pitcher-usage-panel">
+                            <p class="graph-title">Pitch Usage</p>
+                            <div class="graph-block">
+                                <p class="graph-subtitle">LHH</p>
+                                <div class="table-section"><div class="left-usage table-scroll"></div></div>
+                            </div>
+                            <div class="graph-block">
+                                <p class="graph-subtitle">RHH</p>
+                                <div class="table-section"><div class="right-usage table-scroll"></div></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="table-section" style="max-width:1200px; margin: 8px auto;">
+                        <div class="pitcher-table table-scroll"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- Footer Placeholder -->
+    <div id="footer-placeholder"></div>
+
+    <script src="{{ url_for('static', filename='js/core.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/pages/pitching.js') }}"></script>
+</body>
+</html>

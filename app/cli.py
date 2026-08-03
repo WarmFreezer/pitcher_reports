@@ -1,5 +1,7 @@
 # app/cli.py
+import os
 import click
+from flask import current_app
 from flask.cli import with_appcontext
 
 from app.db import models
@@ -153,3 +155,17 @@ def register_cli_commands(app):
 
         Auth.create_user(email, password, first_name, last_name, school.id, role)
         print(f"User '{email}' created successfully with role '{role}'.")
+
+    @app.cli.command()
+    def rebuild_game_index():
+        """Rebuild the game index for all schools."""
+        from app.services.game_archive import rebuild_manifest
+        from app.db.models import School
+        
+        schools = School.query.all()
+        for school in schools:
+            games_dir = os.path.join(app.config['STORAGE'], 'schools', school.slug, 'games')
+            print(f"Rebuilding game index for school: {school.name} (slug: {school.slug})")
+            count = rebuild_manifest(games_dir)
+
+        print("Game index rebuilt successfully.")

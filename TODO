@@ -1,11 +1,38 @@
 ------ TODO ------
 Strikeouts
 Share Page??
-Spin Efficiency 
+Spin Efficiency
 Damage by type (90+mph with launch angle between 10-35deg)
 School -> Organization
 
+REFACTOR BACKEND WITH BETTER STRUCTURE (CLASSES, COMMENTS, ETC)
+
 Email Confirmations, newsletters
+
+------ Deferred from the /pitching + /batting restructure ------
+SECURITY: /storage/schools/<slug>/... routes are unauthenticated
+  app/main.py:96-106 -- the three send_from_directory routes have no
+  @login_required and never check the slug against current_user.school.slug.
+  Anyone who guesses a path downloads another school's charts. PDFs are already
+  safe (exports stream via send_file behind the login); chart PNGs are not.
+  Fix: require login + verify the slug matches, or serve charts through an
+  authenticated route the way /api/*/export does.
+
+outings.date is String(20) holding dates -- should be db.Date
+  Works today only because ISO strings sort chronologically. Needs a migration
+  plus a look at the dashboard queries in app/routes/pages.py. Blocks proper
+  date arithmetic (e.g. "last 30 days") on the DB side.
+
+PDF header subtitle format is wrong for multi-game reports
+  generate_header hardcodes "{a} @ {b}" (report_lab_generator.py:145), giving
+  "HOME @ 2 games" on hitter reports and "HOME @ AWAY" on pitching ones -- the
+  latter is also backwards from the away-@-home convention, inherited from the
+  old upload.py call. Make the separator a parameter so each report type picks
+  its own ("vs" for aggregated ranges, "@" for a true single away game).
+
+Rule learned: any change to game_archive._build_entry needs a
+  `flask --app app.main rebuild-game-index` run, or existing archives silently
+  report defaults for the new field instead of real values.
 
 ------ Good for now ------
 Master Team Sheet

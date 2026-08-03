@@ -1,4 +1,5 @@
 import matplotlib
+import numpy as np
 
 # Use a non-interactive backend for matplotlib
 matplotlib.use('Agg')
@@ -8,6 +9,66 @@ from matplotlib.patches import Rectangle
 import matplotlib.patches as patches
 
 baseball_width = 0.24  # Approximate width of a baseball in feet
+
+# Strike zone bounds in feet. make_strike_zone() draws exactly this box, so any
+# zone/chase calculation must read from here rather than repeating the numbers.
+ZONE_SIDE = 0.83    # half-width, so the zone spans -0.83 to 0.83
+ZONE_BOTTOM = 1.5
+ZONE_TOP = 3.5
+
+
+def in_zone(plate_loc_side, plate_loc_height):
+    """
+    Boolean mask for pitches inside the strike zone.
+
+    Accepts Series (vectorized) or scalars. NaN locations fall out as False, which
+    is the safe reading -- an untracked pitch is not evidence of a strike.
+    """
+    return (
+        (plate_loc_side.abs() <= ZONE_SIDE)
+        & (plate_loc_height >= ZONE_BOTTOM)
+        & (plate_loc_height <= ZONE_TOP)
+    )
+
+# Exit velocity is a magnitude, so it takes a sequential ramp -- one that climbs
+# steadily in lightness, not a rainbow that makes the reader decode an arbitrary
+# hue order.
+#
+# One ramp serves both themes, deliberately. This used to flip to Reds_r on dark
+# so the hardest contact stayed the most visible against a transparent
+# background, but that inverted what a colour *means*: 120 mph read deep red on a
+# light page and pale on a dark one, so anyone who learned the scale in one theme
+# read it backwards in the other. A legend that changes direction is worse than
+# one that is slightly less loud.
+#
+# Legibility is handled without flipping. Both ends of the base ramp are trimmed
+# off, so it never reaches the near-white that vanishes on a light page or the
+# near-black that vanishes on a dark one, and every marker already carries a
+# theme-coloured outline that locates it whatever its fill.
+EV_MIN_MPH = 60.0
+EV_MAX_MPH = 120.0
+
+_EV_BASE_CMAP = 'YlOrRd'
+_EV_RANGE = (0.15, 0.85)    # fraction of the base ramp kept, low end first
+
+
+def ev_colormap(theme='light'):
+    """
+    Sequential colormap for exit velocity: warm yellow at EV_MIN_MPH through to
+    deep red at EV_MAX_MPH, identically in every theme.
+
+    theme is accepted and ignored. Callers pass it, and keeping it in the
+    signature leaves the door open if a theme ever does need its own ramp -- but
+    see above for why reversing this one is not the way to do it.
+    """
+    base = matplotlib.colormaps[_EV_BASE_CMAP]
+    cmap = LinearSegmentedColormap.from_list(
+        'exit_velocity', base(np.linspace(*_EV_RANGE, 256)))
+    # Balls in play without a tracked exit speed still have a landing spot, so
+    # they are plotted -- in neutral gray rather than silently at the ramp's end.
+    cmap.set_bad('#888888')
+    return cmap
+
 
 THEME_COLORS = {
     'light': {

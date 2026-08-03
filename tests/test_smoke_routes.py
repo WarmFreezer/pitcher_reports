@@ -47,10 +47,22 @@ def logged_in_admin(client, make_school, make_user, login_as):
     return school, admin
 
 
-@pytest.mark.parametrize('path', ['/dashboard', '/upload', '/account', '/api/toasts'])
+@pytest.mark.parametrize('path', ['/dashboard', '/upload', '/account', '/batting', '/pitching', '/api/toasts'])
 def test_authenticated_pages_load(client, logged_in, path):
     resp = client.get(path)
     assert resp.status_code == 200
+
+
+def test_pitching_games_is_empty_before_any_game_is_saved(client, logged_in):
+    resp = client.get('/api/pitching/games')
+    assert resp.status_code == 200
+    assert resp.get_json() == {'games': [], 'first_date': None, 'last_date': None, 'game_count': 0}
+
+
+def test_batting_hitters_is_empty_before_any_game_is_saved(client, logged_in):
+    resp = client.get('/api/batting/hitters')
+    assert resp.status_code == 200
+    assert resp.get_json() == {'hitters': [], 'first_date': None, 'last_date': None, 'game_count': 0}
 
 
 # ── Account API ──────────────────────────────────────────────────────────────────

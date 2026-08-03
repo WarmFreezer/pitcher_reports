@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en" style="height: 100%;">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{current_user.school.slug|upper}} Stat_Line - Batting</title>
+    <link rel="icon" href="{{ url_for('static', filename='resources/favicon.ico') }}" type="image/x-icon">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/forms.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tables.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/reports.css') }}">
+
+    {% if branding %}
+    <style>
+        :root {
+            --primary: {{branding.colors.primary}};
+            --secondary: {{branding.colors.secondary}};
+            --tertiary: {{branding.colors.tertiary}};
+            --dark: {{branding.colors.dark}};
+            --light: {{branding.colors.light}};
+            --accent: {{branding.colors.accent}};
+        }
+    </style>
+    {% endif %}
+</head>
+<body onload="loadFooter(); loadNavbar('{{ logo_path }}');">
+    <!-- Navbar Placeholder -->
+    <div id="navbar-placeholder"></div>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <div class="bubble">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+                <div>
+                    <h2>Batting Reports</h2>
+                    <p>Choose a time frame, then pick the hitters to generate.</p>
+                </div>
+                <label class="switch-field">
+                    <span class="switch-text">Own Team</span>
+                    <input type="checkbox" id="targetToggle" class="switch-input">
+                    <span class="switch-slider"></span>
+                    <span class="switch-text">Opponent</span>
+                </label>
+            </div>
+
+            <div class="filter-row">
+                <div class="filter-field">
+                    <label for="startDate">From</label>
+                    <input type="date" id="startDate">
+                </div>
+                <div class="filter-field">
+                    <label for="endDate">To</label>
+                    <input type="date" id="endDate">
+                </div>
+                <p id="archiveInfo" class="filter-note"></p>
+            </div>
+
+            <div class="selection-panel">
+                <div class="selection-panel-head">
+                    <p class="graph-subtitle" style="margin: 0;">Hitters with batted balls in range</p>
+                    <div class="selection-actions">
+                        <button type="button" class="link-btn" onclick="setAllHitters(true)">Select all</button>
+                        <button type="button" class="link-btn" onclick="setAllHitters(false)">Clear</button>
+                    </div>
+                </div>
+                <div id="hitterList" class="checkbox-grid">
+                    <p class="filter-note">Loading…</p>
+                </div>
+            </div>
+
+            <div class="generate-row">
+                <button onclick="generateBattingReports()" class="upload-btn" id="generateBtn">Generate</button>
+                <span id="selectionCount" class="filter-note"></span>
+            </div>
+        </div>
+
+        <div id="battingSummary"></div>
+
+        <!-- Report Output Container -->
+        <div id="report-output" style="margin: 0px;"></div>
+    </main>
+
+    <!-- Hitter Report Template -->
+    <template id="hitter-report-template">
+        <div class="report-card">
+            <div class="report-card-header">
+                <h2 class="user-name">Hitter Name</h2>
+                <div style="display: flex; align-items: center; gap: 14px;">
+                    <span class="hitter-meta filter-note"></span>
+                    <div class="download-container"></div>
+                    <span class="report-card-chevron">▾</span>
+                </div>
+            </div>
+            <div class="report-card-body collapsible collapsible-lg">
+                <div class="report-card-inner">
+                    <div class="summary-grid"></div>
+                    <div class="report-lower-row">
+                        <div class="hitter-spray"></div>
+                    </div>
+                    <!-- Titles sit outside .table-section: it carries border-radius +
+                         overflow:hidden, so anything inside it steals the rounded corners
+                         from the table. Same structure as the usage tables on /pitching. -->
+                    <div style="max-width: 1200px; margin: 8px auto;">
+                        <p class="graph-title">Batted Ball Profile</p>
+                        <div class="table-section"><div class="batted-ball-table table-scroll"></div></div>
+                    </div>
+                    <div style="max-width: 1200px; margin: 8px auto;">
+                        <p class="graph-title">Plate Discipline</p>
+                        <div class="table-section"><div class="discipline-table table-scroll"></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- Footer Placeholder -->
+    <div id="footer-placeholder"></div>
+
+    <script src="{{ url_for('static', filename='js/core.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/pages/batting.js') }}"></script>
+</body>
+</html>

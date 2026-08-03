@@ -62,6 +62,18 @@
     font-weight: bold;
 }
 
+/* Management lists (saved games) rather than stat grids -- fewer, wider columns
+   and an action button per row, so the tall stat-table padding wastes vertical
+   space without helping readability. */
+.table-compact th,
+.table-compact td {
+    padding: 4px 12px;
+}
+
+.table-compact td {
+    white-space: nowrap;
+}
+
 .pitcher-data-table tr:nth-child(even),
 .pitch-usage-table tr:nth-child(even) {
     background-color: var(--bg-card);
@@ -88,10 +100,12 @@
 }
 
 /* ============================================================================
-   PITCHER REPORT CARD
+   COLLAPSIBLE REPORT CARD
+   Shared by the pitcher and hitter report pages -- nothing here is specific
+   to either, so the classes are named for the shape, not the player type.
    ============================================================================ */
 
-.pitcher-report {
+.report-card {
     max-width: 1200px;
     margin: 0 auto;
     width: calc(100% - 64px);
@@ -101,15 +115,15 @@
     transition: border-color 0.3s ease;
 }
 
-.pitcher-report + .pitcher-report {
+.report-card + .report-card {
     margin-top: 16px;
 }
 
-.pitcher-report:last-child {
+.report-card:last-child {
     margin-bottom: 48px;
 }
 
-.pitcher-report-header {
+.report-card-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -122,30 +136,48 @@
     transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
-.pitcher-report-header:hover {
-    background-color: var(--bg-card);
+/* --bg-page rather than --bg-card: the buttons inside this header are --bg-card
+   (matching .upload-btn), so hovering to that token painted the button's own
+   colour behind it and the button disappeared. --bg-page is the one surface that
+   differs from both the header's resting --bg-bubble and the button in either
+   theme -- it lightens the header on light, deepens it on dark. */
+.report-card-header:hover {
+    background-color: var(--bg-page);
 }
 
-.pitcher-report-header h2 {
+.report-card-header h2 {
     margin: 0;
     font-size: 1.25rem;
     color: var(--text-primary);
 }
 
-.pitcher-report-chevron {
+.report-card-chevron {
     font-size: 1rem;
     color: var(--text-secondary);
     display: inline-block;
     transition: transform 0.3s ease;
 }
 
-.pitcher-report-header.open .pitcher-report-chevron {
+.report-card-header.open .report-card-chevron {
     transform: rotate(180deg);
+}
+
+/* Matches .bubble's 20px so a report card insets its contents the same way the
+   dashboard panels do.
+
+   The padding sits on an inner wrapper, not on .report-card-body itself. The
+   body collapses via max-height: 0, and a box can never shrink below its own
+   padding + border -- border-box does not change that -- so padding there would
+   hold every closed card 40px open. One level in, it is clipped by the body's
+   overflow: hidden like any other content, which also keeps opening a plain
+   max-height transition instead of animating the padding too. */
+.report-card-inner {
+    padding: 20px;
 }
 
 
 @media (max-width: 768px) {
-    .pitcher-report {
+    .report-card {
         margin: 0;
         width: 100%;
     }

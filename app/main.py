@@ -23,6 +23,8 @@ from app.routes.payments import payment_bp
 from app.routes.auth import auth_bp
 from app.routes.pages import pages_bp
 from app.routes.account import account_bp
+from app.routes.batting import batting_bp
+from app.routes.pitching import pitching_bp
 from app.routes.subscription import subscription_bp
 from app.routes.upload import upload_bp
 
@@ -109,6 +111,8 @@ def create_app(config_overrides: dict | None = None) -> Flask:
     app.register_blueprint(auth_bp)
     app.register_blueprint(pages_bp)
     app.register_blueprint(account_bp)
+    app.register_blueprint(batting_bp)
+    app.register_blueprint(pitching_bp)
     app.register_blueprint(subscription_bp)
     app.register_blueprint(upload_bp)
     app.register_blueprint(payment_bp)

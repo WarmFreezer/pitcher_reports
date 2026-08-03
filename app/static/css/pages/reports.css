@@ -1,0 +1,217 @@
+/* ============================================================================
+   REPORT PAGES (/batting, /pitching)
+   Filter bar, multi-select checkbox list, and stat tiles. Shared by both
+   report pages -- they have the same shape: range narrows, checkboxes select.
+   ============================================================================ */
+
+.filter-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.filter-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.filter-field label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+/* Same global `input { width: stretch }` from forms.css -- date pickers only need
+   to be as wide as the date they hold. */
+.filter-field input[type="date"] {
+    width: auto;
+    min-width: 150px;
+    max-width: none;
+}
+
+.filter-note {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+/* ---------------------------------------------------------------- selection */
+
+.selection-panel {
+    margin-top: 18px;
+    border: 1px solid var(--bubble-border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    background-color: var(--bg-page);
+}
+
+.selection-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.selection-actions {
+    display: flex;
+    gap: 14px;
+}
+
+/* Text tokens, not branding colours: --tertiary and --accent come from the
+   school's branding.json and have no dark-mode variant, so text wearing them
+   stays put when the theme flips. Only the --text-* tokens are theme-aware. */
+.link-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    text-decoration: underline;
+    transition: color 0.3s;
+}
+
+.link-btn:hover {
+    color: var(--text-primary);
+}
+
+.checkbox-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 4px 16px;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+/* Game rows carry a date, an opponent and two counts -- more than a player name,
+   so they need wider columns than the hitter list. */
+.checkbox-grid-wide {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+
+.row-badge {
+    flex: none;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-on-accent);
+    background-color: var(--accent);
+    border-radius: 999px;
+    padding: 2px 7px;
+}
+
+/* Hover needs a class, not an inline style, so the two can't fight over
+   specificity when a row is also marked selected. */
+.checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.checkbox-row:hover {
+    background-color: var(--bg-hover);
+}
+
+/* forms.css styles `input, select` globally for text fields -- width: stretch,
+   padding and an accent underline. Applied to a checkbox that fills the whole row
+   and squeezes the name out, so undo it here rather than loosening the global rule. */
+.checkbox-row input[type="checkbox"] {
+    flex: none;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    border: none;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.checkbox-row .row-label {
+    /* min-width: 0 lets the ellipsis engage instead of forcing the row wider */
+    flex: 1 1 auto;
+    min-width: 0;
+    color: var(--text-primary);
+    font-size: 0.92rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.checkbox-row .row-meta {
+    padding-left: 8px;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    flex: none;
+}
+
+.generate-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+}
+
+/* ------------------------------------------------------------- stat tiles */
+
+/* No horizontal padding: .report-card-body supplies the 20px inset from the card
+   edge, and keeping the old 16px here would push the tiles in to 36px, out of
+   line with the tables below them. */
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+    gap: 8px;
+    padding: 12px 0 4px;
+}
+
+.summary-tile {
+    background-color: var(--bg-card);
+    border-radius: 8px;
+    padding: 10px 6px;
+    text-align: center;
+}
+
+.summary-tile .tile-value {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.summary-tile .tile-label {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* ------------------------------------------------------------ spray charts */
+
+.hitter-spray {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+.report-img-spray {
+    width: 100%;
+    max-width: 420px;
+}
+
+@media (max-width: 900px) {
+    .report-img-spray {
+        max-width: 100%;
+    }
+}

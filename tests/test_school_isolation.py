@@ -66,10 +66,90 @@ def test_pitcher_averages_allows_own_schools_pitcher(client, login_as, two_schoo
     assert resp.status_code == 200
 
 
+def test_batting_hitters_only_lists_own_schools_archive(client, login_as, two_schools, app):
+    """
+    The game archive is keyed by school slug on disk, so School B's saved games are in
+    a directory School A's user never resolves. Seed one for B and confirm A sees none.
+    """
+    import json
+    import os
+
+    school_b = two_schools['school_b']
+    games_dir = os.path.join(app.config['STORAGE'], 'schools', school_b.slug, 'games')
+    os.makedirs(games_dir, exist_ok=True)
+    with open(os.path.join(games_dir, 'index.json'), 'w', encoding='utf-8') as f:
+        json.dump([{
+            'file': '2026-03-01_deadbeef.csv', 'date': '2026-03-01',
+            'home_team': school_b.trackman_id, 'away_team': 'OTHER',
+            'content_hash': 'deadbeef',
+            'batters': [{'id': '777', 'name': 'Bravo Batter', 'team': school_b.trackman_id}],
+        }], f)
+
+    login_as(client, two_schools['user_a'])
+    data = client.get('/api/batting/hitters?target=own').get_json()
+
+    assert data['hitters'] == []
+    assert data['game_count'] == 0
+    assert 'Bravo Batter' not in json.dumps(data)
+
+
+def test_batting_report_blocks_other_schools_batter(client, login_as, two_schools):
+    login_as(client, two_schools['user_a'])
+
+    resp = client.post('/api/batting/report', json={'batter_id': '777', 'target': 'own'})
+
+    # No archive for School A at all, so this is refused before any batter lookup
+    assert resp.status_code in (400, 404)
+    assert 'Bravo' not in resp.get_data(as_text=True)
+
+
+def test_pitching_games_only_lists_own_schools_archive(client, login_as, two_schools, app):
+    """The archive is keyed by school slug on disk, so B's games are in a directory
+    A's user never resolves."""
+    import json
+    import os
+
+    school_b = two_schools['school_b']
+    games_dir = os.path.join(app.config['STORAGE'], 'schools', school_b.slug, 'games')
+    os.makedirs(games_dir, exist_ok=True)
+    with open(os.path.join(games_dir, 'index.json'), 'w', encoding='utf-8') as f:
+        json.dump([{
+            'file': '2026-03-01_deadbeef.csv', 'date': '2026-03-01',
+            'home_team': school_b.trackman_id, 'away_team': 'OTHER',
+            'content_hash': 'deadbeef', 'practice': False,
+            'batters': [], 'pitchers': [],
+        }], f)
+
+    login_as(client, two_schools['user_a'])
+    data = client.get('/api/pitching/games').get_json()
+
+    assert data['games'] == []
+    assert data['game_count'] == 0
+
+
+def test_pitching_report_blocks_another_schools_game(client, login_as, two_schools):
+    login_as(client, two_schools['user_a'])
+
+    resp = client.post('/api/pitching/report',
+                       json={'content_hashes': ['deadbeef'], 'target': 'own'})
+
+    assert resp.status_code == 404
+
+
 @pytest.mark.parametrize('method,path', [
     ('GET', '/dashboard'),
     ('GET', '/account'),
     ('GET', '/upload'),
+    ('GET', '/batting'),
+    ('GET', '/api/batting/hitters'),
+    ('GET', '/api/batting/export'),
+    ('POST', '/api/batting/report'),
+    ('GET', '/pitching'),
+    ('GET', '/api/pitching/games'),
+    ('GET', '/api/pitching/export'),
+    ('POST', '/api/pitching/report'),
+    ('GET', '/api/games'),
+    ('DELETE', '/api/games/abc123'),
     ('GET', '/api/team/overview'),
     ('GET', '/api/pitcher/1/averages'),
     ('GET', '/subscription'),

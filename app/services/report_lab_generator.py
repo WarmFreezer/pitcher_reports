@@ -85,17 +85,19 @@ class PDF_Generator:
                 fontName="Helvetica",
                 leading=13,
             ),
+            # Both need explicit leading -- ParagraphStyle defaults to 12pt, which is
+            # less than the value's own font size and overlaps the label beneath it
             "stat_label": ParagraphStyle(
                 "StatLabel",
-                fontSize=8, textColor=self.secondary_color,
+                fontSize=8, textColor=self.dark_color,
                 fontName="Helvetica",
-                alignment=TA_CENTER,
+                alignment=TA_CENTER, leading=10,
             ),
             "stat_value": ParagraphStyle(
                 "StatValue",
                 fontSize=18, textColor=self.tertiary_color,
                 fontName="Helvetica-Bold",
-                alignment=TA_CENTER,
+                alignment=TA_CENTER, leading=21, spaceAfter=2,
             ),
             "table_header": ParagraphStyle(
                 "TableHeader",
@@ -342,15 +344,17 @@ class PDF_Generator:
         col_width = (self.PAGE_W - 2 * self.MARGIN) / 4
         stats_grid_table = Table(grid_data, colWidths=[col_width] * 4)
         
+        # Light tiles with dark text: accent is a saturated brand colour, and the
+        # tertiary-on-accent pairing it replaced was unreadable on the default palette
         stats_grid_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), self.accent_color),
+            ('BACKGROUND', (0, 0), (-1, -1), self.light_color),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('LEFTPADDING', (0, 0), (-1, -1), 8),
             ('RIGHTPADDING', (0, 0), (-1, -1), 8),
             ('TOPPADDING', (0, 0), (-1, -1), 8),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-            ('GRID', (0, 0), (-1, -1), 1, self.light_color),
+            ('GRID', (0, 0), (-1, -1), 1, self.accent_color),
         ]))
         
         elements.append(stats_grid_table)
@@ -638,6 +642,157 @@ class PDF_Generator:
             print(f"Error generating PDF: {str(e)}")
             raise
 
+    def generate_data_table(self, df, title: str, available_width: float = None) -> list:
+        """
+        Render an already-formatted DataFrame as a titled table.
+
+        Unlike generate_pitcher_stats_table this applies no numeric formatting -- the
+        hitter builders emit display-ready strings, so the values are passed through.
+
+        Args:
+            df: DataFrame whose columns become the header row
+            title: Section heading above the table
+            available_width: Total table width in points; defaults to the full frame
+
+        Returns:
+            List of document elements containing the table
+        """
+        elements = []
+
+        if df is None or not isinstance(df, pd.DataFrame) or df.empty:
+            return elements
+
+        if available_width is None:
+            available_width = self.PAGE_W - 2 * self.MARGIN
+
+        elements.append(Paragraph(title, self.styles["section_header"]))
+
+        table_data = [list(df.columns)]
+        for _, row in df.iterrows():
+            table_data.append([str(row[col]) for col in df.columns])
+
+        data_table = Table(table_data, colWidths=[available_width / len(df.columns)] * len(df.columns))
+        data_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), self.tertiary_color),
+            ('TEXTCOLOR', (0, 0), (-1, 0), self.WHITE),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('FONTSIZE', (0, 1), (-1, -1), 7),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('TOPPADDING', (0, 0), (-1, 0), 8),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [self.WHITE, self.light_color]),
+        ]))
+
+        elements.append(data_table)
+        elements.append(Spacer(1, 0.05 * inch))
+
+        return elements
+
+    def generate_hitter_report(self, data: dict, output_path: str) -> str:
+        """
+        Generate a complete hitter report PDF covering a date range.
+
+        Mirrors generate_pitcher_report, but the header subtitle carries a date range
+        rather than a single game, since a hitting report is built from every archived
+        game in the selected window.
+
+        Args:
+            data: Dictionary containing report data with keys:
+                  - hitter_name: str
+                  - hitter_id: str
+                  - date_range: str (e.g. "02/01/2026 - 05/31/2026")
+                  - team: str
+                  - games: int (number of games in range)
+                  - summary: dict of slash-line / batted-ball stats
+                  - discipline_table: pandas DataFrame of plate discipline by pitch type
+                  - batted_ball_table: pandas DataFrame of batted-ball profile
+                  - spray_chart_left: image path (optional)
+                  - spray_chart_right: image path (optional)
+
+            output_path: Full path where PDF should be saved
+
+        Returns:
+            Path to the generated PDF
+        """
+
+        # Resolve player pfp: player photo → school logo → statline logo
+        pfp_path = os.path.join(STORAGE_SCHOOLS, self.current_user.school.slug, 'assets', 'players', str(data.get('hitter_id')), 'pfp.png')
+        player_pfp = pfp_path if os.path.exists(pfp_path) else self.school_logo
+
+        frame = Frame(
+            self.MARGIN,
+            0,
+            self.PAGE_W - 2 * self.MARGIN,
+            self.PAGE_H,
+            leftPadding=0,
+            rightPadding=0,
+            topPadding=0,
+            bottomPadding=0,
+        )
+
+        pdf_file = BaseDocTemplate(
+            output_path,
+            pagesize=letter,
+            rightMargin=self.MARGIN,
+            leftMargin=self.MARGIN,
+            topMargin=0,
+            bottomMargin=0,
+        )
+        pdf_file.addPageTemplates([PageTemplate(id='main', frames=[frame])])
+
+        elements = []
+
+        print(f"[PDF] Starting hitter report generation")
+
+        games = data.get('games')
+        games_label = f"{games} game{'s' if games != 1 else ''}" if games else ''
+
+        # generate_header's positional slots were named for pitchers; the last three
+        # are free-form subtitle text, reused here for the team and game count
+        elements.extend(self.generate_header(
+            player_pfp,
+            data.get('hitter_name', 'Hitter'),
+            self.school_logo,
+            data.get('date_range', ''),
+            data.get('team', ''),
+            games_label,
+            '',
+            '',
+            None
+        ))
+
+        if data.get('summary'):
+            elements.extend(self.generate_stats_grid(data['summary']))
+
+        # Spray charts side by side, matching the heat-map row on pitcher reports
+        half_width = (self.PAGE_W - 2 * self.MARGIN - 0.2 * inch) / 2
+        spray_left = data.get('spray_chart_left')
+        spray_right = data.get('spray_chart_right')
+        if spray_left or spray_right:
+            left_els = self.add_image_section(spray_left, "vs Left-Handed Pitching", max_width_pts=half_width) if spray_left else []
+            right_els = self.add_image_section(spray_right, "vs Right-Handed Pitching", max_width_pts=half_width) if spray_right else []
+            elements.extend(self.generate_two_column_layout(left_els, right_els))
+
+        elements.extend(self.generate_data_table(data.get('batted_ball_table'), "Batted Ball Profile"))
+        elements.extend(self.generate_data_table(data.get('discipline_table'), "Plate Discipline"))
+
+        try:
+            for i, el in enumerate(elements):
+                try:
+                    el.wrap(self.PAGE_W - 2 * self.MARGIN, self.PAGE_H)
+                except Exception as e:
+                    print(f"Element {i} failed: {type(el).__name__} — {e}")
+
+            pdf_file.build(elements)
+            print(f"[PDF] Hitter PDF built successfully!")
+            return output_path
+        except Exception as e:
+            print(f"Error generating hitter PDF: {str(e)}")
+            raise
+
     def generate_color_preview(self, output_path: str) -> str:
         """
         Generate a one-page sample PDF with placeholder data so users can preview
@@ -727,23 +882,39 @@ def image_to_base64(img):
     b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
     return f"data:image/png;base64,{b64}"
 
-def merge_pdfs(id, pdf_folder, output_path):
+def merge_pdfs(id, pdf_folder, output_path, prefix="pitcher"):
     """
-    Merge multiple PDFs into one
+    Merge one user's reports of a single kind into a combined PDF.
+
+    Only files named {id}_{prefix}_*.pdf are collected, so a hitter run cannot
+    sweep in the pitcher PDFs sharing the folder.
+
+    Returns the output path, or None when nothing matched -- callers use that to
+    decide whether to offer a combined download at all.
     """
-    from PyPDF2 import PdfMerger
-    
-    merger = PdfMerger()
-    
+    from pypdf import PdfWriter
+
+    merger = PdfWriter()
+    appended = 0
+
     for pdf in sorted(os.listdir(pdf_folder)):
         if pdf == os.path.basename(output_path):
             continue
 
         pdf_path = os.path.join(pdf_folder, pdf)
-        if os.path.exists(pdf_path) and pdf_path.endswith('.pdf') and pdf.startswith(f"{id}_pitcher_"):
+        if os.path.exists(pdf_path) and pdf_path.endswith('.pdf') and pdf.startswith(f"{id}_{prefix}_"):
             merger.append(pdf_path)
-    
+            appended += 1
+
+    # An empty writer writes a perfectly valid zero-page PDF, so the count has to
+    # be tracked -- checking the file exists afterwards would always say yes.
+    if appended == 0:
+        merger.close()
+        print(f"No {prefix} PDFs found to merge for user {id}")
+        return None
+
     merger.write(output_path)
     merger.close()
     print(f"Merged PDF created: {os.path.basename(output_path)}")
+    return output_path
 
