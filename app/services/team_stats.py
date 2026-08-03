@@ -13,6 +13,7 @@ Last Updated: 2024-05-26 (Thomas Eubank)
 
 '''
 
+import io
 import numpy as np
 import pandas as pd
 import hashlib
@@ -34,7 +35,7 @@ def _reach(source):
 def _native(val):
     return val.item() if hasattr(val, 'item') else val
 
-def hash_file(file) -> str:
+def hash_file(file: io.FileIO) -> str:
     file.seek(0)  # Ensure we're at the start of the file
     h = hashlib.md5(file.read()).hexdigest()[:128]
     file.seek(0)  # Reset file pointer after reading
@@ -163,7 +164,10 @@ def add_report(school_id, trackman_id, file):
             db_pitcher_id = add_pitcher(school_id, trackman_pitcher_id, pitcher_data['Pitcher'].iloc[0])
             outing_id = add_outing(
                 db_pitcher_id,
-                pd.to_datetime(pitcher_data['Date'].mode().iloc[0]).date(),
+                # Outing.date is a String column, so hand it an ISO string rather
+                # than a date object -- Python 3.12 deprecated sqlite3's implicit
+                # date adapter, and ISO keeps lexicographic sorting chronological.
+                pd.to_datetime(pitcher_data['Date'].mode().iloc[0]).date().isoformat(),
                 content_hash,
                 (trackman_id == pitcher_data['HomeTeam'].iloc[0]),
                 pitcher_data.shape[0],

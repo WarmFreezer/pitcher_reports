@@ -141,6 +141,21 @@
     text-decoration: none;
 }
 
+/* Destructive actions sit in striped table rows whose even rows are --bg-card,
+   the same token this button normally uses -- so it needs its own colour rather
+   than the shared surface. Muted at rest, solid on hover, since the click is
+   not reversible. */
+.download-btn-small.btn-danger {
+    background-color: var(--bg-page);
+    color: var(--danger);
+    padding: 4px 14px;
+}
+
+.download-btn-small.btn-danger:hover {
+    background-color: var(--danger);
+    color: #fff;
+}
+
 /* ============================================================================
    FLOATING ACTION BUTTON
    ============================================================================ */

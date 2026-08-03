@@ -24,3 +24,18 @@ def get_school_directories():
     os.makedirs(school_output_dir, exist_ok=True)
 
     return school_temp_dir, school_output_dir
+
+
+def get_school_games_directory():
+    """Return the archived-games dir for the current user's school, creating it if needed."""
+    if not current_user.is_authenticated:
+        raise Exception("User not authenticated")
+
+    return get_games_directory(current_user.school.slug)
+
+
+def get_games_directory(school_slug):
+    """Return the archived-games dir for an explicit school slug, creating it if needed."""
+    games_dir = os.path.join(current_app.config['STORAGE'], 'schools', school_slug, 'games')
+    os.makedirs(games_dir, exist_ok=True)
+    return games_dir

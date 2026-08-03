@@ -33,6 +33,17 @@ const _SUN_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16
 const _MOON_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
 
 // Load combined header + navbar
+// The nav's Upload item opens the file picker when you are already on /upload,
+// and otherwise navigates there. uploadFile() only exists on that page, so
+// calling it unconditionally made the link dead everywhere else.
+function _navUpload() {
+    if (window.location.pathname.startsWith('/upload') && typeof uploadFile === 'function') {
+        uploadFile();
+        return false;
+    }
+    return true;
+}
+
 function loadNavbar(logo = '') {
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     const _logoFallback = `/static/resources/${isDark ? 'statline-logo' : 'statline-logo-light'}.svg`;
@@ -43,7 +54,7 @@ function loadNavbar(logo = '') {
     const active = {
         home:     p === '/',
         file:     p.startsWith('/upload'),
-        view:     p.startsWith('/report'),
+        view:     p.startsWith('/batting') || p.startsWith('/pitching'),
         settings: p.startsWith('/account') || p.startsWith('/subscription'),
         about:    p.startsWith('/about'),
     };
@@ -62,14 +73,15 @@ function loadNavbar(logo = '') {
                     <div class="nav-dropdown">
                         <a href="javascript:void(0)" class="nav-link${a('file')}">File ▾</a>
                         <div class="dropdown-content">
-                            <a href="/upload" onclick="uploadFile(); return false;">Upload</a>
+                            <a href="/upload" onclick="return _navUpload();">Upload</a>
                             <a href="#" id="nav-download-link" onclick="downloadPDFs(); return false;">Download</a>
                         </div>
                     </div>
                     <div class="nav-dropdown">
                         <a href="javascript:void(0)" class="nav-link${a('view')}">View ▾</a>
                         <div class="dropdown-content">
-                            <a href="/report">Season Report</a>
+                            <a href="/pitching">Pitching Report</a>
+                            <a href="/batting">Batting Report</a>
                         </div>
                     </div>
                     <div class="nav-dropdown">

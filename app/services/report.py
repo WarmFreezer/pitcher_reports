@@ -4,70 +4,18 @@ import pandas as pd
 import seaborn as sns
 import matplotlib
 
-# Use a non-interactive backend for matplotlib
-matplotlib.use('Agg') 
+from app.services.report_theme import (
+    baseball_width,
+    THEME_COLORS,
+    make_strike_zone,
+    make_shadow_zone,
+    make_homeplate,
+    cmap,
+    pitch_order,
+    pitch_point_colors
+)
 
-from matplotlib.colors import LinearSegmentedColormap, to_rgb
-from matplotlib.patches import Rectangle
 from matplotlib import pyplot as plt
-import matplotlib.patches as patches
-
-baseball_width = 0.24  # Approximate width of a baseball in feet
-
-_THEME_COLORS = {
-    'light': {
-        'figure.facecolor': 'none',
-        'figure.edgecolor': 'none',
-        'axes.facecolor':   'none',
-        'text.color':       '#111111',
-        'axes.edgecolor':   '#111111',
-        'axes.titlecolor':  '#111111',
-        'axes.labelcolor':  '#111111',
-        'xtick.color':      '#444444',
-        'ytick.color':      '#444444',
-        'grid.color':       '#444444',
-        'grid.alpha':       0.3,
-    },
-    'dark': {
-        'figure.facecolor': 'none',
-        'figure.edgecolor': 'none',
-        'axes.facecolor':   'none',
-        'text.color':       '#e0e0e0',
-        'axes.edgecolor':   '#e0e0e0',
-        'axes.titlecolor':  '#e0e0e0',
-        'axes.labelcolor':  '#e0e0e0',
-        'xtick.color':      '#aaaaaa',
-        'ytick.color':      '#aaaaaa',
-        'grid.color':       '#aaaaaa',
-        'grid.alpha':       0.3,
-    },
-}
-
-matplotlib.rcParams.update({
-    'font.family': 'Cambria',
-    'font.size': 18,
-    'font.weight': 'bold',
-})
-
-def _make_strike_zone():
-    return Rectangle((-0.83, 1.5), 1.66, 2.0,
-        linewidth=2, edgecolor=matplotlib.rcParams['text.color'], facecolor='none', linestyle='--')
-
-def _make_shadow_zone():
-    return Rectangle(
-        (-0.83 - baseball_width, 1.5 - baseball_width),
-        1.66 + 2 * baseball_width, 2.0 + 2 * baseball_width,
-        linewidth=1, edgecolor=matplotlib.rcParams['xtick.color'], facecolor='none', linestyle=(0, (1, 10)))
-
-def _make_homeplate():
-    return patches.Polygon([(-0.35, 0.025), (0.35, 0.025), (0.35, 0.45), (0, 0.8), (-0.35, 0.45)],
-        linewidth=1, edgecolor=matplotlib.rcParams['xtick.color'], facecolor='none', linestyle='-')
-
-def _cmap(hex_color, name):
-    # Build a transparency gradient from fully transparent to the pitch color,
-    # so overlapping KDE fills blend cleanly on the white plot background
-    r, g, b = to_rgb(hex_color)
-    return LinearSegmentedColormap.from_list(name, [(r, g, b, 0), (r, g, b, 1)])
 
 # Define required columns and their types
 required_columns = {
@@ -100,35 +48,8 @@ required_columns = {
     'Strikes': 'numeric'
 }
 
-# Order to display pitch types in tables and plots
-pitch_order = {
-    'Fastball': 'FB',
-    'Curveball': 'CB',
-    'Slider': 'SL',
-    'ChangeUp': 'CH',
-    'Splitter': 'SP',
-    'Knuckleball': 'KB',
-    'Cutter': 'CT',
-    'Sinker': 'SK',
-    'Four-Seam': 'FF',
-    'Undefined': 'UN'
-}
-    
-pitch_point_colors = {
-    'Fastball': '#d22d49',
-    'Curveball': '#00d1ed',
-    'Slider': '#004400',
-    'ChangeUp': '#1dbe3a',
-    'Splitter': '#4f0010',
-    'Knuckleball': '#472cee',
-    'Cutter': '#933f2c',
-    'Sinker': '#fe9d00',
-    'Four-Seam': '#FF0088',
-    'Undefined': '#888888'
-}
-
 # Define colors for each pitch type
-pitch_colors = {k: _cmap(v, k) for k, v in pitch_point_colors.items()}
+pitch_colors = {k: cmap(v, k) for k, v in pitch_point_colors.items()}
 
 STRIKES = ['StrikeCalled', 'StrikeSwinging', 'FoulBallNotFieldable']
 
@@ -266,7 +187,7 @@ def build_table(source, pitcher_id):
 
 def pitch_heat_map_by_batter_side(source, id, output_path, pitcher_id, threshold=0.1, theme='light'):
     try:
-        matplotlib.rcParams.update(_THEME_COLORS.get(theme, _THEME_COLORS['light']))
+        matplotlib.rcParams.update(THEME_COLORS.get(theme, THEME_COLORS['light']))
 
         table = source[['Pitcher', 'PitcherId', 'TaggedPitchType', 'PlateLocHeight', 'PlateLocSide', 'BatterSide']]
         pitcher_data = table[table['PitcherId'] == pitcher_id]
@@ -333,9 +254,9 @@ def pitch_heat_map_by_batter_side(source, id, output_path, pitcher_id, threshold
                     ax.set_xlim(-2.5, 2.5)
                     ax.set_ylim(0, 5)
                     ax.set_aspect('equal', adjustable='box')
-                    ax.add_patch(_make_strike_zone())
-                    ax.add_patch(_make_shadow_zone())
-                    ax.add_patch(_make_homeplate())
+                    ax.add_patch(make_strike_zone())
+                    ax.add_patch(make_shadow_zone())
+                    ax.add_patch(make_homeplate())
 
                 side_label = batter_side.lower()
                 fig.subplots_adjust(left=0.1, right=0.96, top=0.88, bottom=0.1)
@@ -354,7 +275,7 @@ def pitch_break_map(source, id, output_path, pitcher_id, threshold=0.1, theme='l
     fig = None
     arm_angle = None
     try:
-        matplotlib.rcParams.update(_THEME_COLORS.get(theme, _THEME_COLORS['light']))
+        matplotlib.rcParams.update(THEME_COLORS.get(theme, THEME_COLORS['light']))
 
         table = source[['Pitcher', 'PitcherId', 'TaggedPitchType', 'InducedVertBreak', 'HorzBreak']]
         pitcher_data = table[table['PitcherId'] == pitcher_id]

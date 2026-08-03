@@ -1,0 +1,13 @@
+Outs,KorBB,PlayResult,Pitcher,PitcherId,PitcherThrows,TaggedPitchType,PlateLocHeight,PlateLocSide,Batter,BatterId,BatterSide,RelSpeed,InducedVertBreak,HorzBreak,SpinRate,VertApprAngle,HorzApprAngle,RelHeight,RelSide,Extension,Tilt,ZoneTime,PitchCall,PitcherTeam,BatterTeam,Date,Inning,PAofInning,PitchofPA,Balls,Strikes,AwayTeam,HomeTeam,ExitSpeed,Angle,Bearing,Distance
+0,Undefined,Undefined,"Doe, John",1001,Right,Fastball,2.5,0.0,"Zulu, Zed",900,Right,89.0,15.0,-6.0,2200,-5.5,1.2,6.0,-1.8,6.3,12:30,0,StrikeCalled,HOME,AWAY,2026-03-01,1,1,1,0,0,AWAY,HOME,,,,
+1,Strikeout,Undefined,"Doe, John",1001,Right,Fastball,2.4,0.1,"Zulu, Zed",900,Right,89.0,15.0,-6.0,2200,-5.5,1.2,6.0,-1.8,6.3,12:30,0,StrikeSwinging,HOME,AWAY,2026-03-01,1,1,2,0,1,AWAY,HOME,,,,
+1,Undefined,Single,"Doe, John",1001,Right,Fastball,2.6,-0.2,"Yankee, Yuri",901,Right,89.0,15.0,-6.0,2200,-5.5,1.2,6.0,-1.8,6.3,12:30,0,InPlay,HOME,AWAY,2026-03-01,1,2,1,0,0,AWAY,HOME,91.0,14.0,-12.0,210.0
+0,Undefined,Single,"Smith, Jane",2002,Right,Fastball,2.5,0.0,"Alpha, Adam",500,Right,89.0,15.0,-6.0,2200,-5.5,1.2,6.0,-1.8,6.3,12:30,0,InPlay,AWAY,HOME,2026-03-01,2,1,1,0,0,AWAY,HOME,98.0,12.0,-20.0,250.0
+1,Undefined,Out,"Smith, Jane",2002,Right,Slider,1.8,0.3,"Alpha, Adam",500,Right,89.0,15.0,-6.0,2200,-5.5,1.2,6.0,-1.8,6.3,12:30,0,InPlay,AWAY,HOME,2026-03-01,2,2,1,0,0,AWAY,HOME,85.0,5.0,10.0,60.0
+1,Undefined,Undefined,"Smith, Jane",2002,Right,Slider,1.1,1.4,"Alpha, Adam",500,Right,89.0,15.0,-6.0,2200,-5.5,1.2,6.0,-1.8,6.3,12:30,0,StrikeSwinging,AWAY,HOME,2026-03-01,2,3,1,0,0,AWAY,HOME,,,,
+2,Strikeout,Undefined,"Smith, Jane",2002,Right,Slider,1.2,1.2,"Alpha, Adam",500,Right,89.0,15.0,-6.0,2200,-5.5,1.2,6.0,-1.8,6.3,12:30,0,StrikeSwinging,AWAY,HOME,2026-03-01,2,3,2,0,1,AWAY,HOME,,,,
+2,Undefined,Undefined,"Smith, Jane",2002,Right,Fastball,4.2,0.2,"Alpha, Adam",500,Right,89.0,15.0,-6.0,2200,-5.5,1.2,6.0,-1.8,6.3,12:30,0,BallCalled,AWAY,HOME,2026-03-01,2,4,1,0,0,AWAY,HOME,,,,
+2,Walk,Undefined,"Smith, Jane",2002,Right,Fastball,4.1,-0.3,"Alpha, Adam",500,Right,89.0,15.0,-6.0,2200,-5.5,1.2,6.0,-1.8,6.3,12:30,0,BallCalled,AWAY,HOME,2026-03-01,2,4,2,1,0,AWAY,HOME,,,,
+2,Undefined,HomeRun,"Smith, Jane",2002,Right,Fastball,2.7,0.1,"Alpha, Adam",500,Right,89.0,15.0,-6.0,2200,-5.5,1.2,6.0,-1.8,6.3,12:30,0,InPlay,AWAY,HOME,2026-03-01,2,5,1,0,0,AWAY,HOME,105.0,28.0,5.0,400.0
+0,Undefined,Double,"Smith, Jane",2002,Right,Fastball,2.4,-0.1,"Bravo, Ben",501,Left,89.0,15.0,-6.0,2200,-5.5,1.2,6.0,-1.8,6.3,12:30,0,InPlay,AWAY,HOME,2026-03-01,3,1,1,0,0,AWAY,HOME,92.0,22.0,25.0,280.0
+1,Strikeout,Undefined,"Smith, Jane",2002,Right,Slider,1.3,1.1,"Bravo, Ben",501,Left,89.0,15.0,-6.0,2200,-5.5,1.2,6.0,-1.8,6.3,12:30,0,StrikeSwinging,AWAY,HOME,2026-03-01,3,2,1,0,2,AWAY,HOME,,,,

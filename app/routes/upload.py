@@ -1,33 +1,49 @@
-import gc
+"""
+Ingest and management for TrackMan game files.
+
+This blueprint used to generate every pitcher report inline. That work now lives in
+app/routes/pitching.py, reading from the saved game archive, so a file has to be
+saved before any report can be built from it. What is left here is the pipeline
+that gets a file into the archive, plus the manager for what is already in it.
+"""
 import os
 import glob
 import pandas as pd
-from datetime import date, datetime
+from datetime import datetime
 from werkzeug.utils import secure_filename
 from flask import Blueprint, request, jsonify, current_app
 from flask_login import login_required, current_user
 
-from app.db import models
-from app.services import report, report_lab_generator, file_validator
-from app.services.branding_loader import BrandingLoader
-from app.services.report_lab_generator import PDF_Generator, merge_pdfs
-from app.routes.utils import get_school_directories, flash_toast
+from app.services import report, game_archive, file_validator
+from app.services.team_stats import hash_file
+from app.routes.utils import get_school_directories, get_school_games_directory
 
 upload_bp = Blueprint('upload_api', __name__)
 
 required_columns = report.required_columns
 
-def calculate_age(birthdate):
-    if birthdate is None:
-        return None
-    today = datetime.today()
-    age = today.year - birthdate.year - ((today.month, today.day) < (birthdate.month, birthdate.day))
-    return age
+
+def _read_source(filepath):
+    if filepath.endswith(('.xlsx', '.xls')):
+        return pd.read_excel(filepath)
+    return pd.read_csv(filepath, low_memory=False)
+
+
+def _distinct(source, column):
+    return int(source[column].nunique()) if column in source.columns else 0
+
 
 @upload_bp.route('/api/upload', methods=['POST'])
 @login_required
 def upload_file():
-    school_temp_folder, school_output_folder = get_school_directories()
+    """
+    Validate a TrackMan file and stage it for saving.
+
+    Returns a summary of what the file contains so the user can confirm it is the
+    right game before committing it. No charts, no PDFs -- those come from
+    /pitching and /batting once the game is saved.
+    """
+    school_temp_folder, _ = get_school_directories()
 
     if 'file' not in request.files:
         return jsonify({'error': 'No file part in the request'}), 400
@@ -35,206 +51,151 @@ def upload_file():
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
 
-    # Clean up previous uploads from this user to avoid stale data
-    for pattern in [f'{current_user.id}_*.xlsx', f'{current_user.id}_*.xls', f'{current_user.id}_*.csv']:
-        for old_file in glob.glob(os.path.join(school_temp_folder, pattern)):
+    filename = secure_filename(file.filename)
+    if not filename.endswith(('.csv', '.xlsx', '.xls')):
+        return jsonify({'error': 'Unsupported file format. Please provide a .csv, .xlsx, or .xls file.'}), 400
+
+    # Clear this user's previous staging file so save-game cannot pick up a stale one
+    for pattern in ('*.xlsx', '*.xls', '*.csv'):
+        for old_file in glob.glob(os.path.join(school_temp_folder, f'{current_user.id}_{pattern}')):
             try:
                 os.remove(old_file)
-            except Exception as e:
+            except OSError as e:
                 print(f"Error deleting old file: {old_file} - {e}")
 
-    filename = secure_filename(file.filename)
     filepath = os.path.join(school_temp_folder, f'{current_user.id}_{filename}')
     file.save(filepath)
 
-    if filepath.endswith('.csv'):
-        source_df = pd.read_csv(filepath)
-    elif filepath.endswith(('.xlsx', '.xls')):
-        source_df = pd.read_excel(filepath)
-    else:
-        raise ValueError("Unsupported file format. Please provide a .csv, .xlsx, or .xls file.")
+    try:
+        source = _read_source(filepath)
+    except Exception as e:
+        os.remove(filepath)
+        return jsonify({'error': f'Could not read the file: {e}'}), 400
 
-    # Full validation: extension, MIME type, file signature, column presence, and type checks
+    # Full validation: extension, MIME type, file signature, column presence, types
     is_valid, result = file_validator.validate_uploaded_file(
-        source_df=source_df, file=file, filepath=filepath,
+        source_df=source, file=file, filepath=filepath,
         required_columns=list(required_columns.keys()),
-        column_types=required_columns
+        column_types=required_columns,
     )
 
     if not is_valid:
         try:
             os.remove(filepath)
-        except Exception:
+        except OSError:
             pass
         current_app.logger.warning(f"File validation failed: {filename} - {result}")
         return jsonify({'error': result}), 400
 
     current_app.logger.info(f"Valid file uploaded: {filename} - Checksum: {result}")
 
-    try:
-        # Remove stale images and PDFs from the previous session before generating new ones
-        for old_image in glob.glob(os.path.join(school_temp_folder, f'{current_user.id}_*.png')):
-            try:
-                os.remove(old_image)
-            except Exception as e:
-                print(f"Error deleting old image: {old_image} - {e}")
+    raw_date = source['Date'].mode().iloc[0] if 'Date' in source.columns else ''
+    parts = str(raw_date).split('-')
+    display_date = f"{parts[1]}/{parts[2]}/{parts[0]}" if len(parts) == 3 else str(raw_date)
 
-        for old_pdf in glob.glob(os.path.join(school_output_folder, f'{current_user.id}_*.pdf')):
-            try:
-                os.remove(old_pdf)
-            except Exception:
-                pass
+    # Must be team_stats.hash_file, not the validator's checksum -- the validator
+    # returns SHA-256 for logging while the archive and the database both key on
+    # that MD5. Comparing the two would never match.
+    with open(filepath, 'rb') as f:
+        content_hash = hash_file(f)
+    already_saved = any(
+        entry.get('content_hash') == content_hash
+        for entry in game_archive.read_manifest(get_school_games_directory())
+    )
 
-        branding = BrandingLoader.get_branding(current_user.school.slug)
-
-        roster_path = os.path.join(current_app.config['STORAGE'], 'schools', current_user.school.slug, 'assets', 'roster.csv')
-        roster = pd.read_csv(roster_path) if os.path.exists(roster_path) else pd.DataFrame()
-
-        gen = PDF_Generator(current_user=current_user, branding=branding)
-
-        target = request.form.get('target', 'own')
-
-        if target == 'opponent':
-            matching = source_df[source_df['PitcherTeam'] != current_user.school.trackman_id]
-        else:
-            matching = source_df[source_df['PitcherTeam'] == current_user.school.trackman_id]
-
-        if matching.empty:
-            if target == 'opponent':
-                return jsonify({'error': 'No opponent pitching data found in this file. Make sure you uploaded the correct game file.'}), 400
-            else:
-                return jsonify({'error': f'No pitching data found for your team (TrackMan ID: {current_user.school.trackman_id}). Make sure you uploaded the correct game file.'}), 400
-
-        raw_date = source_df['Date'].mode().iloc[0]
-        parts = str(raw_date).split('-')
-        date = f"{parts[1]}/{parts[2]}/{parts[0]}" if len(parts) == 3 else str(raw_date)
-        away_team = source_df['AwayTeam'].mode().iloc[0]
-        home_team = source_df['HomeTeam'].mode().iloc[0]
-
-        reports = []
-        for pitcher_id in source_df['PitcherId'].unique():
-            try:
-                pitcher_team = source_df.loc[source_df['PitcherId'] == pitcher_id, 'PitcherTeam'].iloc[0]
-                is_own = pitcher_team == current_user.school.trackman_id
-                if target == 'opponent' and is_own:
-                    continue
-                if target != 'opponent' and not is_own:
-                    continue
-
-                arm_angle = None
-                if current_user.school.is_active:
-                    for theme in ('light', 'dark'):
-                        report.pitch_heat_map_by_batter_side(source_df, current_user.id, school_temp_folder, pitcher_id, 0.75, theme=theme)
-                        result = report.pitch_break_map(source_df, current_user.id, school_temp_folder, pitcher_id, 0.75, theme=theme)
-                        if arm_angle is None and result is not None:
-                            arm_angle = result
-
-                # Auto-add pitchers found in the game file but missing from the roster
-                if not roster.empty and pitcher_id not in roster['Trackman ID'].values and target != 'opponent':
-                    last_name, first_name = source_df.loc[source_df['PitcherId'] == pitcher_id, 'Pitcher'].iloc[0].split(', ', 1)
-                    roster = pd.concat([roster, pd.DataFrame([{'Trackman ID': pitcher_id, 'First Name': first_name, 'Last Name': last_name}])], ignore_index=True)
-
-                # Build pitch stat tables for both the web view and the PDF
-                table_data = report.build_table(source_df, pitcher_id)
-                if not table_data or len(table_data) < 2 or table_data[1] is None:
-                    raise ValueError(f'Failed to build table data for pitcher ID {pitcher_id}')
-                report_html = table_data[4].to_html(index=False, float_format='%.2f', border=0, classes='pitcher-data-table', escape=False, justify='left', na_rep='')
-
-                pitch_usage_data = report.usage_table(source_df, pitcher_id)
-                if not pitch_usage_data or len(pitch_usage_data) < 2 or pitch_usage_data[1] is None:
-                    raise ValueError(f'Failed to build pitch usage table data for pitcher ID {pitcher_id}')
-                left_usage_html = pitch_usage_data[0].to_html(index=False, float_format='%.2f', border=0, classes='pitch-usage-table', escape=False, justify='left', na_rep='')
-                right_usage_html = pitch_usage_data[1].to_html(index=False, float_format='%.2f', border=0, classes='pitch-usage-table', escape=False, justify='left', na_rep='')
-
-                reports.append({
-                    'pitcher_id': str(pitcher_id),
-                    'pitcher_name': table_data[3],
-                    'pitcher_table': report_html,
-                    'left_usage_table': left_usage_html,
-                    'right_usage_table': right_usage_html,
-                    'heatmap_left_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_heat_map_left_light.png',
-                    'heatmap_right_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_heat_map_right_light.png',
-                    'heatmap_left_dark_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_heat_map_left_dark.png',
-                    'heatmap_right_dark_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_heat_map_right_dark.png',
-                    'breakmap_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_break_map_light.png',
-                    'breakmap_dark_url': f'/storage/schools/{current_user.school.slug}/temp/{current_user.id}_pitcher_{pitcher_id}_break_map_dark.png',
-                    'arm_angle': f'{arm_angle:.1f}°' if arm_angle is not None else '',
-                    'pdf_url': f'/storage/schools/{current_user.school.slug}/reports/{current_user.id}_pitcher_{pitcher_id}_report.pdf'
-                })
-
-                pitcher = models.Pitcher.query.filter_by(trackman_id=str(pitcher_id), school_id=current_user.school_id).first()
-            
-                if pitcher is None: 
-                    height = ''
-                    weight = ''
-                    birthdate = ''
-                else: 
-                    height = pitcher.height if pitcher.height else ''
-                    weight = pitcher.weight if pitcher.weight else ''
-                    birthdate = pitcher.birthdate if pitcher.birthdate else ''
-
-                age = calculate_age(birthdate) if birthdate else None
-
-                gen.generate_pitcher_report({
-                    'pitcher_name': table_data[3],
-                    'pitcher_id': str(pitcher_id),
-                    'date': date,
-                    'home_team': home_team,
-                    'away_team': away_team,
-                    'pitcher_height': height,
-                    'pitcher_weight': weight,
-                    'pitcher_age': age,
-                    'pitch_stats': table_data[4],
-                    'pitch_usage_left': pitch_usage_data[0],
-                    'pitch_usage_right': pitch_usage_data[1],
-                    'pitch_heat_map_left': os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_heat_map_left_light.png'),
-                    'pitch_heat_map_right': os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_heat_map_right_light.png'),
-                    'pitch_break_map': os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_break_map_light.png'),
-                }, os.path.abspath(os.path.join(school_output_folder, f'{current_user.id}_pitcher_{pitcher_id}_report.pdf')))
-
-            except Exception as e:
-                print(f"Error processing pitcher ID {pitcher_id}: {e}")
-                flash_toast(f"Error processing pitcher {pitcher_id}: {str(e)}", type='error')   
-                continue
-
-            # Release per-pitcher data before the next iteration to keep memory usage flat
-            del table_data, report_html
-                
-            gc.collect()
-
-        # Persist any new roster entries discovered during this upload
-        if not roster.empty:
-            roster.to_csv(roster_path, index=False)
-
-        merged_pdf_path = os.path.join(school_output_folder, f'{current_user.id}_merged_pitcher_reports.pdf')
-        merge_pdfs(current_user.id, school_output_folder, merged_pdf_path)
-
-        return jsonify({
-            'message': 'File processed successfully',
-            'num_reports': len(reports),
-            'reports': reports,
-            'merged_pdf_url': f'/storage/schools/{current_user.school.slug}/reports/{current_user.id}_merged_pitcher_reports.pdf',
-            'game_data': {'date': date, 'home_team': home_team, 'away_team': away_team},
-            'user': {'name': f"{current_user.first_name} {current_user.last_name}", 'school': current_user.school.name}
-        })
-
-    except Exception as e:
-        print(f"\n!!! ERROR: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': f'Failed to process file: {str(e)}'}), 500
+    return jsonify({
+        'message': 'File validated. Review the summary, then save the game.',
+        'filename': filename,
+        'already_saved': already_saved,
+        'game_data': {
+            'date': display_date,
+            'home_team': source['HomeTeam'].mode().iloc[0] if 'HomeTeam' in source.columns else '',
+            'away_team': source['AwayTeam'].mode().iloc[0] if 'AwayTeam' in source.columns else '',
+            'pitches': int(len(source)),
+            'pitchers': _distinct(source, 'PitcherId'),
+            'batters': _distinct(source, 'BatterId'),
+        },
+    })
 
 
 @upload_bp.route('/api/save-game', methods=['POST'])
 @login_required
 def save_game():
+    """
+    Commit the staged file: archive it, and unless it is a practice file, write
+    its aggregates to the database.
+
+    The archive is what /pitching and /batting read, so practice files stay fully
+    reportable. The flag only gates the database write, which is what keeps them
+    out of the dashboard and season totals.
+    """
     from app.services.team_stats import add_report
+
+    params = request.get_json(silent=True) or {}
+    practice = bool(params.get('practice', False))
+
     school_temp_folder, _ = get_school_directories()
     matches = glob.glob(os.path.join(school_temp_folder, f'{current_user.id}_*.csv'))
     matches += glob.glob(os.path.join(school_temp_folder, f'{current_user.id}_*.xlsx'))
+    matches += glob.glob(os.path.join(school_temp_folder, f'{current_user.id}_*.xls'))
     if not matches:
         return jsonify({'error': 'No uploaded file found. Please upload a file first.'}), 400
+
     filepath = matches[0]
-    with open(filepath, 'rb') as f:
-        add_report(school_id=current_user.school_id, trackman_id=current_user.school.trackman_id, file=f)
-    return jsonify({'message': 'Game data saved successfully.'})
+
+    if not practice:
+        with open(filepath, 'rb') as f:
+            add_report(
+                school_id=current_user.school_id,
+                trackman_id=current_user.school.trackman_id,
+                file=f,
+            )
+
+    entry = game_archive.archive_game(
+        get_school_games_directory(), filepath, practice=practice)
+
+    if entry is None:
+        return jsonify({'message': 'Game was already saved.', 'duplicate': True})
+
+    return jsonify({
+        'message': 'Practice file saved.' if practice else 'Game data saved successfully.',
+        'duplicate': False,
+        'game': {'date': entry['date'], 'practice': entry['practice']},
+    })
+
+
+@upload_bp.route('/api/games')
+@login_required
+def list_saved_games():
+    """Every saved game for this school, for the manager table."""
+    games_dir = get_school_games_directory()
+    return jsonify({
+        'games': game_archive.list_games(games_dir, current_user.school.trackman_id),
+    })
+
+
+@upload_bp.route('/api/games/<content_hash>', methods=['DELETE'])
+@login_required
+def delete_saved_game(content_hash):
+    """
+    Remove a saved game from both stores.
+
+    content_hash is deliberately the same identifier in the archive and the
+    database, which is what makes a clean two-sided delete possible. The hash is
+    checked against this school's archive first, so one school cannot delete
+    another's rows by guessing.
+    """
+    from app.services.team_stats import remove_report
+
+    games_dir = get_school_games_directory()
+    known = {
+        g['content_hash']
+        for g in game_archive.list_games(games_dir, current_user.school.trackman_id)
+    }
+    if content_hash not in known:
+        return jsonify({'error': 'Game not found'}), 404
+
+    removed = game_archive.remove_game(games_dir, content_hash)
+    remove_report(content_hash)
+
+    return jsonify({'message': 'Game deleted.', 'removed': removed})

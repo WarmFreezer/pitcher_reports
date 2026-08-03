@@ -5,8 +5,12 @@ __pycache__/
 /app/storage/schools/*/temp/*
 /app/storage/schools/*/reports/*
 /app/storage/schools/*/assets/*
+/app/storage/schools/*/games/*
+spray_chart_*.png
 instance/pitcher_reports.db
 .env
 instance/pitcher_reports.db-shm
 instance/pitcher_reports.db-wal
 CLAUDE.md
+.pytest_cache/
+.coverage

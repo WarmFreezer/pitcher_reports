@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{current_user.school.slug|upper}} Stat_Line - Home</title>
+    <title>{{current_user.school.slug|upper}} Stat_Line - Upload</title>
     <link rel="icon" href="{{ url_for('static', filename='resources/favicon.ico') }}" type="image/x-icon">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/forms.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tables.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/reports.css') }}">
 
     {% if branding %}
     <style>
@@ -28,69 +29,47 @@
     <!-- Navbar Placeholder -->
     <div id="navbar-placeholder"></div>
 
-    <!-- Header Placeholder -->
-    
     <!-- Main Content -->
     <main class="main-content">
         <div class="bubble" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
             <div>
                 <h2>Welcome to {{current_user.school.slug|upper}} Baseball Analytics</h2>
-                <p>Upload your data file to generate pitcher reports.</p>
+                <p>Upload a TrackMan file to add it to your archive. Build reports from
+                   <a href="/pitching">Pitching</a> or <a href="/batting">Batting</a>.</p>
             </div>
             <div style="display: flex; align-items: center; gap: 24px; flex-wrap: wrap;">
-                <label class="switch-field" style="gap: 10px;">
-                    <span class="switch-text">Own Team</span>
-                    <input type="checkbox" id="targetToggle" class="switch-input">
+                <!-- Order matters: forms.css targets .switch-input:checked + .switch-slider,
+                     so the slider has to be the input's immediate next sibling. -->
+                <label class="switch-field">
+                    <span class="switch-text">Game</span>
+                    <input type="checkbox" id="practiceToggle" class="switch-input">
                     <span class="switch-slider"></span>
-                    <span class="switch-text">Opponent</span>
+                    <span class="switch-text">Practice</span>
                 </label>
                 <input type="file" id="fileUpload" accept=".csv,.xlsx,.xls" onchange="handleFileSelect(event)" style="display: none;">
                 <button onclick="uploadFile()" class="upload-btn">Upload File</button>
             </div>
         </div>
-        
-        <div id="gameDataDisplay"></div>
 
-        <!-- Report Output Container -->
-        <div id="report-output" style="margin: 0px;"></div>
-    </main>
-    
-    <!-- Pitcher Report Template -->
-    <template id="pitcher-report-template">
-        <div class="pitcher-report">
-            <div class="pitcher-report-header">
-                <h2 class="user-name">Pitcher Name</h2>
-                <div style="display: flex; align-items: center; gap: 14px;">
-                    <div class="download-container"></div>
-                    <span class="pitcher-report-chevron">▾</span>
-                </div>
+        <!-- Staged upload summary + Save action -->
+        <div id="uploadSummary"></div>
+
+        <div class="bubble">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+                <h2>Saved Games</h2>
+                <span id="savedCount" class="filter-note"></span>
             </div>
-            <div class="pitcher-report-body collapsible collapsible-lg">
-                <div class="pitcher-heatmap"></div>
-                <div class="report-lower-row">
-                    <div class="pitcher-breakmap"></div>
-                    <div class="pitcher-usage-panel">
-                        <p class="graph-title">Pitch Usage</p>
-                        <div class="graph-block">
-                            <p class="graph-subtitle">LHH</p>
-                            <div class="table-section"><div class="left-usage table-scroll"></div></div>
-                        </div>
-                        <div class="graph-block">
-                            <p class="graph-subtitle">RHH</p>
-                            <div class="table-section"><div class="right-usage table-scroll"></div></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="table-section" style="max-width:1200px; margin: 8px auto;">
-                    <div class="pitcher-table table-scroll"></div>
+            <div class="table-section" style="margin-top: 16px;">
+                <div id="savedGames" class="table-scroll">
+                    <p class="filter-note">Loading…</p>
                 </div>
             </div>
         </div>
-    </template>
-    
+    </main>
+
     <!-- Footer Placeholder -->
     <div id="footer-placeholder"></div>
-    
+
     <script src="{{ url_for('static', filename='js/core.js') }}"></script>
     <script src="{{ url_for('static', filename='js/pages/upload.js') }}"></script>
 </body>

@@ -16,14 +16,14 @@
     <main class="main-content">
         <div class="bubble about-bubble">
             <h2 class="about-lead">
-                Pitcher Reports makes verbose TrackMan data easy to interpret. Build professional, coach-ready reports in minutes.
-                <br>Including quick view on the website, downloadable PDFs, and custom branding options.
+                Stat_Line makes verbose TrackMan data easy to interpret. Build professional, coach-ready reports in minutes.
+                <br>Pitching and batting, with quick view on the website, downloadable PDFs, and custom branding options.
             </h2>
 
             <div class="comparison-toggle" aria-label="Before and after report comparison">
                 <div class="toggle-tabs" role="tablist">
                     <button class="toggle-tab toggle-tab--active" role="tab" aria-selected="true" aria-controls="tab-before" data-tab="before">Before — Raw TrackMan</button>
-                    <button class="toggle-tab" role="tab" aria-selected="false" aria-controls="tab-after" data-tab="after">After — Pitcher Report</button>
+                    <button class="toggle-tab" role="tab" aria-selected="false" aria-controls="tab-after" data-tab="after">After — Stat_Line Reports</button>
                 </div>
 
                 <div class="toggle-panel toggle-panel--active" id="tab-before" role="tabpanel">
@@ -34,8 +34,19 @@
                 </div>
 
                 <div class="toggle-panel toggle-panel--scrollable" id="tab-after" role="tabpanel">
-                    <p class="comparison-subtitle">Readable pitcher report with school branding</p>
-                    <img src="{{ url_for('static', filename='resources/PitcherReport.png') }}" alt="Pitcher report example, Used with permission" class="comparison-image--after">
+                    <div class="report-samples">
+                        <div class="report-sample">
+                            <p class="comparison-subtitle">Pitcher report — heatmaps, movement charts and pitch-type tables</p>
+                            <img src="{{ url_for('static', filename='resources/PitcherReport.png') }}" alt="Pitcher report example, Used with permission" class="comparison-image--after">
+                        </div>
+
+                        <div class="report-sample">
+                            <p class="comparison-subtitle">Batter report — date-ranged, with spray charts and plate discipline</p>
+                            <img src="{{ url_for('static', filename='resources/BatterReport.png') }}"
+                                 alt="Batter report example, Used with permission"
+                                 class="comparison-image--after">
+                        </div>
+                    </div>
                 </div>
             </div>
 
