@@ -160,11 +160,11 @@ function escapeAttr(v) {
 function buildRosterRow(row, columns) {
     const trackmanId = row[columns[0]] ?? '';
     // Cache-busting timestamp prevents the browser from serving a stale 404 after a new pfp is uploaded
-    const pfpUrl = `/storage/schools/${window._schoolSlug}/assets/players/${trackmanId}/pfp.png?t=${Date.now()}`;
+    const pfpUrl = `/storage/schools/${window._schoolId}/assets/players/${trackmanId}/pfp.png?t=${Date.now()}`;
 
     const pfpCell = `
         <td class="pfp-cell">
-            <img class="player-pfp" src="${pfpUrl}" onerror="if(!this._triedSchool){this._triedSchool=true;this.src='/storage/schools/'+window._schoolSlug+'/assets/logo.png';}else{this.onerror=null;this.src='/static/resources/'+(document.documentElement.getAttribute('data-theme')==='dark'?'statline-logo':'statline-logo-light')+'.svg';}">
+            <img class="player-pfp" src="${pfpUrl}" onerror="if(!this._triedSchool){this._triedSchool=true;this.src='/storage/schools/'+window._schoolId+'/assets/logo.png';}else{this.onerror=null;this.src='/static/resources/'+(document.documentElement.getAttribute('data-theme')==='dark'?'statline-logo':'statline-logo-light')+'.svg';}">
             <input type="file" accept=".png,.jpg,.jpeg" style="display:none"
                    onchange="uploadPlayerPfp('${trackmanId}', this)">
             <span class="pfp-edit" onclick="this.previousElementSibling.click()">✎</span>
@@ -362,7 +362,7 @@ async function cancelSubscription() {
 // Roster auto-load — reads school slug from the body data attribute set by the template
 (function () {
     if (document.getElementById('roster-table-container')) {
-        window._schoolSlug = document.body.dataset.schoolSlug || '';
+        window._schoolId = document.body.dataset.schoolId || '';
         loadRoster();
     }
 })();

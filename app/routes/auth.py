@@ -1,6 +1,7 @@
 import os
 import stripe
 from flask import Blueprint, request, render_template, redirect, url_for, flash, session
+from flask.typing import ResponseReturnValue
 from flask_login import login_user, logout_user, login_required, current_user
 
 from app.db.models import db, User, School
@@ -12,14 +13,15 @@ stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
 
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
-def register():
+def register() -> ResponseReturnValue:
+    """New-user signup: pick a school, confirm the email matches its domain, create the account."""
     schools = School.query.order_by(School.name).all()
 
     if request.method == 'POST':
-        name = request.form.get('name')
+        name = request.form.get('name', '')
         first_name, last_name = name.split(' ', 1) if ' ' in name else (name, '')
-        email = request.form.get('email')
-        password = request.form.get('password')
+        email = request.form.get('email', '')
+        password = request.form.get('password', '')
         confirm_password = request.form.get('confirm_password')
         school_name = request.form.get('school')
 
@@ -64,12 +66,13 @@ def register():
 
 
 @auth_bp.route('/schools', methods=['GET', 'POST'])
-def schools():
+def schools() -> ResponseReturnValue:
+    """New-school signup: collect school details, stash them in session, and start Stripe checkout."""
     if request.method == 'POST':
-        school_name = request.form.get('name')
-        school_slug = request.form.get('slug')
-        admin_email = request.form.get('admin_email')
-        confirm_admin_email = request.form.get('confirm_admin_email')
+        school_name = request.form.get('name', '')
+        school_slug = request.form.get('slug', '')
+        admin_email = request.form.get('admin_email', '')
+        confirm_admin_email = request.form.get('confirm_admin_email', '')
 
         # Validate uniqueness and admin email confirmation before touching Stripe
         if School.query.filter_by(name=school_name).first():
@@ -92,7 +95,7 @@ def schools():
 
         try:
             checkout_session = stripe.checkout.Session.create(
-                line_items=[{'price': os.environ.get('STRIPE_PRICE_ID'), 'quantity': 1}],
+                line_items=[{'price': os.environ.get('STRIPE_PRICE_ID', ''), 'quantity': 1}],
                 mode='subscription',
                 ui_mode='embedded',
                 return_url='http://localhost:5000/return?session_id={CHECKOUT_SESSION_ID}',
@@ -109,13 +112,14 @@ def schools():
 
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
-def login():
+def login() -> ResponseReturnValue:
+    """Log in with email/password, honoring a ?next= redirect set by @login_required."""
     if current_user.is_authenticated:
         return redirect(url_for('pages.dashboard'))
 
     if request.method == 'POST':
-        email = request.form.get('email')
-        password = request.form.get('password')
+        email = request.form.get('email', '')
+        password = request.form.get('password', '')
         user = Auth.get_user_by_email(email)
 
         if user and Auth.verify_password(user, password):
@@ -131,7 +135,8 @@ def login():
 
 @auth_bp.route('/logout')
 @login_required
-def logout():
+def logout() -> ResponseReturnValue:
+    """Log out the current user."""
     logout_user()
     flash('You have been logged out.', 'info')
     return redirect(url_for('pages.index'))

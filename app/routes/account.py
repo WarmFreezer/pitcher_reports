@@ -1,4 +1,5 @@
 from flask import Blueprint, request, jsonify, render_template
+from flask.typing import ResponseReturnValue
 from flask_login import login_required, logout_user, current_user
 
 from app.db.models import db
@@ -10,9 +11,10 @@ account_bp = Blueprint('account', __name__)
 
 @account_bp.route('/account')
 @login_required
-def account_page():
-    branding = BrandingLoader.get_branding(current_user.school.slug)
-    logo_path = f"/storage/schools/{current_user.school.slug}/assets/logo.png"
+def account_page() -> ResponseReturnValue:
+    """Render the account settings page."""
+    branding = BrandingLoader.get_branding(current_user.school_id)
+    logo_path = f"/storage/schools/{current_user.school_id}/assets/logo.png"
     return render_template('account.html', branding=branding, logo_path=logo_path)
 
 
@@ -20,7 +22,8 @@ def account_page():
 
 @account_bp.route('/api/account/password', methods=['POST'])
 @login_required
-def update_password():
+def update_password() -> ResponseReturnValue:
+    """Change the current user's password after verifying the current one."""
     data = request.get_json()
     current_password = data.get('current_password')
     new_password = data.get('new_password')
@@ -43,7 +46,8 @@ def update_password():
 
 @account_bp.route('/api/account/information', methods=['POST'])
 @login_required
-def update_information():
+def update_information() -> ResponseReturnValue:
+    """Update the current user's name and/or email."""
     data = request.get_json()
     name = data.get('name', '')
     first_name = name.split(' ')[0] if name else current_user.first_name
@@ -68,7 +72,8 @@ def update_information():
 
 @account_bp.route('/api/account/delete', methods=['POST'])
 @login_required
-def delete_account():
+def delete_account() -> ResponseReturnValue:
+    """Delete the current user's account (blocked for the school's admin)."""
     data = request.get_json()
     if data.get('confirm') != 'DELETE':
         return jsonify({'error': 'Please type DELETE to confirm account deletion.'}), 400

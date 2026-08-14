@@ -42,7 +42,7 @@ def _save(client, practice=False):
 
 
 def _games_dir(app, school):
-    return os.path.join(app.config['STORAGE'], 'schools', school.slug, 'games')
+    return os.path.join(app.config['STORAGE'], 'schools', str(school.id), 'games')
 
 
 # --- upload: validate and describe -----------------------------------------
@@ -69,7 +69,7 @@ def test_upload_generates_no_reports(client, login_as, home_user, home_school, a
 
     _upload(client)
 
-    school_dir = os.path.join(app.config['STORAGE'], 'schools', home_school.slug)
+    school_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id))
     assert glob_count(os.path.join(school_dir, 'temp'), '.png') == 0
     assert glob_count(os.path.join(school_dir, 'reports'), '.pdf') == 0
 

@@ -1,6 +1,7 @@
 import os
 import stripe
 from flask import Blueprint, render_template, request, jsonify, session, flash, redirect, url_for
+from flask.typing import ResponseReturnValue
 
 from app.db.models import db, School
 
@@ -10,11 +11,11 @@ stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
 
 
 @payment_bp.route('/subscribe', methods=['POST'])
-def subscribe():
-    # Legacy endpoint used by the embedded checkout JS — creates a session for a new school signup
+def subscribe() -> ResponseReturnValue:
+    """Legacy endpoint used by the embedded checkout JS — creates a session for a new school signup."""
     try:
         checkout_session = stripe.checkout.Session.create(
-            line_items=[{'price': os.environ.get('STRIPE_PRICE_ID'), 'quantity': 1}],
+            line_items=[{'price': os.environ.get('STRIPE_PRICE_ID', ''), 'quantity': 1}],
             mode='subscription',
             ui_mode='embedded',
             return_url='http://localhost:5000/return?session_id={CHECKOUT_SESSION_ID}',
@@ -27,25 +28,26 @@ def subscribe():
 
 
 @payment_bp.route('/return', methods=['GET'])
-def return_from_checkout():
-    session_id = request.args.get('session_id')
+def return_from_checkout() -> ResponseReturnValue:
+    """Land here after Stripe checkout; create or reactivate the school once payment succeeded."""
+    session_id = request.args.get('session_id', '')
     try:
         checkout_session = stripe.checkout.Session.retrieve(session_id)
 
         if checkout_session.mode == 'subscription':
             subscription_id = checkout_session.subscription
             if subscription_id:
-                subscription = stripe.Subscription.retrieve(subscription_id)
+                subscription = stripe.Subscription.retrieve(str(subscription_id))
 
                 if subscription.status in ('active', 'trialing'):
-                    metadata = checkout_session.metadata
+                    metadata = checkout_session.metadata or {}
 
-                    if 'school_slug' in metadata and 'name' not in metadata:
+                    if 'school_id' in metadata and 'name' not in metadata:
                         # Resubscribe flow — update the existing school record
-                        school = School.query.filter_by(slug=metadata['school_slug']).first()
+                        school = db.session.get(School, int(metadata['school_id']))
                         if school:
-                            school.stripe_customer_id = checkout_session.customer
-                            school.stripe_subscription_id = subscription_id
+                            school.stripe_customer_id = str(checkout_session.customer)
+                            school.stripe_subscription_id = str(subscription_id)
                             school.stripe_subscription_status = subscription.status
                             db.session.commit()
                         flash('Subscription reactivated successfully!', 'success')
@@ -57,8 +59,8 @@ def return_from_checkout():
                             slug=metadata['slug'],
                             admin_email=metadata['admin_email'],
                             trackman_id=metadata.get('trackman_id') or None,
-                            stripe_customer_id=checkout_session.customer,
-                            stripe_subscription_id=subscription_id,
+                            stripe_customer_id=str(checkout_session.customer),
+                            stripe_subscription_id=str(subscription_id),
                             stripe_subscription_status=subscription.status
                         ))
                         db.session.commit()
@@ -67,6 +69,8 @@ def return_from_checkout():
                         return redirect(url_for('auth.register'))
                 else:
                     return render_template('subscription_pending.html', subscription=subscription)
+            else:
+                return render_template('pending.html')
 
         elif checkout_session.payment_status == 'paid':
             return render_template('success.html')
@@ -78,7 +82,8 @@ def return_from_checkout():
 
 
 @payment_bp.route('/checkout', methods=['GET'])
-def embedded_checkout():
+def embedded_checkout() -> ResponseReturnValue:
+    """Render the embedded Stripe checkout page for a client_secret."""
     client_secret = request.args.get('client_secret', '')
     if not client_secret:
         return 'Missing client_secret', 400
@@ -90,13 +95,14 @@ def embedded_checkout():
 
 
 @payment_bp.route('/webhook', methods=['POST'])
-def webhook():
+def webhook() -> ResponseReturnValue:
+    """Stripe webhook: keep the school's subscription status in sync with account events."""
     payload = request.data
-    sig_header = request.headers.get('Stripe-Signature')
+    sig_header = request.headers.get('Stripe-Signature', '')
 
     # Verify the event came from Stripe before processing it
     try:
-        event = stripe.Webhook.construct_event(payload, sig_header, os.environ.get('STRIPE_WHSEC'))
+        event = stripe.Webhook.construct_event(payload, sig_header, os.environ.get('STRIPE_WHSEC', ''))
     except (ValueError, stripe.error.SignatureVerificationError) as e:
         return str(e), 400
 

@@ -1,10 +1,13 @@
 import os
 import gc
 import glob
+from collections.abc import Mapping
 from datetime import datetime
+from typing import Any
 
 import pandas as pd
 from flask import Blueprint, request, jsonify, render_template, send_file
+from flask.typing import ResponseReturnValue
 from flask_login import login_required, current_user
 
 from app.services import game_archive, hitter_report
@@ -17,7 +20,7 @@ batting_bp = Blueprint('batting', __name__)
 DATE_FORMAT = '%Y-%m-%d'
 
 
-def _parse_date(value, fallback):
+def _parse_date(value: str | None, fallback: str | None) -> str | None:
     """ISO date string, or the fallback when absent/malformed."""
     if not value:
         return fallback
@@ -27,14 +30,14 @@ def _parse_date(value, fallback):
         return fallback
 
 
-def _display_date(iso_date):
+def _display_date(iso_date: str | None) -> str:
     try:
-        return datetime.strptime(iso_date, DATE_FORMAT).strftime('%m/%d/%Y')
+        return datetime.strptime(iso_date or '', DATE_FORMAT).strftime('%m/%d/%Y')
     except (ValueError, TypeError):
         return iso_date or ''
 
 
-def _resolve_range(params):
+def _resolve_range(params: Mapping[str, Any]) -> tuple[str | None, str | None, str | None, ResponseReturnValue | None]:
     """
     Clamp the requested window to what the archive actually holds.
 
@@ -49,26 +52,26 @@ def _resolve_range(params):
 
     start_date = _parse_date(params.get('start_date'), earliest)
     end_date = _parse_date(params.get('end_date'), latest)
-    if start_date > end_date:
+    if start_date and end_date and start_date > end_date:
         start_date, end_date = end_date, start_date
 
     return games_dir, start_date, end_date, None
 
 
-def _hitter_pdf_path(school_output_folder, batter_id):
+def _hitter_pdf_path(school_output_folder: str, batter_id: str) -> str:
     return os.path.abspath(os.path.join(
         school_output_folder, f'{current_user.id}_hitter_{batter_id}_report.pdf'))
 
 
 @batting_bp.route('/batting')
 @login_required
-def batting_page():
+def batting_page() -> ResponseReturnValue:
     return render_template('batting.html')
 
 
 @batting_bp.route('/api/batting/hitters')
 @login_required
-def batting_hitters():
+def batting_hitters() -> ResponseReturnValue:
     """
     Hitters with batted balls inside the requested window, for the checkbox list.
 
@@ -103,7 +106,7 @@ def batting_hitters():
 
 @batting_bp.route('/api/batting/report', methods=['POST'])
 @login_required
-def batting_report():
+def batting_report() -> ResponseReturnValue:
     """
     Build reports for every selected hitter over the date range.
 
@@ -122,6 +125,7 @@ def batting_report():
     games_dir, start_date, end_date, error = _resolve_range(params)
     if error:
         return error
+    assert games_dir is not None and start_date is not None and end_date is not None
 
     target = params.get('target', 'own')
 
@@ -142,7 +146,7 @@ def batting_report():
         return jsonify({'error': 'No data in the selected date range.'}), 404
 
     school_temp_folder, school_output_folder = get_school_directories()
-    branding = BrandingLoader.get_branding(current_user.school.slug)
+    branding = BrandingLoader.get_branding(current_user.school_id)
     gen = PDF_Generator(current_user=current_user, branding=branding)
 
     # Clear this user's previous hitter output so a stale chart or PDF from an
@@ -157,7 +161,7 @@ def batting_report():
             print(f"Error deleting stale hitter output: {path} - {e}")
 
     date_range = f'{_display_date(start_date)} - {_display_date(end_date)}'
-    slug = current_user.school.slug
+    school_id = current_user.school_id
     reports = []
     failed = []
 
@@ -179,13 +183,7 @@ def batting_report():
             hitter_name = hitter_report.batter_name(source, batter_id)
             games = int(rows['GameDate'].nunique()) if 'GameDate' in rows.columns else 0
 
-            def to_html(df):
-                if df is None or df.empty:
-                    return ''
-                return df.to_html(index=False, border=0, classes='pitcher-data-table',
-                                  escape=False, justify='left', na_rep='')
-
-            def chart_path(side, theme):
+            def chart_path(side: str, theme: str) -> str | None:
                 path = os.path.join(
                     school_temp_folder,
                     f'{current_user.id}_hitter_{batter_id}_spray_{side}_{theme}.png')
@@ -204,7 +202,7 @@ def batting_report():
                 'spray_chart_right': chart_path('right', 'light'),
             }, _hitter_pdf_path(school_output_folder, batter_id))
 
-            chart_base = f'/storage/schools/{slug}/temp/{current_user.id}_hitter_{batter_id}_spray'
+            chart_base = f'/storage/schools/{school_id}/temp/{current_user.id}_hitter_{batter_id}_spray'
             export = f'/api/batting/export?batter_id={batter_id}&target={target}' \
                      f'&start_date={start_date}&end_date={end_date}'
 
@@ -214,8 +212,8 @@ def batting_report():
                 'games': games,
                 'date_range': date_range,
                 'summary': summary,
-                'discipline_table': to_html(discipline),
-                'batted_ball_table': to_html(batted_ball),
+                'discipline_table': discipline.to_html('pitcher-data-table'),
+                'batted_ball_table': batted_ball.to_html('pitcher-data-table'),
                 'spray_left_url': f'{chart_base}_left_light.png',
                 'spray_right_url': f'{chart_base}_right_light.png',
                 'spray_left_dark_url': f'{chart_base}_left_dark.png',
@@ -261,7 +259,7 @@ def batting_report():
 
 @batting_bp.route('/api/batting/export')
 @login_required
-def batting_export():
+def batting_export() -> ResponseReturnValue:
     """
     Stream a PDF built by the preceding /report call.
 
@@ -272,6 +270,7 @@ def batting_export():
     games_dir, start_date, end_date, error = _resolve_range(request.args)
     if error:
         return error
+    assert games_dir is not None
 
     _, school_output_folder = get_school_directories()
 

@@ -1,14 +1,18 @@
 import os
 import gc
 import glob
-from datetime import datetime
+from datetime import date, datetime
+from typing import Any
 
+import pandas as pd
 from flask import Blueprint, request, jsonify, render_template, send_file
+from flask.typing import ResponseReturnValue
 from flask_login import login_required, current_user
 
 from app.db import models
 from app.services import game_archive, report
 from app.services.branding_loader import BrandingLoader
+from app.services.pitch_stats import PitcherReportRequest
 from app.services.report_lab_generator import PDF_Generator, merge_pdfs
 from app.routes.utils import get_school_directories, get_school_games_directory, flash_toast
 
@@ -17,7 +21,7 @@ pitching_bp = Blueprint('pitching', __name__)
 DATE_FORMAT = '%Y-%m-%d'
 
 
-def _parse_date(value, fallback=None):
+def _parse_date(value: str | None, fallback: str | None = None) -> str | None:
     if not value:
         return fallback
     try:
@@ -26,21 +30,21 @@ def _parse_date(value, fallback=None):
         return fallback
 
 
-def _display_date(iso_date):
+def _display_date(iso_date: str | None) -> str:
     try:
-        return datetime.strptime(iso_date, DATE_FORMAT).strftime('%m/%d/%Y')
+        return datetime.strptime(iso_date or '', DATE_FORMAT).strftime('%m/%d/%Y')
     except (ValueError, TypeError):
         return iso_date or ''
 
 
-def calculate_age(birthdate):
+def calculate_age(birthdate: date | None) -> int | None:
     if not birthdate:
         return None
     today = datetime.today()
     return today.year - birthdate.year - ((today.month, today.day) < (birthdate.month, birthdate.day))
 
 
-def _selected_games(params):
+def _selected_games(params: dict[str, Any]) -> tuple[str | None, list[dict[str, Any]] | None, ResponseReturnValue | None]:
     """
     Resolve the requested content hashes against this school's own archive.
 
@@ -65,7 +69,7 @@ def _selected_games(params):
     return games_dir, selected, None
 
 
-def _pitcher_meta(pitcher_id):
+def _pitcher_meta(pitcher_id: int) -> tuple[str, str, int | None]:
     """Height/weight/age for the PDF header, blank when the roster has no entry."""
     pitcher = models.Pitcher.query.filter_by(
         trackman_id=str(pitcher_id), school_id=current_user.school_id).first()
@@ -80,13 +84,13 @@ def _pitcher_meta(pitcher_id):
 
 @pitching_bp.route('/pitching')
 @login_required
-def pitching_page():
+def pitching_page() -> ResponseReturnValue:
     return render_template('pitching.html')
 
 
 @pitching_bp.route('/api/pitching/games')
 @login_required
-def pitching_games():
+def pitching_games() -> ResponseReturnValue:
     """
     Archived games for the checkbox list, narrowed by the date range.
 
@@ -119,7 +123,7 @@ def pitching_games():
 
 @pitching_bp.route('/api/pitching/report', methods=['POST'])
 @login_required
-def pitching_report():
+def pitching_report() -> ResponseReturnValue:
     """
     Build reports for every pitcher in the selected games.
 
@@ -135,6 +139,7 @@ def pitching_report():
     games_dir, selected, error = _selected_games(params)
     if error:
         return error
+    assert games_dir is not None and selected is not None
 
     target = params.get('target', 'own')
     trackman_id = current_user.school.trackman_id
@@ -155,7 +160,7 @@ def pitching_report():
         return jsonify({'error': f'No pitching data found for {side} in the selected games.'}), 404
 
     school_temp_folder, school_output_folder = get_school_directories()
-    branding = BrandingLoader.get_branding(current_user.school.slug)
+    branding = BrandingLoader.get_branding(current_user.school_id)
     gen = PDF_Generator(current_user=current_user, branding=branding)
 
     # Clear this user's previous pitcher output so a stale chart or PDF from an
@@ -175,7 +180,7 @@ def pitching_report():
     opponents = sorted({g['opponent'] for g in selected})
     opponent_label = opponents[0] if len(opponents) == 1 else f'{len(opponents)} opponents'
 
-    slug = current_user.school.slug
+    school_id = current_user.school_id
     reports = []
     failed = []
 
@@ -191,45 +196,41 @@ def pitching_report():
                     if arm_angle is None and result is not None:
                         arm_angle = result
 
-            table_data = report.build_table(source, pitcher_id)
-            if not table_data or len(table_data) < 2 or table_data[1] is None:
+            game_report = report.build_table(source, pitcher_id)
+            if game_report is None:
                 raise ValueError(f'Failed to build table data for pitcher ID {pitcher_id}')
 
-            usage_data = report.usage_table(source, pitcher_id)
-            if not usage_data or len(usage_data) < 2 or usage_data[1] is None:
+            usage_sides = report.usage_table(source, pitcher_id)
+            if usage_sides is None:
                 raise ValueError(f'Failed to build pitch usage table for pitcher ID {pitcher_id}')
-
-            def to_html(df, css_class):
-                return df.to_html(index=False, float_format='%.2f', border=0,
-                                  classes=css_class, escape=False, justify='left', na_rep='')
 
             height, weight, age = _pitcher_meta(pitcher_id)
 
-            gen.generate_pitcher_report({
-                'pitcher_name': table_data[3],
-                'pitcher_id': str(pitcher_id),
-                'date': date_range,
-                'home_team': trackman_id,
-                'away_team': opponent_label,
-                'pitcher_height': height,
-                'pitcher_weight': weight,
-                'pitcher_age': age,
-                'pitch_stats': table_data[4],
-                'pitch_usage_left': usage_data[0],
-                'pitch_usage_right': usage_data[1],
-                'pitch_heat_map_left': os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_heat_map_left_light.png'),
-                'pitch_heat_map_right': os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_heat_map_right_light.png'),
-                'pitch_break_map': os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_break_map_light.png'),
-            }, os.path.abspath(os.path.join(
+            gen.generate_pitcher_report(PitcherReportRequest(
+                pitcher_name=game_report.header.pitcher_name,
+                pitcher_id=str(pitcher_id),
+                date=date_range,
+                home_team=trackman_id,
+                away_team=opponent_label,
+                pitcher_height=height,
+                pitcher_weight=weight,
+                pitcher_age=age,
+                pitch_stats=game_report.stats,
+                pitch_usage_left=usage_sides.left,
+                pitch_usage_right=usage_sides.right,
+                pitch_heat_map_left=os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_heat_map_left_light.png'),
+                pitch_heat_map_right=os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_heat_map_right_light.png'),
+                pitch_break_map=os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_break_map_light.png'),
+            ), os.path.abspath(os.path.join(
                 school_output_folder, f'{current_user.id}_pitcher_{pitcher_id}_report.pdf')))
 
-            chart_base = f'/storage/schools/{slug}/temp/{current_user.id}_pitcher_{pitcher_id}'
+            chart_base = f'/storage/schools/{school_id}/temp/{current_user.id}_pitcher_{pitcher_id}'
             reports.append({
                 'pitcher_id': str(pitcher_id),
-                'pitcher_name': table_data[3],
-                'pitcher_table': to_html(table_data[4], 'pitcher-data-table'),
-                'left_usage_table': to_html(usage_data[0], 'pitch-usage-table'),
-                'right_usage_table': to_html(usage_data[1], 'pitch-usage-table'),
+                'pitcher_name': game_report.header.pitcher_name,
+                'pitcher_table': game_report.stats.to_html('pitcher-data-table'),
+                'left_usage_table': usage_sides.left.to_html('pitch-usage-table'),
+                'right_usage_table': usage_sides.right.to_html('pitch-usage-table'),
                 'heatmap_left_url': f'{chart_base}_heat_map_left_light.png',
                 'heatmap_right_url': f'{chart_base}_heat_map_right_light.png',
                 'heatmap_left_dark_url': f'{chart_base}_heat_map_left_dark.png',
@@ -267,7 +268,7 @@ def pitching_report():
 
 @pitching_bp.route('/api/pitching/export')
 @login_required
-def pitching_export():
+def pitching_export() -> ResponseReturnValue:
     """
     Stream a PDF built by the preceding /report call.
 

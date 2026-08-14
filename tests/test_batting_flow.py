@@ -55,7 +55,7 @@ def archived_games(client, login_as, home_user):
 
 
 def _games_dir(app, school):
-    return os.path.join(app.config['STORAGE'], 'schools', school.slug, 'games')
+    return os.path.join(app.config['STORAGE'], 'schools', str(school.id), 'games')
 
 
 def _report(client, **overrides):
@@ -247,7 +247,7 @@ def test_range_covering_no_games_returns_404_not_500(archived_games, client):
 def test_report_generates_both_themes_of_both_spray_charts(archived_games, client, app, home_school, home_user):
     report = _first_report(_report(client))
 
-    temp_dir = os.path.join(app.config['STORAGE'], 'schools', home_school.slug, 'temp')
+    temp_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'temp')
     for side in ('left', 'right'):
         for theme in ('light', 'dark'):
             name = f'{home_user.id}_hitter_{BATTER_ID}_spray_{side}_{theme}.png'
@@ -289,14 +289,13 @@ def _discipline(**columns):
     from app.services.hitter_report import build_hitter_discipline_table
 
     rows = pd.DataFrame({'BatterId': [1] * len(columns['PitchCall']), **columns})
-    return build_hitter_discipline_table(rows, 1).set_index('Pitch')
+    return build_hitter_discipline_table(rows, 1)
 
 
 def test_discipline_table_keeps_pitch_types_outside_the_shared_order():
     """
     A tag with no pitch_order entry must keep its own label. Dropping it from the
-    sort categories turns the cell into NaN, which renders blank -- the row keeps
-    its numbers but stops saying what pitch they describe.
+    sort order would lose which pitch a row's numbers describe.
     """
     table = _discipline(
         TaggedPitchType=['Fastball', 'Sweeper'],
@@ -305,8 +304,9 @@ def test_discipline_table_keeps_pitch_types_outside_the_shared_order():
         PlateLocHeight=[2.5, 2.5],
     )
 
-    assert list(table.index) == ['FB', 'Sweeper'], 'unknown tags sort after known ones'
-    assert table.loc['Sweeper', 'Seen'] == 1
+    assert [row.pitch_type for row in table.rows] == ['FB', 'Sweeper'], 'unknown tags sort after known ones'
+    sweeper = next(row for row in table.rows if row.pitch_type == 'Sweeper')
+    assert sweeper.seen == 1
 
 
 def test_zone_and_chase_ignore_pitches_with_no_tracked_location():
@@ -326,14 +326,14 @@ def test_zone_and_chase_ignore_pitches_with_no_tracked_location():
         PlateLocSide=[0.0, 2.0, 2.0, np.nan],
         PlateLocHeight=[2.5, 2.5, 2.5, np.nan],
     )
-    row = table.loc['FB']
+    row = table.rows[0]
 
-    assert row['Zone'] == '33.3%', '1 of 3 located pitches, not 1 of 4 seen'
-    assert row['Chase'] == '50.0%', '1 chase of 2 located pitches out of the zone'
+    assert row.zone_pct == pytest.approx(33.333, abs=0.01), '1 of 3 located pitches, not 1 of 4 seen'
+    assert row.chase_pct == 50.0, '1 chase of 2 located pitches out of the zone'
 
     # Rates that do not depend on location still cover every pitch seen
-    assert row['Seen'] == 4
-    assert row['Swing'] == '50.0%'
+    assert row.seen == 4
+    assert row.swing_pct == 50.0
 
 
 # --- multi-hitter selection + merged PDF -----------------------------------
@@ -359,7 +359,7 @@ def test_multi_hitter_run_produces_a_merged_pdf(archived_games, client, app, hom
 
     assert data['merged_pdf_url'], 'a multi-hitter run must produce a merged PDF'
 
-    reports_dir = os.path.join(app.config['STORAGE'], 'schools', home_school.slug, 'reports')
+    reports_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'reports')
     merged = os.path.join(reports_dir, f'{home_user.id}_merged_hitter_reports.pdf')
     assert os.path.exists(merged)
 
@@ -372,7 +372,7 @@ def test_merged_pdf_excludes_pitcher_reports(archived_games, client, app, home_s
     """A2: merge_pdfs must filter on the hitter prefix, not sweep the whole folder."""
     from reportlab.pdfgen import canvas
 
-    reports_dir = os.path.join(app.config['STORAGE'], 'schools', home_school.slug, 'reports')
+    reports_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'reports')
     os.makedirs(reports_dir, exist_ok=True)
 
     # A decoy pitcher report sharing the folder. Written here rather than relying
@@ -407,7 +407,7 @@ def test_regenerating_clears_the_previous_selection(archived_games, client, app,
 
     _report(client, batter_ids=[BATTER_ID])
 
-    reports_dir = os.path.join(app.config['STORAGE'], 'schools', home_school.slug, 'reports')
+    reports_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'reports')
     remaining = {f for f in os.listdir(reports_dir) if '_hitter_' in f and 'merged' not in f}
     assert remaining == {f'{home_user.id}_hitter_{BATTER_ID}_report.pdf'}
 

@@ -208,7 +208,7 @@ def test_subscribe_without_pending_school_fails_gracefully(client):
 
 def test_return_from_checkout_resubscribe_flow(client, make_school, mock_stripe):
     school = make_school(stripe_subscription_status='canceled')
-    mock_stripe.checkout_session.metadata = {'school_slug': school.slug}
+    mock_stripe.checkout_session.metadata = {'school_id': str(school.id)}
 
     resp = client.get('/return?session_id=cs_test_123', follow_redirects=False)
 

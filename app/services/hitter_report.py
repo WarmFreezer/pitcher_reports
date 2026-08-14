@@ -7,11 +7,18 @@ only per-row requirement is the TrackMan schema below.
 '''
 
 import os
+from typing import Protocol, TypeVar, overload
 
 import numpy as np
 import pandas as pd
 import matplotlib
 
+from app.services.hitter_stats import (
+    BattedBallStat,
+    BattedBallTable,
+    HitterDisciplineStat,
+    HitterDisciplineTable,
+)
 from app.services.report_theme import (
     EV_MAX_MPH,
     EV_MIN_MPH,
@@ -22,6 +29,7 @@ from app.services.report_theme import (
 )
 
 from matplotlib import pyplot as plt
+from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import Normalize
 from matplotlib.lines import Line2D
@@ -75,7 +83,15 @@ required_columns = {
 }
 
 
-def calculate_x_y_coordinates(magnitude, angle):
+@overload
+def calculate_x_y_coordinates(magnitude: float, angle: float) -> tuple[float, float]: ...
+@overload
+def calculate_x_y_coordinates(magnitude: float, angle: np.ndarray) -> tuple[np.ndarray, np.ndarray]: ...
+@overload
+def calculate_x_y_coordinates(magnitude: pd.Series, angle: pd.Series) -> tuple[pd.Series, pd.Series]: ...
+def calculate_x_y_coordinates(
+    magnitude: float | np.ndarray | pd.Series, angle: float | np.ndarray | pd.Series
+) -> tuple[float | np.ndarray | pd.Series, float | np.ndarray | pd.Series]:
     """
     Polar TrackMan landing data to cartesian feet.
 
@@ -89,7 +105,7 @@ def calculate_x_y_coordinates(magnitude, angle):
     return x, y
 
 
-def calculate_marker(angle):
+def calculate_marker(angle: float) -> str:
     """Map a launch angle to its batted-ball marker. Scalar helper; plots use classify_hit_type."""
     for hit_type, threshold in hit_types.items():
         if angle <= threshold:
@@ -97,7 +113,7 @@ def calculate_marker(angle):
     return hit_types_markers['Pop']
 
 
-def classify_hit_type(angles):
+def classify_hit_type(angles: pd.Series) -> pd.Series:
     """Vectorized launch angle to batted-ball bucket. Returns a Categorical."""
     return pd.cut(
         angles,
@@ -106,20 +122,21 @@ def classify_hit_type(angles):
     )
 
 
-def _numeric(source, column):
+def _numeric(source: pd.DataFrame, column: str) -> pd.Series:
     """Column as float, or an all-NaN column when the export omitted it."""
     if column not in source.columns:
         return pd.Series(np.nan, index=source.index, dtype='float64')
     return pd.to_numeric(source[column], errors='coerce')
 
 
-def _text(source, column):
+def _text(source: pd.DataFrame, column: str) -> pd.Series:
+    """Column as string, blank where the export omitted it or the cell was null."""
     if column not in source.columns:
         return pd.Series('', index=source.index, dtype='object')
     return source[column].fillna('').astype(str)
 
 
-def batter_rows(source, batter_id):
+def batter_rows(source: pd.DataFrame, batter_id: str | int) -> pd.DataFrame:
     """Every pitch seen by one batter. Ids are compared numerically to dodge int/float/str drift."""
     if source.empty or 'BatterId' not in source.columns:
         return source.iloc[0:0]
@@ -133,7 +150,8 @@ def batter_rows(source, batter_id):
     return source[ids == target]
 
 
-def batter_name(source, batter_id):
+def batter_name(source: pd.DataFrame, batter_id: str | int) -> str:
+    """Display name for a batter id, falling back to the id itself if unresolved."""
     rows = batter_rows(source, batter_id)
     if rows.empty or 'Batter' not in rows.columns:
         return str(batter_id)
@@ -141,11 +159,12 @@ def batter_name(source, batter_id):
     return str(names.iloc[0]) if not names.empty else str(batter_id)
 
 
-def _swings(pitch_calls):
+def _swings(pitch_calls: pd.Series) -> pd.Series:
+    """Whether each pitch call was a swing: a whiff, ball in play, or foul."""
     return pitch_calls.isin(SWING_CALLS) | pitch_calls.str.startswith(FOUL_PREFIX)
 
 
-def build_hitter_summary(source, batter_id):
+def build_hitter_summary(source: pd.DataFrame, batter_id: str | int) -> dict[str, str]:
     """
     Slash line and batted-ball profile for one hitter, as a label -> display-string dict
     suitable for PDF_Generator.generate_stats_grid and for direct rendering on the page.
@@ -187,7 +206,7 @@ def build_hitter_summary(source, batter_id):
     launch_angle = _numeric(rows, 'Angle')[batted].dropna()
     hard_hit = int((exit_speed >= HARD_HIT_MPH).sum())
 
-    def rate(value):
+    def rate(value: float) -> str:
         # Baseball convention drops the leading zero on sub-1.000 rate stats
         return f"{value:.3f}".lstrip('0') if value < 1 else f"{value:.3f}"
 
@@ -211,7 +230,29 @@ def build_hitter_summary(source, batter_id):
     }
 
 
-def build_hitter_discipline_table(source, batter_id):
+class _HasPitchType(Protocol):
+    @property
+    def pitch_type(self) -> str: ...
+
+
+_HD = TypeVar('_HD', bound=_HasPitchType)
+
+
+def _order_by_pitch_type(stats: list[_HD]) -> list[_HD]:
+    """
+    Sort into the shared pitch_order so tables read the same as the pitcher reports.
+
+    Anything TrackMan tags outside that order -- Sweeper and TwoSeamFastBall turn up
+    in real exports -- is appended as its own category, in first-seen order, rather
+    than dropped.
+    """
+    order = list(pitch_order.values())
+    order += [s.pitch_type for s in stats if s.pitch_type not in order]
+    order_index = {p: i for i, p in enumerate(order)}
+    return sorted(stats, key=lambda s: order_index[s.pitch_type])
+
+
+def build_hitter_discipline_table(source: pd.DataFrame, batter_id: str | int) -> HitterDisciplineTable:
     """
     Plate discipline per pitch type.
 
@@ -221,7 +262,7 @@ def build_hitter_discipline_table(source, batter_id):
     """
     rows = batter_rows(source, batter_id)
     if rows.empty:
-        return pd.DataFrame()
+        return HitterDisciplineTable([])
 
     pitch_call = _text(rows, 'PitchCall')
     pitch_types = _text(rows, 'TaggedPitchType')
@@ -241,7 +282,7 @@ def build_hitter_discipline_table(source, batter_id):
     swing = _swings(pitch_call)
     whiff = pitch_call == 'StrikeSwinging'
 
-    table = []
+    stats: list[HitterDisciplineStat] = []
     total = len(rows)
 
     for pitch_type in pitch_types.unique():
@@ -261,49 +302,29 @@ def build_hitter_discipline_table(source, batter_id):
         out_of_zone = int((~zone & mask & located).sum())
         chases = int((swing & ~zone & mask & located).sum())
 
-        table.append({
-            'Pitch': pitch_order.get(pitch_type, pitch_type),
-            'Seen': seen,
-            'Usage': seen / total * 100,
-            'Zone': in_strike_zone / tracked * 100 if tracked else 0.0,
-            'Swing': swings / seen * 100,
-            'Whiff': whiffs / swings * 100 if swings else 0.0,
-            'Chase': chases / out_of_zone * 100 if out_of_zone else 0.0,
-            'Contact': (swings - whiffs) / swings * 100 if swings else 0.0,
-        })
+        stats.append(HitterDisciplineStat(
+            pitch_type=pitch_order.get(pitch_type, pitch_type),
+            seen=seen,
+            usage_pct=seen / total * 100,
+            zone_pct=in_strike_zone / tracked * 100 if tracked else 0.0,
+            swing_pct=swings / seen * 100,
+            whiff_pct=whiffs / swings * 100 if swings else 0.0,
+            chase_pct=chases / out_of_zone * 100 if out_of_zone else 0.0,
+            contact_pct=(swings - whiffs) / swings * 100 if swings else 0.0,
+        ))
 
-    if not table:
-        return pd.DataFrame()
-
-    report_df = pd.DataFrame(table)
-    for column in ('Usage', 'Zone', 'Swing', 'Whiff', 'Chase', 'Contact'):
-        report_df[column] = report_df[column].map(lambda x: f"{x:.1f}%")
-
-    # Sort by the shared pitch order so tables read the same as the pitcher reports.
-    #
-    # Anything TrackMan tags outside that order -- Sweeper and TwoSeamFastBall turn
-    # up in real exports -- is appended as its own category rather than left out.
-    # A value missing from the categories becomes NaN, which is not a sort quirk
-    # but data loss: the row keeps its numbers and renders with a blank Pitch cell,
-    # since to_html writes NaN as ''. Appending keeps the raw tag visible and lands
-    # the unknowns after the known types.
-    order = list(pitch_order.values())
-    order += [p for p in report_df['Pitch'] if p not in order]
-    report_df['Pitch'] = pd.Categorical(report_df['Pitch'], categories=order, ordered=True)
-    report_df = report_df.sort_values('Pitch').reset_index(drop=True)
-
-    return report_df
+    return HitterDisciplineTable(_order_by_pitch_type(stats))
 
 
-def build_batted_ball_table(source, batter_id):
+def build_batted_ball_table(source: pd.DataFrame, batter_id: str | int) -> BattedBallTable:
     """Batted-ball mix with exit velocity and launch angle per bucket."""
     rows = batter_rows(source, batter_id)
     if rows.empty:
-        return pd.DataFrame()
+        return BattedBallTable([])
 
     batted = rows[_text(rows, 'PitchCall') == 'InPlay'].copy()
     if batted.empty:
-        return pd.DataFrame()
+        return BattedBallTable([])
 
     batted['_Angle'] = _numeric(batted, 'Angle')
     batted['_ExitSpeed'] = _numeric(batted, 'ExitSpeed')
@@ -311,7 +332,7 @@ def build_batted_ball_table(source, batter_id):
     batted['_HitType'] = classify_hit_type(batted['_Angle'])
 
     total = len(batted)
-    table = []
+    stats: list[BattedBallStat] = []
 
     for hit_type in hit_types:
         bucket = batted[batted['_HitType'] == hit_type]
@@ -319,20 +340,20 @@ def build_batted_ball_table(source, batter_id):
             continue
 
         exit_speed = bucket['_ExitSpeed'].dropna()
-        table.append({
-            'Type': hit_type,
-            'Count': len(bucket),
-            'Rate': f"{len(bucket) / total * 100:.1f}%",
-            'Avg EV': f"{exit_speed.mean():.1f}" if not exit_speed.empty else '-',
-            'Max EV': f"{exit_speed.max():.1f}" if not exit_speed.empty else '-',
-            'Avg LA': f"{bucket['_Angle'].mean():.1f}" if bucket['_Angle'].notna().any() else '-',
-            'Avg Dist': f"{bucket['_Distance'].mean():.0f}" if bucket['_Distance'].notna().any() else '-',
-        })
+        stats.append(BattedBallStat(
+            hit_type=hit_type,
+            count=len(bucket),
+            rate_pct=len(bucket) / total * 100,
+            avg_ev=exit_speed.mean() if not exit_speed.empty else None,
+            max_ev=exit_speed.max() if not exit_speed.empty else None,
+            avg_launch_angle=bucket['_Angle'].mean() if bucket['_Angle'].notna().any() else None,
+            avg_distance=bucket['_Distance'].mean() if bucket['_Distance'].notna().any() else None,
+        ))
 
-    return pd.DataFrame(table)
+    return BattedBallTable(stats)
 
 
-def _draw_field(ax):
+def _draw_field(ax: Axes) -> None:
     """Foul lines, outfield arc and infield diamond, for orientation."""
     edge = matplotlib.rcParams['axes.edgecolor']
 
@@ -358,7 +379,7 @@ def _draw_field(ax):
 DISTANCE_MARKERS_FT = (100, 200, 300, 400)
 
 
-def _draw_distance_markers(ax, edge):
+def _draw_distance_markers(ax: Axes, edge: str) -> None:
     """
     Distance rings across fair territory, ticked and labelled on the first-base line.
 
@@ -405,7 +426,13 @@ def _draw_distance_markers(ax, edge):
                 rotation=45, rotation_mode='anchor')
 
 
-def hitter_spray_chart_by_pitcher_side(source, id, output_path, batter_id, theme='light'):
+def hitter_spray_chart_by_pitcher_side(
+    source: pd.DataFrame,
+    id: int,
+    output_path: str,
+    batter_id: str | int,
+    theme: str = 'light',
+) -> None:
     """
     Batted-ball spray charts for one hitter, split by the handedness of the pitcher.
 
@@ -496,7 +523,7 @@ def hitter_spray_chart_by_pitcher_side(source, id, output_path, batter_id, theme
                     )
                     bar.set_label('Exit Velocity (mph)', fontsize=9)
                     bar.ax.tick_params(labelsize=8)
-                    bar.outline.set_edgecolor(edge)
+                    bar.outline.set_edgecolor(edge)  # type: ignore[operator]  # matplotlib stub mistypes Colorbar.outline as callable
 
                     # Marker shape still encodes batted-ball type, so that key stays.
                     # The pitch-type key is gone -- colour means exit velocity now.

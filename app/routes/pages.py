@@ -1,6 +1,7 @@
 import io
 from datetime import date
 from flask import Blueprint, render_template, redirect, url_for, jsonify, session, request, make_response
+from flask.typing import ResponseReturnValue
 from flask_login import login_required, current_user
 from openpyxl import Workbook
 from sqlalchemy import func
@@ -12,7 +13,8 @@ pages_bp = Blueprint('pages', __name__)
 
 
 @pages_bp.route('/')
-def index():
+def index() -> ResponseReturnValue:
+    """Landing route: authenticated users go to the dashboard, everyone else to login."""
     # Authenticated users go straight to the dashboard
     if current_user.is_authenticated:
         return redirect(url_for('pages.dashboard'))
@@ -21,13 +23,15 @@ def index():
 
 @pages_bp.route('/dashboard')
 @login_required
-def dashboard():
+def dashboard() -> ResponseReturnValue:
+    """Render the main dashboard page."""
     return render_template('dashboard.html')
 
 
 @pages_bp.route('/api/team/overview')
 @login_required
-def team_overview():
+def team_overview() -> ResponseReturnValue:
+    """Season-to-date situational stats (lead-off, two-out) for every pitcher on the roster."""
     rows = db.session.query(
         models.Pitcher.id.label("pitcher_id"),
         models.Pitcher.name.label("pitcher_name"),
@@ -71,7 +75,8 @@ def team_overview():
 
 @pages_bp.route('/api/team/overview/download')
 @login_required
-def team_overview_download():
+def team_overview_download() -> ResponseReturnValue:
+    """Same data as team_overview, as an XLSX download."""
     rows = db.session.query(
         models.Pitcher.name.label("pitcher_name"),
         func.sum(models.Outing.pitch_count).label("total_pitches"),
@@ -101,9 +106,9 @@ def team_overview_download():
         '2-Out AB', '2-Out Reach', '2-Out Eff%', '2-Out BB Count', '2-Out BB%',
     ])
     for row in rows:
-        def pct(v):
+        def pct(v: float | None) -> float | None:
             return round(float(v) * 100, 1) if v is not None else None
-        def dec(v, d=3):
+        def dec(v: float | None, d: int = 3) -> float | None:
             return round(float(v), d) if v is not None else None
         ws.append([
             row.pitcher_name,
@@ -133,7 +138,8 @@ def team_overview_download():
 
 @pages_bp.route('/api/pitcher/<int:pitcher_id>/averages')
 @login_required
-def pitcher_averages(pitcher_id):
+def pitcher_averages(pitcher_id: int) -> ResponseReturnValue:
+    """Season-to-date per-pitch-type averages for one pitcher."""
     pitcher = db.session.get(models.Pitcher, pitcher_id)
     if not pitcher or pitcher.school_id != current_user.school_id:
         return jsonify({'error': 'Pitcher not found'}), 404
@@ -173,7 +179,8 @@ def pitcher_averages(pitcher_id):
 
 @pages_bp.route('/api/pitcher/<int:pitcher_id>/averages/download')
 @login_required
-def pitcher_averages_download(pitcher_id):
+def pitcher_averages_download(pitcher_id: int) -> ResponseReturnValue:
+    """Same data as pitcher_averages, as an XLSX download."""
     pitcher = db.session.get(models.Pitcher, pitcher_id)
     if not pitcher or pitcher.school_id != current_user.school_id:
         return jsonify({'error': 'Not found'}), 404
@@ -205,9 +212,9 @@ def pitcher_averages_download(pitcher_id):
         'Velo Low', 'Velo Med', 'Velo Hi',
     ])
     for row in rows:
-        def pct(v):
+        def pct(v: float | None) -> float | None:
             return round(float(v) * 100, 1) if v is not None else None
-        def velo(v):
+        def velo(v: float | None) -> float | None:
             return round(float(v), 1) if v is not None else None
         ws.append([
             row.pitch_type,
@@ -236,28 +243,30 @@ def pitcher_averages_download(pitcher_id):
 
 @pages_bp.route('/upload')
 @login_required
-def upload_page():
-    logo_path = f"/storage/schools/{current_user.school.slug}/assets/logo.png"
+def upload_page() -> ResponseReturnValue:
+    """Render the TrackMan file upload page."""
+    logo_path = f"/storage/schools/{current_user.school_id}/assets/logo.png"
     return render_template('index.html', logo_path=logo_path)
 
 
 @pages_bp.route('/about')
-def about():
+def about() -> ResponseReturnValue:
     return render_template('about.html')
 
 
 @pages_bp.route('/terms')
-def terms():
+def terms() -> ResponseReturnValue:
     return render_template('terms.html')
 
 
 @pages_bp.route('/privacy')
-def privacy():
+def privacy() -> ResponseReturnValue:
     return render_template('privacy.html')
 
 
 @pages_bp.route('/sitemap.xml')
-def sitemap():
+def sitemap() -> ResponseReturnValue:
+    """Generate sitemap.xml for search engines."""
     base = request.host_url.rstrip('/')
     today = date.today().isoformat()
 
@@ -289,6 +298,7 @@ def sitemap():
 
 
 @pages_bp.route('/api/toasts')
-def get_toasts():
+def get_toasts() -> ResponseReturnValue:
+    """Pop and return any queued toast notifications."""
     toasts = session.pop('_toasts', [])
     return jsonify(toasts)

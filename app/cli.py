@@ -1,7 +1,7 @@
 # app/cli.py
 import os
 import click
-from flask import current_app
+from flask import Flask, current_app
 from flask.cli import with_appcontext
 
 from app.db import models
@@ -14,17 +14,18 @@ User = models.User
 School = models.School
 Branding_Loader = branding_loader.BrandingLoader
 
-def register_cli_commands(app):
+def register_cli_commands(app: Flask) -> None:
+    """Register all `flask <command>` CLI commands on the given app."""
     @app.cli.command("init-db")
     @with_appcontext
-    def init_db():
+    def init_db() -> None:
         """Initialize the database."""
         models.db.create_all()
         click.echo("Database initialized.")
-    
+
     @app.cli.command("reset-db")
     @with_appcontext
-    def reset_db():
+    def reset_db() -> None:
         """Drop all tables and reinitialize the database. WARNING: This deletes all data!"""
         if click.confirm('This will delete all data. Are you sure?'):
             models.db.drop_all()
@@ -33,7 +34,7 @@ def register_cli_commands(app):
 
     @app.cli.command("seed-pitch-types")
     @with_appcontext
-    def seed_pitch_types():
+    def seed_pitch_types() -> None:
         """Seed the pitch_types table from the pitch_order dictionary in report.py."""
         added = 0
         for name, abbreviation in pitch_order.items():
@@ -51,7 +52,7 @@ def register_cli_commands(app):
     @click.option("--school-id", default=1, type=int)
     @click.option("--role", default="user")
     @with_appcontext
-    def create_user_func(email, password, first_name, last_name, school_id, role):
+    def create_user_func(email: str, password: str, first_name: str, last_name: str, school_id: int, role: str) -> None:
         auth.Auth().create_user(email, password, first_name, last_name, school_id, role=role)
         click.echo(f"User {email} created.")
 
@@ -65,8 +66,8 @@ def register_cli_commands(app):
     @click.argument("light-color")
     @click.argument("dark-color")
     @with_appcontext
-    def create_school_func(name, slug, primary_color, secondary_color, tertiary_color, accent_color, light_color, dark_color):
-        """Create a new school."""        
+    def create_school_func(name: str, slug: str, primary_color: str, secondary_color: str, tertiary_color: str, accent_color: str, light_color: str, dark_color: str) -> None:
+        """Create a new school."""
         school = models.School(name=name, slug=slug)
         models.db.session.add(school)
         models.db.session.commit()
@@ -82,13 +83,13 @@ def register_cli_commands(app):
             'logo': 'logo.png'
         }
         
-        branding_loader.create_school_dir(slug, branding_data)
+        Branding_Loader.create_school_dir(school.id, branding_data)
         click.echo(f'✓ School "{name}" created!')
-        click.echo(f'  Add logo to: storage/schools/{slug}/logo.png')
+        click.echo(f'  Add logo to: storage/schools/{school.id}/logo.png')
 
     @app.cli.command("list-users")
     @with_appcontext
-    def list_users():
+    def list_users() -> None:
         """List all users."""
         users = models.User.query.all()
         if not users:
@@ -101,7 +102,7 @@ def register_cli_commands(app):
 
     @app.cli.command("list-schools")
     @with_appcontext
-    def list_schools():
+    def list_schools() -> None:
         """List all schools."""
         schools = models.School.query.all()
         if not schools:
@@ -116,7 +117,8 @@ def register_cli_commands(app):
         return
         
     @app.cli.command()
-    def create_school():
+    def create_school() -> None:
+        """Interactively create a school (name + slug only, no branding)."""
         name = input("Enter school name: ")
         slug = input("Enter school slug (e.g., myschool): ")
 
@@ -135,7 +137,8 @@ def register_cli_commands(app):
         print(f"School '{name}' created with slug '{slug}' and branding initialized. Add logo to the school's assets directory.")
 
     @app.cli.command()
-    def create_user():
+    def create_user() -> None:
+        """Interactively create a user, resolving their school by id."""
         email = input("Enter user email: ")
         password = input("Enter user password: ")
         first_name = input("Enter user first name: ")
@@ -143,29 +146,58 @@ def register_cli_commands(app):
         schools = School.query.all()
         print("\nAvailable Schools:")
         for school in schools:
-            print(f"- {school.name} (slug: {school.slug})")
+            print(f"- {school.id}. {school.name} (slug: {school.slug})")
 
-        school_slug = input("Enter school slug for the user: ")
+        school_id_input = input("Enter school id for the user: ")
         role = input("Enter user role (student/admin): ")
 
-        school = School.query.filter_by(slug=school_slug).first()
+        try:
+            school_id = int(school_id_input)
+        except ValueError:
+            print(f"'{school_id_input}' is not a valid school id.")
+            return
+
+        school = db.session.get(School, school_id)
         if not school:
-            print(f"School with slug '{school_slug}' not found.")
+            print(f"School with id '{school_id}' not found.")
             return
 
         Auth.create_user(email, password, first_name, last_name, school.id, role)
         print(f"User '{email}' created successfully with role '{role}'.")
 
     @app.cli.command()
-    def rebuild_game_index():
+    def rebuild_game_index() -> None:
         """Rebuild the game index for all schools."""
         from app.services.game_archive import rebuild_manifest
         from app.db.models import School
-        
+
         schools = School.query.all()
         for school in schools:
-            games_dir = os.path.join(app.config['STORAGE'], 'schools', school.slug, 'games')
+            games_dir = os.path.join(app.config['STORAGE'], 'schools', str(school.id), 'games')
             print(f"Rebuilding game index for school: {school.name} (slug: {school.slug})")
             count = rebuild_manifest(games_dir)
 
         print("Game index rebuilt successfully.")
+
+    @app.cli.command("migrate-school-storage")
+    @with_appcontext
+    def migrate_school_storage_cmd() -> None:
+        """
+        One-time migration: move each school's storage directory from the old
+        slug-keyed layout to the id-keyed layout. Idempotent — safe to re-run.
+        Run this after deploying the code that reads storage by school.id but
+        before dropping the unique constraint on schools.slug (see
+        docs/test-plan-slug-migration.md).
+        """
+        from app.services.storage_migration import migrate_school_storage
+
+        storage_root = current_app.config['STORAGE']
+        migrated, skipped = 0, 0
+        for school in models.School.query.all():
+            if migrate_school_storage(storage_root, school.id, school.slug):
+                click.echo(f'✓ Migrated {school.name} (slug: {school.slug}) -> schools/{school.id}')
+                migrated += 1
+            else:
+                skipped += 1
+
+        click.echo(f'Done. {migrated} migrated, {skipped} already up to date or nothing to migrate.')

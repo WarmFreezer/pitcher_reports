@@ -19,15 +19,18 @@ import os
 import json
 import shutil
 import tempfile
+from typing import Any
 
 import pandas as pd
 
 from app.services.team_stats import hash_file
-from app.db.models import db, School
 
 MANIFEST_NAME = 'index.json'
 
-def _build_entry(source, filename, content_hash, practice=False):
+GameEntry = dict[str, Any]
+
+
+def _build_entry(source: pd.DataFrame, filename: str, content_hash: str, practice: bool = False) -> GameEntry | None:
     """Derive a manifest entry from a TrackMan file on disk."""
     date = _game_date(source)
     if date is None:
@@ -44,7 +47,7 @@ def _build_entry(source, filename, content_hash, practice=False):
         'practice': practice
     }
 
-def rebuild_manifest(games_dir):
+def rebuild_manifest(games_dir: str) -> int:
     """Re-derive the manifest from the files on disk. Returns the entry count."""
     old = {e['file']: e for e in read_manifest(games_dir)}
     entries = []
@@ -74,11 +77,11 @@ def rebuild_manifest(games_dir):
     _write_manifest(games_dir, entries)
     return len(entries)
 
-def _manifest_path(games_dir):
+def _manifest_path(games_dir: str) -> str:
     return os.path.join(games_dir, MANIFEST_NAME)
 
 
-def read_manifest(games_dir):
+def read_manifest(games_dir: str) -> list[GameEntry]:
     """Return the list of archived game entries. Missing or corrupt manifest reads as empty."""
     path = _manifest_path(games_dir)
     if not os.path.exists(path):
@@ -92,7 +95,7 @@ def read_manifest(games_dir):
     return data if isinstance(data, list) else []
 
 
-def _write_manifest(games_dir, entries):
+def _write_manifest(games_dir: str, entries: list[GameEntry]) -> None:
     """Write the manifest atomically so an interrupted save cannot truncate the index."""
     path = _manifest_path(games_dir)
     fd, tmp_path = tempfile.mkstemp(dir=games_dir, suffix='.tmp')
@@ -106,13 +109,13 @@ def _write_manifest(games_dir, entries):
         raise
 
 
-def _read_source(filepath):
+def _read_source(filepath: str) -> pd.DataFrame:
     if filepath.endswith(('.xlsx', '.xls')):
         return pd.read_excel(filepath)
     return pd.read_csv(filepath, low_memory=False)
 
 
-def _game_date(source):
+def _game_date(source: pd.DataFrame) -> str | None:
     """The date the game was played, as YYYY-MM-DD. Mode, since a file is one game."""
     parsed = pd.to_datetime(source['Date'], errors='coerce').dropna()
     if parsed.empty:
@@ -120,7 +123,7 @@ def _game_date(source):
     return parsed.mode().iloc[0].date().isoformat()
 
 
-def _mode_or_blank(source, column):
+def _mode_or_blank(source: pd.DataFrame, column: str) -> str:
     if column not in source.columns:
         return ''
     values = source[column].dropna()
@@ -129,7 +132,7 @@ def _mode_or_blank(source, column):
     return str(values.mode().iloc[0])
 
 
-def _normalize_id(value):
+def _normalize_id(value: Any) -> str:
     """
     A TrackMan id as a plain digit string, whatever dtype pandas gave the column.
 
@@ -144,7 +147,7 @@ def _normalize_id(value):
         return str(value)
 
 
-def _batters(source):
+def _batters(source: pd.DataFrame) -> list[GameEntry]:
     """Every distinct batter in the file, both teams -- team filtering happens at query time."""
     needed = {'BatterId', 'Batter', 'BatterTeam', 'PitchCall'}
     if not needed.issubset(source.columns):
@@ -166,7 +169,7 @@ def _batters(source):
         for batter_id, row in grouped.iterrows()
     ]
 
-def _pitchers(source):
+def _pitchers(source: pd.DataFrame) -> list[GameEntry]:
     """Every distinct pitcher in the file, both teams -- team filtering happens at query time."""
     needed = {'PitcherId', 'Pitcher', 'PitcherTeam'}
     if not needed.issubset(source.columns):
@@ -186,7 +189,7 @@ def _pitchers(source):
         for pitcher_id, row in grouped.iterrows()
     ]
 
-def archive_game(games_dir, filepath, practice=False):
+def archive_game(games_dir: str, filepath: str, practice: bool = False) -> GameEntry | None:
     """
     Copy a saved TrackMan file into the school's game archive and index it.
 
@@ -213,11 +216,12 @@ def archive_game(games_dir, filepath, practice=False):
     shutil.copyfile(filepath, os.path.join(games_dir, stored_name))
 
     entry = _build_entry(
-        source=source, 
-        filename=stored_name, 
+        source=source,
+        filename=stored_name,
         content_hash=content_hash,
         practice=practice
     )
+    assert entry is not None, 'date was already confirmed present above'
 
     entries.append(entry)
     entries.sort(key=lambda e: e.get('date', ''))
@@ -226,7 +230,7 @@ def archive_game(games_dir, filepath, practice=False):
     return entry
 
 
-def remove_game(games_dir, content_hash):
+def remove_game(games_dir: str, content_hash: str) -> bool:
     """
     Remove a game from the archive by its content hash.
 
@@ -254,7 +258,7 @@ def remove_game(games_dir, content_hash):
     return True
 
 
-def date_bounds(games_dir):
+def date_bounds(games_dir: str) -> tuple[str | None, str | None]:
     """(earliest, latest) archived game date as YYYY-MM-DD, or (None, None) when empty."""
     dates = sorted(entry['date'] for entry in read_manifest(games_dir) if entry.get('date'))
     if not dates:
@@ -263,7 +267,14 @@ def date_bounds(games_dir):
 
 
 
-def list_hitters(games_dir, trackman_id, target='own', start_date=None, end_date=None, batted_only=False):
+def list_hitters(
+    games_dir: str,
+    trackman_id: str,
+    target: str = 'own',
+    start_date: str | None = None,
+    end_date: str | None = None,
+    batted_only: bool = False,
+) -> list[GameEntry]:
     """
     Distinct hitters in the archive, filtered by team.
 
@@ -271,7 +282,7 @@ def list_hitters(games_dir, trackman_id, target='own', start_date=None, end_date
     'opponent' keeps everyone else. Each hitter carries the range of dates they
     actually appear in, so the UI can bound the date pickers per player.
     """
-    hitters = {}
+    hitters: dict[str, GameEntry] = {}
 
     for entry in read_manifest(games_dir):
         date = entry.get('date')
@@ -317,7 +328,7 @@ def list_hitters(games_dir, trackman_id, target='own', start_date=None, end_date
     return sorted(hitters.values(), key=lambda h: h['name'])
 
 
-def load_games(games_dir, content_hashes):
+def load_games(games_dir: str, content_hashes: list[str]) -> pd.DataFrame:
     """
     Concatenate every archived game whose content hash is in content_hashes.
 
@@ -349,7 +360,13 @@ def load_games(games_dir, content_hashes):
     return pd.concat(frames, ignore_index=True, sort=False)
 
 
-def list_games(games_dir, trackman_id, start_date=None, end_date=None, include_practice=True):
+def list_games(
+    games_dir: str,
+    trackman_id: str,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    include_practice: bool = True,
+) -> list[GameEntry]:
     """
     List every archived game, optionally filtered by date range.
 
@@ -393,7 +410,7 @@ def list_games(games_dir, trackman_id, start_date=None, end_date=None, include_p
     return sorted(games, key=lambda g: g['date'])
 
 
-def load_range(games_dir, start_date, end_date):
+def load_range(games_dir: str, start_date: str, end_date: str) -> pd.DataFrame:
     """
     Concatenate every archived game whose date falls within [start_date, end_date].
 

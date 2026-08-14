@@ -12,6 +12,7 @@ import pandas as pd
 from datetime import datetime
 from werkzeug.utils import secure_filename
 from flask import Blueprint, request, jsonify, current_app
+from flask.typing import ResponseReturnValue
 from flask_login import login_required, current_user
 
 from app.services import report, game_archive, file_validator
@@ -23,19 +24,19 @@ upload_bp = Blueprint('upload_api', __name__)
 required_columns = report.required_columns
 
 
-def _read_source(filepath):
+def _read_source(filepath: str) -> pd.DataFrame:
     if filepath.endswith(('.xlsx', '.xls')):
         return pd.read_excel(filepath)
     return pd.read_csv(filepath, low_memory=False)
 
 
-def _distinct(source, column):
+def _distinct(source: pd.DataFrame, column: str) -> int:
     return int(source[column].nunique()) if column in source.columns else 0
 
 
 @upload_bp.route('/api/upload', methods=['POST'])
 @login_required
-def upload_file():
+def upload_file() -> ResponseReturnValue:
     """
     Validate a TrackMan file and stage it for saving.
 
@@ -48,7 +49,7 @@ def upload_file():
     if 'file' not in request.files:
         return jsonify({'error': 'No file part in the request'}), 400
     file = request.files['file']
-    if file.filename == '':
+    if not file.filename:
         return jsonify({'error': 'No selected file'}), 400
 
     filename = secure_filename(file.filename)
@@ -120,7 +121,7 @@ def upload_file():
 
 @upload_bp.route('/api/save-game', methods=['POST'])
 @login_required
-def save_game():
+def save_game() -> ResponseReturnValue:
     """
     Commit the staged file: archive it, and unless it is a practice file, write
     its aggregates to the database.
@@ -166,7 +167,7 @@ def save_game():
 
 @upload_bp.route('/api/games')
 @login_required
-def list_saved_games():
+def list_saved_games() -> ResponseReturnValue:
     """Every saved game for this school, for the manager table."""
     games_dir = get_school_games_directory()
     return jsonify({
@@ -176,7 +177,7 @@ def list_saved_games():
 
 @upload_bp.route('/api/games/<content_hash>', methods=['DELETE'])
 @login_required
-def delete_saved_game(content_hash):
+def delete_saved_game(content_hash: str) -> ResponseReturnValue:
     """
     Remove a saved game from both stores.
 

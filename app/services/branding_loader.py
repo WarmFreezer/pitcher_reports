@@ -1,38 +1,44 @@
 import json
 import os
 from pathlib import Path
+from typing import Any
 
 class BrandingLoader:
+    """Reads/writes each school's branding.json and locates its logo on disk, keyed by school id."""
+
     # Resolved at import time relative to this file so it works regardless of cwd
     SCHOOLS = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'storage', 'schools')
 
     @staticmethod
-    def get_branding(school_slug):
-        branding_path = os.path.join(BrandingLoader.SCHOOLS, school_slug, 'assets', 'branding.json')
+    def get_branding(school_id: int) -> dict[str, Any]:
+        """Load a school's branding.json, falling back to default.json if missing or corrupt."""
+        branding_path = os.path.join(BrandingLoader.SCHOOLS, str(school_id), 'assets', 'branding.json')
         if not os.path.exists(branding_path):
-            print(f"Branding file not found for school: {school_slug}")
+            print(f"Branding file not found for school: {school_id}")
             return json.load(open(os.path.join(BrandingLoader.SCHOOLS, 'default.json'), 'r'))
         try:
             with open(branding_path, 'r') as f:
                 return json.load(f)
         except Exception as e:
             # Fall back to defaults so the app stays usable even with a corrupt branding file
-            print(f"Error loading branding for {school_slug}: {e}")
+            print(f"Error loading branding for {school_id}: {e}")
             return json.load(open(os.path.join(BrandingLoader.SCHOOLS, 'default.json'), 'r'))
 
     @staticmethod
-    def get_logo_path(school_slug):
+    def get_logo_path(school_id: int) -> str | None:
+        """Public URL of the school's logo, checking png/jpg/jpeg/svg in priority order."""
         # Check extensions in priority order — PNG preferred, SVG last
-        logo_dir = os.path.join(BrandingLoader.SCHOOLS, school_slug, 'assets')
+        logo_dir = os.path.join(BrandingLoader.SCHOOLS, str(school_id), 'assets')
         for ext in ['png', 'jpg', 'jpeg', 'svg']:
             logo_path = os.path.join(logo_dir, f'logo.{ext}')
             if os.path.exists(logo_path):
-                return f'/storage/schools/{school_slug}/assets/logo.{ext}'
+                return f'/storage/schools/{school_id}/assets/logo.{ext}'
         return None
 
     @staticmethod
-    def create_school_dir(school_slug, branding_data):
-        school_dir = os.path.join(BrandingLoader.SCHOOLS, school_slug)
+    def create_school_dir(school_id: int, branding_data: dict[str, Any]) -> str:
+        """Create a new school's storage directory and write its initial branding.json."""
+        school_dir = os.path.join(BrandingLoader.SCHOOLS, str(school_id))
         Path(school_dir).mkdir(parents=True, exist_ok=True)
 
         assets_dir = os.path.join(school_dir, 'assets')
@@ -45,8 +51,9 @@ class BrandingLoader:
         return branding_path
 
     @staticmethod
-    def update_branding(school_slug, branding_data):
-        branding_path = os.path.join(BrandingLoader.SCHOOLS, school_slug, 'assets', 'branding.json')
+    def update_branding(school_id: int, branding_data: dict[str, Any]) -> bool:
+        """Overwrite a school's branding.json, creating its directory if needed."""
+        branding_path = os.path.join(BrandingLoader.SCHOOLS, str(school_id), 'assets', 'branding.json')
         # Create the directory if it doesn't exist yet (e.g. newly provisioned school)
         os.makedirs(os.path.dirname(branding_path), exist_ok=True)
         with open(branding_path, 'w') as f:
@@ -54,7 +61,8 @@ class BrandingLoader:
         return True
 
     @staticmethod
-    def is_dark(color_hex):
+    def is_dark(color_hex: str) -> bool:
+        """Whether a hex color's perceived brightness (W3C formula) reads as dark."""
         # W3C perceived brightness formula — values below 128 are considered dark
         color_hex = color_hex.lstrip('#')
         r, g, b = int(color_hex[0:2], 16), int(color_hex[2:4], 16), int(color_hex[4:6], 16)

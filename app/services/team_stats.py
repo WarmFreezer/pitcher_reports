@@ -13,7 +13,8 @@ Last Updated: 2024-05-26 (Thomas Eubank)
 
 '''
 
-import io
+from typing import Any, BinaryIO
+
 import numpy as np
 import pandas as pd
 import hashlib
@@ -24,7 +25,8 @@ from app.db import models
 STRIKES  =  ['StrikeCalled', 'StrikeSwinging', 'FoulBallNotFieldable']
 SWINGS  =  ['StrikeSwinging', 'FoulBallNotFieldable', 'InPlay']
 
-def _reach(source):
+def _reach(source: pd.DataFrame) -> pd.DataFrame:
+    """Rows where the batter reached base: a walk, HBP, or non-out PlayResult."""
     return_me = source[
         source['KorBB'].isin(['Walk', 'HitByPitch']) |
         source['PlayResult'].isin(['Single', 'Double', 'Triple', 'HomeRun', 'Error'])
@@ -32,16 +34,19 @@ def _reach(source):
 
     return return_me
 
-def _native(val):
+def _native(val: Any) -> Any:
+    """Unwrap a numpy scalar (e.g. from .sum()/.quantile()) to a plain Python number."""
     return val.item() if hasattr(val, 'item') else val
 
-def hash_file(file: io.FileIO) -> str:
+def hash_file(file: BinaryIO) -> str:
+    """MD5 checksum of a file's contents, leaving the read position unchanged."""
     file.seek(0)  # Ensure we're at the start of the file
     h = hashlib.md5(file.read()).hexdigest()[:128]
     file.seek(0)  # Reset file pointer after reading
     return h
 
-def add_pitcher(school_id, trackman_id, name):
+def add_pitcher(school_id: int, trackman_id: str | int, name: str) -> int:
+    """Find or create a Pitcher for this school by TrackMan id; returns its db id."""
     trackman_id = str(trackman_id)
     pitcher = models.Pitcher.query.filter_by(trackman_id=trackman_id, school_id=school_id).first()
     if not pitcher:
@@ -50,15 +55,24 @@ def add_pitcher(school_id, trackman_id, name):
         db.session.flush()
     return pitcher.id
 
-def update_pitcher(pitcher_id, **kwargs):
-    pitcher = models.Pitcher.query.get(pitcher_id)
+def update_pitcher(pitcher_id: int, **kwargs: Any) -> None:
+    """Set arbitrary column values on a Pitcher by id, ignoring unknown keys."""
+    pitcher = db.session.get(models.Pitcher, pitcher_id)
     if pitcher:
         for key, value in kwargs.items():
             if hasattr(pitcher, key):
                 setattr(pitcher, key, value)
         db.session.commit()
 
-def add_outing(pitcher_id, date, content_hash, is_home, pitch_count, source):
+def add_outing(
+    pitcher_id: int,
+    date: str,
+    content_hash: str,
+    is_home: bool,
+    pitch_count: int,
+    source: pd.DataFrame,
+) -> int:
+    """Persist an Outing with lead-off/two-out situational stats computed from source; returns its db id."""
     lead_off_df = source[source['Outs'] == 0]
     two_outs_df = source[source['Outs'] == 2]
 
@@ -98,15 +112,17 @@ def add_outing(pitcher_id, date, content_hash, is_home, pitch_count, source):
     db.session.flush()
     return new_outing.id
 
-def update_outing(outing_id, **kwargs):
-    outing = models.Outing.query.get(outing_id)
+def update_outing(outing_id: int, **kwargs: Any) -> None:
+    """Set arbitrary column values on an Outing by id, ignoring unknown keys."""
+    outing = db.session.get(models.Outing, outing_id)
     if outing:
         for key, value in kwargs.items():
             if hasattr(outing, key):
                 setattr(outing, key, value)
         db.session.commit()
 
-def add_outing_pitch_stats(pitcher_id, outing_id, source):
+def add_outing_pitch_stats(pitcher_id: int, outing_id: int, source: pd.DataFrame) -> None:
+    """Persist one Outing_Pitch_Stat row per pitch type thrown in source."""
     pitch_type_map = {pt.name: pt.id for pt in models.Pitch_Types.query.all()}
     undefined_id = pitch_type_map.get('Undefined', None)
 
@@ -142,13 +158,15 @@ def add_outing_pitch_stats(pitcher_id, outing_id, source):
         db.session.add(new_stat)
     db.session.flush()
 
-def update_outing_pitch_stats(pitcher_id, outing_id, source):
+def update_outing_pitch_stats(pitcher_id: int, outing_id: int, source: pd.DataFrame) -> None:
+    """Replace an outing's pitch-type stats: delete existing rows, then re-add from source."""
     models.Outing_Pitch_Stat.query.filter_by(outing_id=outing_id).delete()
     db.session.flush()
     add_outing_pitch_stats(pitcher_id, outing_id, source)
     db.session.commit()
 
-def add_report(school_id, trackman_id, file):
+def add_report(school_id: int, trackman_id: str, file: BinaryIO) -> None:
+    """Parse a TrackMan file and persist an Outing + pitch stats per pitcher, skipping duplicates by content hash."""
     content_hash = hash_file(file)
     filepath = file.name
     if filepath.endswith(('.xlsx', '.xls')):
@@ -181,7 +199,8 @@ def add_report(school_id, trackman_id, file):
     else: 
         print("Report with this content hash already exists. No new data added.")
 
-def remove_report(content_hash):
+def remove_report(content_hash: str) -> None:
+    """Delete every Outing (and its pitch stats) matching content_hash."""
     outings = models.Outing.query.filter_by(content_hash=content_hash).all()
     for outing in outings:
         models.Outing_Pitch_Stat.query.filter_by(outing_id=outing.id).delete()

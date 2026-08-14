@@ -1,10 +1,11 @@
 import matplotlib
 import numpy as np
+import pandas as pd
 
 # Use a non-interactive backend for matplotlib
 matplotlib.use('Agg')
 
-from matplotlib.colors import LinearSegmentedColormap, to_rgb
+from matplotlib.colors import Colormap, LinearSegmentedColormap, to_rgb
 from matplotlib.patches import Rectangle
 import matplotlib.patches as patches
 
@@ -17,7 +18,7 @@ ZONE_BOTTOM = 1.5
 ZONE_TOP = 3.5
 
 
-def in_zone(plate_loc_side, plate_loc_height):
+def in_zone(plate_loc_side: pd.Series, plate_loc_height: pd.Series) -> pd.Series:
     """
     Boolean mask for pitches inside the strike zone.
 
@@ -52,7 +53,7 @@ _EV_BASE_CMAP = 'YlOrRd'
 _EV_RANGE = (0.15, 0.85)    # fraction of the base ramp kept, low end first
 
 
-def ev_colormap(theme='light'):
+def ev_colormap(theme: str = 'light') -> Colormap:
     """
     Sequential colormap for exit velocity: warm yellow at EV_MIN_MPH through to
     deep red at EV_MAX_MPH, identically in every theme.
@@ -132,21 +133,25 @@ pitch_point_colors = {
     'Undefined': '#888888'
 }
 
-def make_strike_zone():
+def make_strike_zone() -> Rectangle:
+    """Dashed outline of the rulebook strike zone, in plate-location feet."""
     return Rectangle((-0.83, 1.5), 1.66, 2.0,
         linewidth=2, edgecolor=matplotlib.rcParams['text.color'], facecolor='none', linestyle='--')
 
-def make_shadow_zone():
+def make_shadow_zone() -> Rectangle:
+    """Dotted outline one baseball-width outside the strike zone, for borderline pitches."""
     return Rectangle(
         (-0.83 - baseball_width, 1.5 - baseball_width),
         1.66 + 2 * baseball_width, 2.0 + 2 * baseball_width,
         linewidth=1, edgecolor=matplotlib.rcParams['xtick.color'], facecolor='none', linestyle=(0, (1, 10)))
 
-def make_homeplate():
+def make_homeplate() -> patches.Polygon:
+    """Home plate outline drawn at the front of the strike zone, for orientation."""
     return patches.Polygon([(-0.35, 0.025), (0.35, 0.025), (0.35, 0.45), (0, 0.8), (-0.35, 0.45)],
         linewidth=1, edgecolor=matplotlib.rcParams['xtick.color'], facecolor='none', linestyle='-')
 
-def cmap(hex_color, name):
+def cmap(hex_color: str, name: str) -> LinearSegmentedColormap:
+    """Transparency ramp from invisible to hex_color, for one pitch type's KDE fill."""
     # Build a transparency gradient from fully transparent to the pitch color,
     # so overlapping KDE fills blend cleanly on the white plot background
     r, g, b = to_rgb(hex_color)

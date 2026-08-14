@@ -51,19 +51,28 @@ def source_df():
 
 
 def test_build_table_computes_expected_stats(source_df):
-    date, home_team, away_team, pitcher, table = report.build_table(source_df, 1001)
+    game_report = report.build_table(source_df, 1001)
 
-    assert pitcher == 'Doe, John'
-    assert home_team == 'HOME'
-    assert away_team == 'AWAY'
-    assert len(table) == 1
+    assert game_report.header.pitcher_name == 'Doe, John'
+    assert game_report.header.home_team == 'HOME'
+    assert game_report.header.away_team == 'AWAY'
+    assert len(game_report.stats) == 1
 
-    row = table.iloc[0]
-    assert row['Pitch'] == 'FB'
+    row = game_report.stats.rows[0]
+    assert row.pitch_type == 'FB'
     # 2 called strikes + 1 swinging strike out of 4 pitches = 75% CSW
-    assert row['CSW'] == '75.0%'
+    assert row.csw_pct == 75.0
     # 1 whiff out of 4 = handled inside CSW; verify Zone% uses ZoneTime mean (2 of 4 = 50%)
-    assert row['Zone'] == '50.0%'
+    assert row.zone_pct == 50.0
+
+    # Formatting is applied only at render time, not on the raw stat
+    formatted = game_report.stats.to_reportlab_rows()
+    assert formatted[0] == [c.header for c in game_report.stats.columns]
+    assert 'CSW' in formatted[0] and 'Zone' in formatted[0]
+    csw_col = formatted[0].index('CSW')
+    zone_col = formatted[0].index('Zone')
+    assert formatted[1][csw_col] == '75.0%'
+    assert formatted[1][zone_col] == '50.0%'
 
 
 def test_build_table_chase_percent_counts_swings_outside_zone():
@@ -76,10 +85,10 @@ def test_build_table_chase_percent_counts_swings_outside_zone():
         _row(PitchCall='StrikeSwinging', PlateLocHeight=2.5, PlateLocSide=0.0),
     ]
     df = pd.DataFrame(rows)
-    _, _, _, _, table = report.build_table(df, 1001)
+    game_report = report.build_table(df, 1001)
 
-    row = table.iloc[0]
-    assert row['Chase'] == '33.3%'
+    row = game_report.stats.rows[0]
+    assert row.chase_pct == pytest.approx(33.333, abs=0.01)
 
 
 def test_usage_table_splits_by_batter_side():
@@ -89,12 +98,12 @@ def test_usage_table_splits_by_batter_side():
         _row(BatterSide='Right', PitchofPA=1, Balls=0, Strikes=2, PitchCall='StrikeSwinging'),
     ]
     df = pd.DataFrame(rows)
-    left_table, right_table = report.usage_table(df, 1001)
+    sides = report.usage_table(df, 1001)
 
-    assert left_table.iloc[0]['Count'] == 2
-    assert right_table.iloc[0]['Count'] == 1
+    assert sides.left.rows[0].count == 2
+    assert sides.right.rows[0].count == 1
     # The one right-handed pitch was a swinging strike -> 100% whiff for that side
-    assert right_table.iloc[0]['Whiff'] == '100.0%'
+    assert sides.right.rows[0].whiff_pct == 100.0
 
 
 def test_build_table_returns_none_for_missing_pitcher():

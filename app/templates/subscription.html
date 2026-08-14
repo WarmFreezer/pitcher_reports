@@ -25,7 +25,7 @@
     </style>
     {% endif %}
 </head>
-<body data-school-slug="{{ current_user.school.slug }}" onload="loadFooter(); loadNavbar('{{ logo_path }}');">
+<body data-school-id="{{ current_user.school_id }}" onload="loadFooter(); loadNavbar('{{ logo_path }}');">
     <div id="navbar-placeholder"></div>
 
     <main class="main-content">

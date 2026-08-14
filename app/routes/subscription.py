@@ -3,11 +3,14 @@ import re
 import tempfile
 import stripe
 import unicodedata
+from typing import Any
+
 import pandas as pd
 from io import BytesIO
 from datetime import datetime
 from PIL import Image
 from flask import Blueprint, request, jsonify, render_template, redirect, url_for, flash, current_app, send_file
+from flask.typing import ResponseReturnValue
 from flask_login import login_required, current_user
 
 from app.db.models import db
@@ -38,17 +41,18 @@ ROSTER_REQUIRED_COLUMNS = {
 
 @subscription_bp.route('/subscription')
 @login_required
-def subscription_page():
+def subscription_page() -> ResponseReturnValue:
+    """Render the subscription/billing management page, admin only."""
     # Only the school's admin email may access this page
     if current_user.email != current_user.school.admin_email:
         flash('You do not have permission to access that page.', 'danger')
         return redirect(url_for('pages.dashboard'))
 
-    branding = BrandingLoader.get_branding(current_user.school.slug)
-    logo_path = f"/storage/schools/{current_user.school.slug}/assets/logo.png"
+    branding = BrandingLoader.get_branding(current_user.school_id)
+    logo_path = f"/storage/schools/{current_user.school_id}/assets/logo.png"
 
     # Fetch up to 12 most recent invoices from Stripe for the billing history table
-    invoices = []
+    invoices: list[dict[str, Any]] = []
     if current_user.school.stripe_customer_id:
         try:
             result = stripe.Invoice.list(customer=current_user.school.stripe_customer_id, limit=12)
@@ -68,7 +72,8 @@ def subscription_page():
 
 @subscription_bp.route('/api/subscription/cancel', methods=['POST'])
 @login_required
-def cancel_subscription():
+def cancel_subscription() -> ResponseReturnValue:
+    """Cancel the school's subscription at the end of the current billing period."""
     # Accounts without a Stripe subscription ID are permanent and cannot be cancelled here
     if not current_user.school.stripe_subscription_id:
         return jsonify({'message': 'This is a permanent subscription and cannot be cancelled.', 'permanent': True}), 200
@@ -87,7 +92,8 @@ def cancel_subscription():
 
 @subscription_bp.route('/api/subscription/start', methods=['POST'])
 @login_required
-def start_subscription():
+def start_subscription() -> ResponseReturnValue:
+    """Reactivate a pending-cancellation subscription, or start Stripe checkout for a new one."""
     if current_user.email != current_user.school.admin_email:
         return jsonify({'error': 'Only the school administrator can manage the subscription.'}), 403
     try:
@@ -102,13 +108,13 @@ def start_subscription():
 
         # Subscription is truly gone — open a new Stripe checkout session
         checkout_session = stripe.checkout.Session.create(
-            line_items=[{'price': os.environ.get('STRIPE_PRICE_ID'), 'quantity': 1}],
+            line_items=[{'price': os.environ.get('STRIPE_PRICE_ID', ''), 'quantity': 1}],
             mode='subscription',
             ui_mode='embedded',
             return_url=f'{request.host_url}return?session_id={{CHECKOUT_SESSION_ID}}',
-            customer=current_user.school.stripe_customer_id or None,
-            customer_email=None if current_user.school.stripe_customer_id else current_user.school.admin_email,
-            metadata={'school_slug': current_user.school.slug}
+            customer=current_user.school.stripe_customer_id or None,  # type: ignore[arg-type]  # stripe stub marks these NotRequired[str]; None omits the field at the API layer
+            customer_email=None if current_user.school.stripe_customer_id else current_user.school.admin_email,  # type: ignore[arg-type]
+            metadata={'school_id': str(current_user.school_id)}
         )
         return jsonify({'client_secret': checkout_session.client_secret}), 200
     except Exception as e:
@@ -120,7 +126,8 @@ def start_subscription():
 
 @subscription_bp.route('/api/subscription/settings', methods=['POST'])
 @login_required
-def update_subscription_settings():
+def update_subscription_settings() -> ResponseReturnValue:
+    """Update the school's admin email, admin only."""
     if current_user.email != current_user.school.admin_email:
         return jsonify({'error': 'Only the admin can update school settings.'}), 403
     data = request.get_json()
@@ -138,7 +145,8 @@ def update_subscription_settings():
 
 @subscription_bp.route('/api/subscription/rebrand', methods=['POST'])
 @login_required
-def rebrand_subscription():
+def rebrand_subscription() -> ResponseReturnValue:
+    """Update the school's brand colors, validating the four required hex tokens."""
     data = request.get_json()
     colors = data.get('colors', {})
 
@@ -152,9 +160,9 @@ def rebrand_subscription():
             return jsonify({'error': f'Invalid hex color for {token}: {value}'}), 400
 
     try:
-        branding = BrandingLoader.get_branding(current_user.school.slug)
+        branding = BrandingLoader.get_branding(current_user.school_id)
         branding['colors'].update(colors)
-        BrandingLoader.update_branding(current_user.school.slug, branding)
+        BrandingLoader.update_branding(current_user.school_id, branding)
         return jsonify({'message': 'Branding updated successfully.'}), 200
     except Exception as e:
         current_app.logger.error(f"Error updating branding: {e}")
@@ -165,10 +173,11 @@ def rebrand_subscription():
 
 @subscription_bp.route('/api/subscription/preview-pdf', methods=['GET'])
 @login_required
-def preview_branding_pdf():
+def preview_branding_pdf() -> ResponseReturnValue:
+    """Render a sample PDF using the school's current branding, for the settings preview."""
     from app.services.report_lab_generator import PDF_Generator
 
-    branding = BrandingLoader.get_branding(current_user.school.slug)
+    branding = BrandingLoader.get_branding(current_user.school_id)
     gen = PDF_Generator(current_user, branding)
 
     with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
@@ -195,11 +204,12 @@ def preview_branding_pdf():
 
 @subscription_bp.route('/api/subscription/logo', methods=['POST'])
 @login_required
-def upload_logo():
+def upload_logo() -> ResponseReturnValue:
+    """Upload and normalize the school's logo to PNG."""
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided.'}), 400
     file = request.files['file']
-    if file.filename == '':
+    if not file.filename:
         return jsonify({'error': 'No file selected.'}), 400
 
     ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
@@ -217,10 +227,10 @@ def upload_logo():
         return jsonify({'error': 'Invalid or corrupt image file.'}), 400
 
     try:
-        assets_dir = os.path.join(current_app.config['STORAGE'], 'schools', current_user.school.slug, 'assets')
+        assets_dir = os.path.join(current_app.config['STORAGE'], 'schools', str(current_user.school_id), 'assets')
         os.makedirs(assets_dir, exist_ok=True)
         img.save(os.path.join(assets_dir, 'logo.png'), 'PNG')
-        return jsonify({'message': 'Logo uploaded successfully.', 'logo_url': f'/storage/schools/{current_user.school.slug}/assets/logo.png'}), 200
+        return jsonify({'message': 'Logo uploaded successfully.', 'logo_url': f'/storage/schools/{current_user.school_id}/assets/logo.png'}), 200
     except Exception as e:
         current_app.logger.error(f"Error saving logo: {e}")
         return jsonify({'error': 'Failed to save logo.'}), 500
@@ -228,7 +238,8 @@ def upload_logo():
 
 # ── Roster helpers ───────────────────────────────────────────────────────────
 
-def _upsert_roster_rows(rows):
+def _upsert_roster_rows(rows: list[dict[Any, Any]]) -> None:
+    """Create or update a Pitcher per roster row, keyed by Trackman ID; rows without one are skipped."""
     for row in rows:
         trackman_id = str(row.get('Trackman ID', '')).strip()
         if not trackman_id:
@@ -269,9 +280,10 @@ def _upsert_roster_rows(rows):
 
 @subscription_bp.route('/api/subscription/roster', methods=['GET'])
 @login_required
-def get_roster():
+def get_roster() -> ResponseReturnValue:
+    """List the school's roster as display rows for the roster editor table."""
     pitchers = db_models.Pitcher.query.filter_by(school_id=current_user.school_id).all()
-    roster = []
+    roster: list[dict[str, Any]] = []
     for p in pitchers:
         parts = (p.name or '').split(' ', 1)
         roster.append({
@@ -288,7 +300,8 @@ def get_roster():
 
 @subscription_bp.route('/api/subscription/roster', methods=['PUT'])
 @login_required
-def save_roster():
+def save_roster() -> ResponseReturnValue:
+    """Save roster rows edited directly in the roster table."""
     data = request.get_json()
     rows = data.get('rows', [])
     try:
@@ -303,7 +316,8 @@ def save_roster():
 
 @subscription_bp.route('/api/subscription/roster', methods=['POST'])
 @login_required
-def upload_roster():
+def upload_roster() -> ResponseReturnValue:
+    """Upload a roster file (CSV/XLSX), validate it, and upsert every row as a Pitcher."""
     from werkzeug.utils import secure_filename
     from app.routes.utils import get_school_directories
 
@@ -312,7 +326,7 @@ def upload_roster():
     if 'file' not in request.files:
         return jsonify({'error': 'No file part in the request'}), 400
     file = request.files['file']
-    if file.filename == '':
+    if not file.filename:
         return jsonify({'error': 'No selected file'}), 400
 
     filename = secure_filename(file.filename)
@@ -362,13 +376,14 @@ def upload_roster():
 
 @subscription_bp.route('/api/subscription/roster/pfp/<player_id>', methods=['POST'])
 @login_required
-def upload_player_pfp(player_id):
+def upload_player_pfp(player_id: str) -> ResponseReturnValue:
+    """Upload and normalize one player's profile picture to PNG."""
     if not re.match(r'^[\w\-]+$', player_id):
         return jsonify({'error': 'Invalid player ID.'}), 400
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided.'}), 400
     file = request.files['file']
-    if file.filename == '':
+    if not file.filename:
         return jsonify({'error': 'No file selected.'}), 400
 
     ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
@@ -385,10 +400,10 @@ def upload_player_pfp(player_id):
         return jsonify({'error': 'Invalid or corrupt image file.'}), 400
 
     try:
-        player_dir = os.path.join(current_app.config['STORAGE'], 'schools', current_user.school.slug, 'assets', 'players', player_id)
+        player_dir = os.path.join(current_app.config['STORAGE'], 'schools', str(current_user.school_id), 'assets', 'players', player_id)
         os.makedirs(player_dir, exist_ok=True)
         img.save(os.path.join(player_dir, 'pfp.png'), 'PNG')
-        return jsonify({'message': 'Profile picture uploaded successfully.', 'pfp_url': f'/storage/schools/{current_user.school.slug}/assets/players/{player_id}/pfp.png'}), 200
+        return jsonify({'message': 'Profile picture uploaded successfully.', 'pfp_url': f'/storage/schools/{current_user.school_id}/assets/players/{player_id}/pfp.png'}), 200
     except Exception as e:
         current_app.logger.error(f"Error saving player pfp: {e}")
         return jsonify({'error': 'Failed to save profile picture.'}), 500
@@ -396,8 +411,9 @@ def upload_player_pfp(player_id):
 
 @subscription_bp.route('/api/subscription/roster/pfp/bulk', methods=['POST'])
 @login_required
-def upload_player_pfp_bulk():
-    def normalize(s):
+def upload_player_pfp_bulk() -> ResponseReturnValue:
+    """Match a batch of uploaded photos to roster players by normalized filename, and save each pfp."""
+    def normalize(s: str) -> str:
         # Strip diacritics and non-alpha characters so "Martínez" matches "martinez"
         s = unicodedata.normalize('NFD', str(s).lower())
         s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
@@ -411,7 +427,7 @@ def upload_player_pfp_bulk():
     if not pitchers:
         return jsonify({'error': 'No roster found. Please upload a roster first.'}), 400
 
-    name_to_id = {}
+    name_to_id: dict[str, str] = {}
     for p in pitchers:
         parts = (p.name or '').split(' ', 1)
         first = normalize(parts[0] if parts else '')
@@ -434,8 +450,8 @@ def upload_player_pfp_bulk():
         # Strip path separators from webkitdirectory uploads (e.g. "HEADSHOTS/6_OwensCarter.jpg")
         basename = file.filename.replace('\\', '/').split('/')[-1]
         stem = normalize(os.path.splitext(basename)[0])
-        player_id = name_to_id.get(stem)
-        if not player_id:
+        matched_player_id = name_to_id.get(stem)
+        if not matched_player_id:
             unmatched.append(file.filename)
             continue
 
@@ -448,7 +464,7 @@ def upload_player_pfp_bulk():
 
         try:
             img = Image.open(file).convert('RGBA')
-            player_dir = os.path.join(current_app.config['STORAGE'], 'schools', current_user.school.slug, 'assets', 'players', player_id)
+            player_dir = os.path.join(current_app.config['STORAGE'], 'schools', str(current_user.school_id), 'assets', 'players', matched_player_id)
             os.makedirs(player_dir, exist_ok=True)
             img.save(os.path.join(player_dir, 'pfp.png'), 'PNG')
             matched.append(file.filename)

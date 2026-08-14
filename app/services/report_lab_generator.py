@@ -1,8 +1,11 @@
 import os
 import base64
+from typing import Any
+
 import pandas as pd
 from PIL import Image as PILImage
 from io import BytesIO
+import io
 
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
@@ -14,6 +17,15 @@ from reportlab.platypus import (
     Image, Frame, PageTemplate, BaseDocTemplate, KeepInFrame
 )
 
+from app.db.models import User
+from app.services.pitch_stats import (
+    PitcherReportRequest,
+    PitcherStatsTable,
+    PitchTypeStat,
+    PitchUsageStat,
+    PitchUsageTable,
+)
+from app.services.stat_table import StatTable
 from .branding_loader import BrandingLoader
 
 STORAGE_SCHOOLS = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'storage', 'schools')
@@ -44,11 +56,11 @@ class PDF_Generator:
         self.output_path = output_path
     '''
 
-    def __init__(self, current_user, branding):
+    def __init__(self, current_user: User, branding: dict[str, Any]) -> None:
         self.current_user = current_user
 
         # Always resolve logo from local storage; fall back to the app icon if not yet uploaded
-        logo_path = os.path.join(STORAGE_SCHOOLS, current_user.school.slug, 'assets', 'logo.png')
+        logo_path = os.path.join(STORAGE_SCHOOLS, str(current_user.school_id), 'assets', 'logo.png')
         self.school_logo = logo_path if os.path.exists(logo_path) else os.path.join(STATIC_RESOURCES, 'statline-logo.png')
 
         self.primary_color = colors.HexColor(branding['colors']['primary'])
@@ -119,7 +131,7 @@ class PDF_Generator:
             ),
         }
 
-    def generate_header(self, player_pfp: str, pitcher_name: str, school_logo: str, game_date: str, home_team: str, away_team: str, pitcher_height: str = '', pitcher_weight: str = '', age: int = None) -> list:
+    def generate_header(self, player_pfp: str, pitcher_name: str, school_logo: str, game_date: str, home_team: str, away_team: str, pitcher_height: str = '', pitcher_weight: str = '', age: int | None = None) -> list[Any]:
         """
         Generate document header with pitcher info and game details.
 
@@ -137,8 +149,8 @@ class PDF_Generator:
         Returns:
             List of document elements for the header
         """
-        elements = []
-        
+        elements: list[Any] = []
+
         # Create center column content with title and subtitle stacked vertically
         center_content = [
             Paragraph(f"<b>{pitcher_name}</b>", self.styles["title"]),
@@ -147,7 +159,7 @@ class PDF_Generator:
             Paragraph(f"{pitcher_height} {f'| {pitcher_weight}' if pitcher_weight else ''} {f'| {age}' if age else ''}", self.styles["subtitle"]),
         ]
         
-        def _fit_image(path, box=1*inch):
+        def _fit_image(path: str, box: float = 1*inch) -> Image:
             img = PILImage.open(path)
             w, h = img.size
             if w >= h:
@@ -188,43 +200,18 @@ class PDF_Generator:
         
         return elements
 
-    def generate_pitcher_stats_table(self, stats_df) -> list:
-        """
-        Generate a table displaying pitcher statistics from a DataFrame.
-        
-        Args:
-            stats_df: DataFrame with columns: Pitch, Count, % Thrown, Vel., IVB, HB, Spin, VAA, HAA, RelH, RelS, Ext., Axis, Zone %, Chase %, CSW %
-            
-        Returns:
-            List of document elements containing the stats table
-        """
-        elements = []
-        
+    def generate_pitcher_stats_table(self, stats: PitcherStatsTable) -> list[Any]:
+        """Render a pitcher's per-pitch-type stats table. Formatting comes from PitcherStatsTable.columns."""
+        elements: list[Any] = []
+
         elements.append(Paragraph("Pitch Statistics", self.styles["section_header"]))
-        
-        # Prepare table data
-        table_data = [list(stats_df.columns)]
-        
-        for _, row in stats_df.iterrows():
-            row_data = []
-            for col in stats_df.columns:
-                value = row[col]
-                # Format numeric values
-                if isinstance(value, (int, float)):
-                    if col in ['Thrown', 'Zone', 'Chase', 'CSW']:
-                        row_data.append(f"{value:.1f}%")
-                    elif col == 'Count':
-                        row_data.append(str(int(value)))
-                    else:
-                        row_data.append(f"{value:.2f}")
-                else:
-                    row_data.append(str(value))
-            table_data.append(row_data)
-        
+
+        table_data = stats.to_reportlab_rows()
+
         # Create table
-        col_widths = [(self.PAGE_W - 2 * self.MARGIN) / len(stats_df.columns)]
+        col_widths = [(self.PAGE_W - 2 * self.MARGIN) / len(stats.columns)]
         stats_table = Table(table_data, colWidths=col_widths)
-        
+
         # Style the table
         table_style = [
             ('BACKGROUND', (0, 0), (-1, 0), self.tertiary_color),
@@ -243,49 +230,23 @@ class PDF_Generator:
         stats_table.setStyle(TableStyle(table_style))
         elements.append(stats_table)
         elements.append(Spacer(1, 0.05 * inch))
-        
+
         return elements
 
-    def generate_usage_table(self, usage_df, batter_side: str = "Right", available_width: float = None) -> list:
-        """
-        Generate a table displaying pitch usage by count.
-        
-        Args:
-            usage_df: DataFrame with usage statistics
-            batter_side: "Left" or "Right" handed batters
-            
-        Returns:
-            List of document elements containing the usage table
-        """
-        elements = []
-        
+    def generate_usage_table(self, usage: PitchUsageTable, batter_side: str = "Right", available_width: float | None = None) -> list[Any]:
+        """Render a pitch-usage-by-count table for one batter side. Formatting comes from PitchUsageTable.columns."""
+        elements: list[Any] = []
+
         elements.append(Paragraph(f"Pitch Usage vs {batter_side}-Handed Batters", self.styles["section_header"]))
-        
-        # Prepare table data
-        table_data = [list(usage_df.columns)]
-        
-        for _, row in usage_df.iterrows():
-            row_data = []
-            for col in usage_df.columns:
-                value = row[col]
-                # Format numeric values
-                if isinstance(value, (int, float)):
-                    if col in ['Strike', '0-0', "Hitter's", "Pitcher's", '2k', 'Whiff']:
-                        row_data.append(f"{value:.1f}%")
-                    elif col == 'Count':
-                        row_data.append(str(int(value)))
-                    else:
-                        row_data.append(f"{value:.2f}")
-                else:
-                    row_data.append(str(value))
-            table_data.append(row_data)
-        
+
+        table_data = usage.to_reportlab_rows()
+
         # Create table with adjusted column widths
         if available_width is None:
             available_width = (self.PAGE_W - 2 * self.MARGIN) / 2
-        col_widths = available_width / len(usage_df.columns)
+        col_widths = available_width / len(usage.columns)
         usage_table = Table(table_data, colWidths=col_widths)
-        
+
         # Style the table
         table_style = [
             ('BACKGROUND', (0, 0), (-1, 0), self.tertiary_color),
@@ -304,27 +265,27 @@ class PDF_Generator:
         usage_table.setStyle(TableStyle(table_style))
         elements.append(usage_table)
         elements.append(Spacer(1, 0.05 * inch))
-        
+
         return elements
 
-    def generate_stats_grid(self, stats_data: dict) -> list:
+    def generate_stats_grid(self, stats_data: dict[str, Any]) -> list[Any]:
         """
         Generate a grid of key statistical boxes.
-        
+
         Args:
             stats_data: Dictionary with stat names as keys and values as values
                        Example: {"Avg Velocity": "94.2", "Spin Rate": "2456", ...}
-        
+
         Returns:
             List of document elements containing the stats grid
         """
-        elements = []
-        
+        elements: list[Any] = []
+
         elements.append(Paragraph("Key Statistics", self.styles["section_header"]))
-        
+
         # Create a grid of stats (4 columns)
         stat_items = list(stats_data.items())
-        grid_data = []
+        grid_data: list[Any] = []
         
         for i in range(0, len(stat_items), 4):
             row = []
@@ -362,19 +323,19 @@ class PDF_Generator:
         
         return elements
 
-    def add_image_section(self, image_path: str, title: str, max_width_pts: float = None) -> list:
+    def add_image_section(self, image_path: str, title: str, max_width_pts: float | None = None) -> list[Any]:
         """
         Add an image section to the report (for heat maps, break maps, etc).
-        
+
         Args:
             image_path: Full path to the image file
             title: Title for the image section
             max_width_pts: Maximum width of the image in points
-            
+
         Returns:
             List of document elements containing the image section
         """
-        elements = []
+        elements: list[Any] = []
         
         if max_width_pts is None:
             max_width_pts = self.PAGE_W - 2 * self.MARGIN
@@ -408,17 +369,17 @@ class PDF_Generator:
         
         return elements
 
-    def generate_pitch_type_summary(self, stats_df) -> list:
+    def generate_pitch_type_summary(self, stats_df: pd.DataFrame) -> list[Any]:
         """
         Generate a summary section showing pitch type breakdown.
-        
+
         Args:
             stats_df: DataFrame with pitch statistics
-            
+
         Returns:
             List of document elements
         """
-        elements = []
+        elements: list[Any] = []
         
         elements.append(Paragraph("Pitch Type Breakdown", self.styles["section_header"]))
         
@@ -457,26 +418,28 @@ class PDF_Generator:
         
         return elements
 
-    def generate_summary_page(self, pitcher_name: str, game_info: dict, stats_df=None) -> list:
+    def generate_summary_page(self, pitcher_name: str, game_info: dict[str, Any], stats_df: pd.DataFrame | None = None) -> list[Any]:
         """
         Generate a summary page with key highlights.
-        
+
         Args:
             pitcher_name: Name of the pitcher
             game_info: Dictionary with game information (date, teams, etc)
             stats_df: Optional DataFrame with statistics
-            
+
         Returns:
             List of document elements
         """
-        elements = []
-        
+        elements: list[Any] = []
+
         # Add main header
         elements.extend(self.generate_header(
+            self.school_logo,
             pitcher_name,
+            self.school_logo,
             game_info.get('game_date', ''),
             game_info.get('home_team', ''),
-            game_info.get('away_team', '')
+            game_info.get('away_team', ''),
         ))
         
         # Add summary text
@@ -495,7 +458,7 @@ class PDF_Generator:
         
         return elements
 
-    def generate_two_column_layout(self, left_elements: list, right_elements: list) -> list:
+    def generate_two_column_layout(self, left_elements: list[Any], right_elements: list[Any]) -> list[Any]:
         """
         Generate a two-column layout for side-by-side content.
         
@@ -526,35 +489,11 @@ class PDF_Generator:
         
         return [layout_table]
 
-    def generate_pitcher_report(self, data: dict, output_path: str) -> str:
-        """
-        Generate complete pitcher report PDF.
-        
-        Args:
-            data: Dictionary containing report data with keys:
-                  - pitcher_name: str
-                  - pitcher_id: int
-                  - date: str (MM/DD/YYYY)
-                  - home_team: str
-                  - away_team: str
-                  - pitcher_height: str
-                  - pitcher_weight: str
-                  - pitcher_age: int
-                  - pitch_stats: pandas DataFrame with pitch statistics
-                  - pitch_usage_left: pandas DataFrame for left-handed batters usage
-                  - pitch_usage_right: pandas DataFrame for right-handed batters usage
-                  - overview: dict of key statistics (optional)
-                  - pitch_heat_map: image paths (optional)
-                  - pitch_break_map: image paths (optional)
+    def generate_pitcher_report(self, data: PitcherReportRequest, output_path: str) -> str:
+        """Generate complete pitcher report PDF. Returns the path it was saved to."""
 
-            output_path: Full path where PDF should be saved
-            
-        Returns:
-            Path to the generated PDF
-        """
-        
         # Resolve player pfp: player photo → school logo → statline logo
-        pfp_path = os.path.join(STORAGE_SCHOOLS, self.current_user.school.slug, 'assets', 'players', str(data.get('pitcher_id')), 'pfp.png')
+        pfp_path = os.path.join(STORAGE_SCHOOLS, str(self.current_user.school_id), 'assets', 'players', str(data.pitcher_id), 'pfp.png')
         player_pfp = pfp_path if os.path.exists(pfp_path) else self.school_logo
 
         # Replace SimpleDocTemplate with this in generate_pitcher_report:
@@ -578,55 +517,59 @@ class PDF_Generator:
             bottomMargin=0,
         )
         pdf_file.addPageTemplates([PageTemplate(id='main', frames=[frame])])
-        
-        elements = []
-        
+
+        elements: list[Any] = []
+
         print(f"[PDF] Starting report generation")
 
         # Add header
         elements.extend(self.generate_header(
             player_pfp,
-            data.get('pitcher_name', 'Pitcher'),
+            data.pitcher_name,
             self.school_logo,
-            data.get('date', ''),
-            data.get('home_team', ''),
-            data.get('away_team', ''),
-            data.get('pitcher_height', ''),
-            data.get('pitcher_weight', ''),
-            data.get('pitcher_age', '')
+            data.date,
+            data.home_team,
+            data.away_team,
+            data.pitcher_height,
+            data.pitcher_weight,
+            data.pitcher_age,
         ))
         # Add pitch heatmap images (left and right) below header
         half_width = (self.PAGE_W - 2 * self.MARGIN - 0.2 * inch) / 2
-        heatmap_left = data.get('pitch_heat_map_left')
-        heatmap_right = data.get('pitch_heat_map_right')
-        if heatmap_left or heatmap_right:
-            left_els = self.add_image_section(heatmap_left, "vs Left-Handed Batters", max_width_pts=half_width) if heatmap_left else []
-            right_els = self.add_image_section(heatmap_right, "vs Right-Handed Batters", max_width_pts=half_width) if heatmap_right else []
+        if data.pitch_heat_map_left or data.pitch_heat_map_right:
+            left_els = self.add_image_section(data.pitch_heat_map_left, "vs Left-Handed Batters", max_width_pts=half_width) if data.pitch_heat_map_left else []
+            right_els = self.add_image_section(data.pitch_heat_map_right, "vs Right-Handed Batters", max_width_pts=half_width) if data.pitch_heat_map_right else []
             elements.extend(self.generate_two_column_layout(left_els, right_els))
 
         # Add pitch break map on left below heatmap and usage tables on right if break map exists
-        break_map_path = data.get('pitch_break_map')    
-        if break_map_path and os.path.exists(break_map_path):
+        if data.pitch_break_map and os.path.exists(data.pitch_break_map):
             half_width = (self.PAGE_W - 2 * self.MARGIN - 0.2 * inch) / 2
-            left_elements = self.add_image_section(break_map_path, "Pitch Break Map", max_width_pts=half_width)
-            right_elements = []
-            if 'pitch_usage_left' in data and isinstance(data['pitch_usage_left'], pd.DataFrame):
-                right_elements.extend(self.generate_usage_table(data['pitch_usage_left'], batter_side="Left"))
-            if 'pitch_usage_right' in data and isinstance(data['pitch_usage_right'], pd.DataFrame):
-                right_elements.extend(self.generate_usage_table(data['pitch_usage_right'], batter_side="Right"))
-            
+            left_elements = self.add_image_section(data.pitch_break_map, "Pitch Break Map", max_width_pts=half_width)
+            right_elements: list[Any] = []
+            if data.pitch_usage_left is not None:
+                right_elements.extend(self.generate_usage_table(data.pitch_usage_left, batter_side="Left"))
+            if data.pitch_usage_right is not None:
+                right_elements.extend(self.generate_usage_table(data.pitch_usage_right, batter_side="Right"))
+
             elements.extend(self.generate_two_column_layout(left_elements, right_elements))
         else:
             # If no break map, add usage tables in single column
-            if 'pitch_usage_left' in data and isinstance(data['pitch_usage_left'], pd.DataFrame):
-                elements.extend(self.generate_usage_table(data['pitch_usage_left'], batter_side="Left"))
-            if 'pitch_usage_right' in data and isinstance(data['pitch_usage_right'], pd.DataFrame):
-                elements.extend(self.generate_usage_table(data['pitch_usage_right'], batter_side="Right"))
+            if data.pitch_usage_left is not None:
+                elements.extend(self.generate_usage_table(data.pitch_usage_left, batter_side="Left"))
+            if data.pitch_usage_right is not None:
+                elements.extend(self.generate_usage_table(data.pitch_usage_right, batter_side="Right"))
 
         # Add pitch stats table
-        if 'pitch_stats' in data and isinstance(data['pitch_stats'], pd.DataFrame):
-            elements.extend(self.generate_pitcher_stats_table(data['pitch_stats']))
-        
+        if data.pitch_stats is not None:
+            elements.extend(self.generate_pitcher_stats_table(data.pitch_stats))
+        '''
+        if (io.path.exists(io.path.join(STORAGE_SCHOOLS, self.current_user.school.slug, 'assets', 'custom_pitcher_report.py'))):
+            try:
+                print(f"[PDF] Generating custom pitcher report")
+            except Exception as e:
+                print(f"[PDF] Error generating custom pitcher report: {str(e)}")
+                raise
+        '''
         # Build PDF
         try:
             for i, el in enumerate(elements):
@@ -642,24 +585,21 @@ class PDF_Generator:
             print(f"Error generating PDF: {str(e)}")
             raise
 
-    def generate_data_table(self, df, title: str, available_width: float = None) -> list:
+    def generate_data_table(self, table: StatTable[Any] | None, title: str, available_width: float | None = None) -> list[Any]:
         """
-        Render an already-formatted DataFrame as a titled table.
-
-        Unlike generate_pitcher_stats_table this applies no numeric formatting -- the
-        hitter builders emit display-ready strings, so the values are passed through.
+        Render a StatTable as a titled table.
 
         Args:
-            df: DataFrame whose columns become the header row
+            table: rows + column spec; formatting is declared on table.columns
             title: Section heading above the table
             available_width: Total table width in points; defaults to the full frame
 
         Returns:
             List of document elements containing the table
         """
-        elements = []
+        elements: list[Any] = []
 
-        if df is None or not isinstance(df, pd.DataFrame) or df.empty:
+        if table is None or not table:
             return elements
 
         if available_width is None:
@@ -667,11 +607,9 @@ class PDF_Generator:
 
         elements.append(Paragraph(title, self.styles["section_header"]))
 
-        table_data = [list(df.columns)]
-        for _, row in df.iterrows():
-            table_data.append([str(row[col]) for col in df.columns])
+        table_data = table.to_reportlab_rows()
 
-        data_table = Table(table_data, colWidths=[available_width / len(df.columns)] * len(df.columns))
+        data_table = Table(table_data, colWidths=[available_width / len(table.columns)] * len(table.columns))
         data_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), self.tertiary_color),
             ('TEXTCOLOR', (0, 0), (-1, 0), self.WHITE),
@@ -691,7 +629,7 @@ class PDF_Generator:
 
         return elements
 
-    def generate_hitter_report(self, data: dict, output_path: str) -> str:
+    def generate_hitter_report(self, data: dict[str, Any], output_path: str) -> str:
         """
         Generate a complete hitter report PDF covering a date range.
 
@@ -719,7 +657,7 @@ class PDF_Generator:
         """
 
         # Resolve player pfp: player photo → school logo → statline logo
-        pfp_path = os.path.join(STORAGE_SCHOOLS, self.current_user.school.slug, 'assets', 'players', str(data.get('hitter_id')), 'pfp.png')
+        pfp_path = os.path.join(STORAGE_SCHOOLS, str(self.current_user.school_id), 'assets', 'players', str(data.get('hitter_id')), 'pfp.png')
         player_pfp = pfp_path if os.path.exists(pfp_path) else self.school_logo
 
         frame = Frame(
@@ -743,7 +681,7 @@ class PDF_Generator:
         )
         pdf_file.addPageTemplates([PageTemplate(id='main', frames=[frame])])
 
-        elements = []
+        elements: list[Any] = []
 
         print(f"[PDF] Starting hitter report generation")
 
@@ -813,45 +751,32 @@ class PDF_Generator:
 
         player_pfp = os.path.join(STATIC_RESOURCES, 'favicon.png')
 
-        elements = []
+        elements: list[Any] = []
         elements.extend(self.generate_header(
             player_pfp, 'Sample Pitcher', self.school_logo,
             '01/01/2025', 'HOME', 'AWAY',
         ))
 
-        stats_df = pd.DataFrame({
-            'Pitch':  ['Fastball', 'Slider', 'Curveball', 'Changeup'],
-            'Count':  [45,          20,        15,           10],
-            'Thrown': [50.0,        22.2,      16.7,         11.1],
-            'Vel.':   [93.2,        84.1,      77.5,         85.0],
-            'IVB':    [14.5,         2.1,      -8.3,          7.2],
-            'HB':     [ 8.3,        -5.6,       6.1,         -3.4],
-            'Spin':   [2345.0,     2567.0,    2789.0,       1876.0],
-            'VAA':    [-4.2,        -5.1,      -6.8,         -4.9],
-            'HAA':    [ 0.3,        -1.2,       0.8,         -0.5],
-            'RelH':   [ 6.1,         6.0,       5.9,          6.1],
-            'RelS':   [-2.1,        -2.0,      -2.2,         -2.0],
-            'Ext.':   [ 6.8,         6.5,       6.3,          6.7],
-            'Axis':   [212.0,        45.0,     315.0,        190.0],
-            'Zone':   [45.6,        38.2,      52.1,         41.3],
-            'Chase':  [32.1,        41.5,      35.8,         28.9],
-            'CSW':    [28.4,        35.2,      31.6,         25.7],
-        })
-        elements.extend(self.generate_pitcher_stats_table(stats_df))
+        stats = PitcherStatsTable([
+            PitchTypeStat(pitch_type='Fastball', thrown_pct=50.0, velo_low=90.0, velo_avg=93.2, velo_high=96.0, ivb=14.5, hb=8.3, spin=2345.0, vaa=-4.2, haa=0.3, rel_height=6.1, rel_side=-2.1, extension=6.8, axis='08:30', zone_pct=45.6, chase_pct=32.1, csw_pct=28.4),
+            PitchTypeStat(pitch_type='Slider', thrown_pct=22.2, velo_low=81.0, velo_avg=84.1, velo_high=87.0, ivb=2.1, hb=-5.6, spin=2567.0, vaa=-5.1, haa=-1.2, rel_height=6.0, rel_side=-2.0, extension=6.5, axis='02:45', zone_pct=38.2, chase_pct=41.5, csw_pct=35.2),
+            PitchTypeStat(pitch_type='Curveball', thrown_pct=16.7, velo_low=74.0, velo_avg=77.5, velo_high=81.0, ivb=-8.3, hb=6.1, spin=2789.0, vaa=-6.8, haa=0.8, rel_height=5.9, rel_side=-2.2, extension=6.3, axis='12:15', zone_pct=52.1, chase_pct=35.8, csw_pct=31.6),
+            PitchTypeStat(pitch_type='Changeup', thrown_pct=11.1, velo_low=82.0, velo_avg=85.0, velo_high=88.0, ivb=7.2, hb=-3.4, spin=1876.0, vaa=-4.9, haa=-0.5, rel_height=6.1, rel_side=-2.0, extension=6.7, axis='09:50', zone_pct=41.3, chase_pct=28.9, csw_pct=25.7),
+        ])
+        elements.extend(self.generate_pitcher_stats_table(stats))
 
-        usage_cols = ['Pitch', 'Count', 'Strike', '0-0', "Hitter's", "Pitcher's", '2k', 'Whiff']
-        lhh = pd.DataFrame([
-            ['Fastball',  24, 65.2, 55.0, 52.0, 62.0, 58.0, 18.5],
-            ['Slider',    10, 70.1, 30.0, 28.0, 38.0, 45.0, 32.4],
-            ['Curveball',  8, 62.5, 25.0, 22.0, 35.0, 48.0, 28.6],
-            ['Changeup',   5, 60.0, 20.0, 18.0, 28.0, 35.0, 22.1],
-        ], columns=usage_cols)
-        rhh = pd.DataFrame([
-            ['Fastball',  21, 63.8, 52.0, 49.0, 60.0, 55.0, 20.1],
-            ['Slider',    10, 68.4, 32.0, 30.0, 40.0, 43.0, 30.8],
-            ['Curveball',  7, 60.0, 23.0, 20.0, 32.0, 46.0, 26.4],
-            ['Changeup',   5, 58.2, 18.0, 16.0, 26.0, 33.0, 21.5],
-        ], columns=usage_cols)
+        lhh = PitchUsageTable([
+            PitchUsageStat(pitch_type='Fastball', count=24, strike_pct=65.2, first_pitch_pct=55.0, hitter_favorable_pct=52.0, pitcher_favorable_pct=62.0, two_strike_pct=58.0, whiff_pct=18.5),
+            PitchUsageStat(pitch_type='Slider', count=10, strike_pct=70.1, first_pitch_pct=30.0, hitter_favorable_pct=28.0, pitcher_favorable_pct=38.0, two_strike_pct=45.0, whiff_pct=32.4),
+            PitchUsageStat(pitch_type='Curveball', count=8, strike_pct=62.5, first_pitch_pct=25.0, hitter_favorable_pct=22.0, pitcher_favorable_pct=35.0, two_strike_pct=48.0, whiff_pct=28.6),
+            PitchUsageStat(pitch_type='Changeup', count=5, strike_pct=60.0, first_pitch_pct=20.0, hitter_favorable_pct=18.0, pitcher_favorable_pct=28.0, two_strike_pct=35.0, whiff_pct=22.1),
+        ])
+        rhh = PitchUsageTable([
+            PitchUsageStat(pitch_type='Fastball', count=21, strike_pct=63.8, first_pitch_pct=52.0, hitter_favorable_pct=49.0, pitcher_favorable_pct=60.0, two_strike_pct=55.0, whiff_pct=20.1),
+            PitchUsageStat(pitch_type='Slider', count=10, strike_pct=68.4, first_pitch_pct=32.0, hitter_favorable_pct=30.0, pitcher_favorable_pct=40.0, two_strike_pct=43.0, whiff_pct=30.8),
+            PitchUsageStat(pitch_type='Curveball', count=7, strike_pct=60.0, first_pitch_pct=23.0, hitter_favorable_pct=20.0, pitcher_favorable_pct=32.0, two_strike_pct=46.0, whiff_pct=26.4),
+            PitchUsageStat(pitch_type='Changeup', count=5, strike_pct=58.2, first_pitch_pct=18.0, hitter_favorable_pct=16.0, pitcher_favorable_pct=26.0, two_strike_pct=33.0, whiff_pct=21.5),
+        ])
 
         half_width = (self.PAGE_W - 2 * self.MARGIN - 0.2 * inch) / 2
         # Subtract the 5pt left+right cell padding from generate_two_column_layout
@@ -864,25 +789,26 @@ class PDF_Generator:
         return output_path
 
 
-def find_image_with_extensions(base_path, extensions=None):
+def find_image_with_extensions(base_path: str, extensions: list[str] | None = None) -> str | None:
     """Find an image file with any of the given extensions"""
     if extensions is None:
         extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
-    
+
     for ext in extensions:
         path = base_path + ext
         if os.path.exists(path):
             return path
     return None
 
-def image_to_base64(img):
+def image_to_base64(img: PILImage.Image) -> str:
+    """Encode a PIL image as a data: URI, for embedding directly in HTML."""
     buffer = BytesIO()
     img.save(buffer, format="PNG")
     buffer.seek(0)
     b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
     return f"data:image/png;base64,{b64}"
 
-def merge_pdfs(id, pdf_folder, output_path, prefix="pitcher"):
+def merge_pdfs(id: int, pdf_folder: str, output_path: str, prefix: str = "pitcher") -> str | None:
     """
     Merge one user's reports of a single kind into a combined PDF.
 

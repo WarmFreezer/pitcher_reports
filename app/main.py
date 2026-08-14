@@ -11,7 +11,10 @@ Purpose: Generates pitcher performance reports from game datasets exported from 
 '''
 
 import os
+from typing import Any
+
 from flask import Flask, send_from_directory, render_template
+from flask.typing import ResponseReturnValue
 from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_login import LoginManager, current_user
@@ -32,6 +35,7 @@ STORAGE_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'stora
 
 
 def create_app(config_overrides: dict | None = None) -> Flask:
+    """Flask application factory: wires up the DB, login manager, and blueprints."""
     app = Flask(__name__, template_folder='templates', static_folder='static')
     app.secret_key = os.environ.get('APP_SECRET_KEY')
     CORS(app)
@@ -62,50 +66,51 @@ def create_app(config_overrides: dict | None = None) -> Flask:
     login_manager.login_view = 'auth.login'
 
     @login_manager.user_loader
-    def load_user(user_id):
-        return User.query.get(int(user_id))
+    def load_user(user_id: str) -> User | None:
+        return db.session.get(User, int(user_id))
 
     # Context processor
     @app.context_processor
-    def inject_branding():
+    def inject_branding() -> dict[str, Any]:
+        """Make the current school's branding/logo available to every template."""
         if current_user.is_authenticated and current_user.school:
-            branding = BrandingLoader.get_branding(current_user.school.slug)
-            logo_path = BrandingLoader.get_logo_path(current_user.school.slug)
+            branding = BrandingLoader.get_branding(current_user.school_id)
+            logo_path = BrandingLoader.get_logo_path(current_user.school_id)
             return {'branding': branding, 'logo_path': logo_path}
         return {}
 
     # Static file serving
     @app.route('/favicon.ico')
-    def favicon():
-        return send_from_directory(os.path.join(app.static_folder, 'resources'), 'favicon.ico', mimetype='image/x-icon')
+    def favicon() -> ResponseReturnValue:
+        return send_from_directory(os.path.join(str(app.static_folder), 'resources'), 'favicon.ico', mimetype='image/x-icon')
 
     @app.route('/robots.txt')
-    def robots():
-        return send_from_directory(app.static_folder, 'robots.txt', mimetype='text/plain')
+    def robots() -> ResponseReturnValue:
+        return send_from_directory(str(app.static_folder), 'robots.txt', mimetype='text/plain')
 
     @app.route('/.well-known/security.txt')
-    def security():
-        return send_from_directory(app.static_folder, 'security.txt', mimetype='text/plain')
+    def security() -> ResponseReturnValue:
+        return send_from_directory(str(app.static_folder), 'security.txt', mimetype='text/plain')
 
     @app.errorhandler(404)
-    def not_found(e):
+    def not_found(e: Exception) -> ResponseReturnValue:
         return render_template('404.html'), 404
 
     @app.errorhandler(500)
-    def server_error(e):
+    def server_error(e: Exception) -> ResponseReturnValue:
         return render_template('500.html'), 500
 
-    @app.route('/storage/schools/<school_slug>/assets/<path:filename>')
-    def school_files(school_slug, filename):
-        return send_from_directory(os.path.join(app.config['STORAGE'], 'schools', school_slug, 'assets'), filename)
+    @app.route('/storage/schools/<int:school_id>/assets/<path:filename>')
+    def school_files(school_id: int, filename: str) -> ResponseReturnValue:
+        return send_from_directory(os.path.join(app.config['STORAGE'], 'schools', str(school_id), 'assets'), filename)
 
-    @app.route('/storage/schools/<school_slug>/temp/<path:filename>')
-    def school_temp_files(school_slug, filename):
-        return send_from_directory(os.path.join(app.config['STORAGE'], 'schools', school_slug, 'temp'), filename)
+    @app.route('/storage/schools/<int:school_id>/temp/<path:filename>')
+    def school_temp_files(school_id: int, filename: str) -> ResponseReturnValue:
+        return send_from_directory(os.path.join(app.config['STORAGE'], 'schools', str(school_id), 'temp'), filename)
 
-    @app.route('/storage/schools/<school_slug>/reports/<path:filename>')
-    def school_report_files(school_slug, filename):
-        return send_from_directory(os.path.join(app.config['STORAGE'], 'schools', school_slug, 'reports'), filename)
+    @app.route('/storage/schools/<int:school_id>/reports/<path:filename>')
+    def school_report_files(school_id: int, filename: str) -> ResponseReturnValue:
+        return send_from_directory(os.path.join(app.config['STORAGE'], 'schools', str(school_id), 'reports'), filename)
 
     # Register blueprints
     app.register_blueprint(auth_bp)

@@ -2,8 +2,11 @@ import os
 import magic
 import hashlib
 import re
+from typing import Any
+
 import numpy as np
 import pandas as pd
+from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
 
 ALLOWED_EXTENSIONS = {'csv', 'xlsx', 'xls'}
@@ -35,7 +38,8 @@ MAX_COLUMNS = 500
 
 class file_validator:
     @staticmethod
-    def _is_valid_timestamp_value(value):
+    def _is_valid_timestamp_value(value: Any) -> bool:
+        """Whether value parses as one of the TrackMan time-of-day formats (or is blank)."""
         if pd.isna(value):
             return True
 
@@ -55,7 +59,8 @@ class file_validator:
         return False
 
     @staticmethod
-    def check_extension(filename):
+    def check_extension(filename: str) -> tuple[bool, str]:
+        """Whether filename's extension is one of ALLOWED_EXTENSIONS; returns it lowercased."""
         if '.' not in filename:
             return False, 'Filename has no extension'
         ext = filename.rsplit('.', 1)[1].lower()
@@ -64,7 +69,8 @@ class file_validator:
         return True, ext
 
     @staticmethod
-    def check_filename(filename):
+    def check_filename(filename: str) -> tuple[bool, str | None]:
+        """Rejects path-traversal patterns, null bytes, and over-long filenames."""
         # Reject path traversal patterns and null bytes before the file touches disk
         dangerous_patterns = ['..', '/', '\\', '%00', '\x00']
         for pattern in dangerous_patterns:
@@ -75,7 +81,8 @@ class file_validator:
         return True, None
 
     @staticmethod
-    def check_file_size(file):
+    def check_file_size(file: FileStorage) -> tuple[bool, str | None]:
+        """Rejects empty uploads and anything over MAX_FILE_SIZE."""
         file.seek(0, os.SEEK_END)
         size = file.tell()
         file.seek(0)
@@ -86,7 +93,8 @@ class file_validator:
         return True, None
 
     @staticmethod
-    def check_mime_type(filepath):
+    def check_mime_type(filepath: str) -> tuple[bool, str]:
+        """Whether the file's detected MIME type is one of ALLOWED_MIME_TYPES."""
         # MIME check runs on the saved file path, not the stream, because libmagic
         # needs a seekable file to read the full header reliably
         try:
@@ -99,7 +107,8 @@ class file_validator:
             return False, 'MIME type detection error: {}'.format(str(e))
 
     @staticmethod
-    def check_file_signature(filepath):
+    def check_file_signature(filepath: str) -> tuple[bool, str | None]:
+        """Rejects files whose header/body matches a known executable or script signature."""
         # Read the first 256 bytes and check both the header start and interior
         # because some polyglot files embed dangerous content after a valid header
         try:
@@ -113,7 +122,8 @@ class file_validator:
             return False, 'File signature check error: {}'.format(str(e))
 
     @staticmethod
-    def validate_content_structure(df):
+    def validate_content_structure(df: pd.DataFrame) -> tuple[bool, str | None]:
+        """Rejects an empty dataframe or one exceeding MAX_ROWS/MAX_COLUMNS."""
         try:
             if df.empty:
                 return False, 'File contains no data'
@@ -128,14 +138,16 @@ class file_validator:
             return False, 'Could not parse file: {}'.format(str(e))
 
     @staticmethod
-    def validate_required_columns(df, required_columns):
+    def validate_required_columns(df: pd.DataFrame, required_columns: list[str]) -> tuple[bool, str | None]:
+        """Whether every name in required_columns is present in df."""
         missing = set(required_columns) - set(df.columns)
         if missing:
             return False, 'Missing required columns: {}'.format(', '.join(missing))
         return True, None
 
     @staticmethod
-    def check_data_types(df, column_types):
+    def check_data_types(df: pd.DataFrame, column_types: dict[str, str]) -> tuple[bool, str | None]:
+        """Coerces/validates each named column against its expected 'numeric'/'timestamp'/'string' type."""
         try:
             for col, expected_type in column_types.items():
                 if col not in df.columns:
@@ -164,8 +176,8 @@ class file_validator:
             return False, 'Data type validation error: {}'.format(str(e))
 
     @staticmethod
-    def calculate_checksum(filepath):
-        # SHA-256 checksum used for logging — not for integrity enforcement
+    def calculate_checksum(filepath: str) -> str:
+        """SHA-256 checksum used for logging — not for integrity enforcement."""
         sha256_hash = hashlib.sha256()
         with open(filepath, "rb") as f:
             for byte_block in iter(lambda: f.read(4096), b""):
@@ -173,9 +185,15 @@ class file_validator:
         return sha256_hash.hexdigest()
 
 
-def validate_uploaded_file(source_df, file, filepath, required_columns, column_types):
+def validate_uploaded_file(
+    source_df: pd.DataFrame,
+    file: FileStorage,
+    filepath: str,
+    required_columns: list[str],
+    column_types: dict[str, str],
+) -> tuple[bool, str | None]:
     """Run the full validation pipeline. Returns (True, checksum) or (False, error_message)."""
-    filename = secure_filename(file.filename)
+    filename = secure_filename(file.filename) if file.filename else ''
 
     # Order matters: cheap checks (extension, filename) run before expensive ones (MIME, content)
     is_valid, ext_or_msg = file_validator.check_extension(filename)

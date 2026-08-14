@@ -133,7 +133,7 @@ def test_multi_game_selection_spans_the_dates(archived_games, client):
 def test_report_generates_charts_in_both_themes(archived_games, client, app, home_school, home_user):
     _report(client)
 
-    temp_dir = os.path.join(app.config['STORAGE'], 'schools', home_school.slug, 'temp')
+    temp_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'temp')
     for name in (
         f'{home_user.id}_pitcher_1001_heat_map_left_light.png',
         f'{home_user.id}_pitcher_1001_heat_map_left_dark.png',
@@ -147,7 +147,7 @@ def test_report_produces_a_merged_pdf(archived_games, client, app, home_school, 
     data = _report(client).get_json()
 
     assert data['merged_pdf_url']
-    reports_dir = os.path.join(app.config['STORAGE'], 'schools', home_school.slug, 'reports')
+    reports_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'reports')
     assert os.path.exists(os.path.join(reports_dir, f'{home_user.id}_merged_pitcher_reports.pdf'))
 
 

@@ -5,9 +5,13 @@ Spin Efficiency
 Damage by type (90+mph with launch angle between 10-35deg)
 School -> Organization
 
-REFACTOR BACKEND WITH BETTER STRUCTURE (CLASSES, COMMENTS, ETC)
+REFACTOR BACKEND WITH BETTER STRUCTURE (CLASSES, COMMENTS, ETC) <<<WIP>>>
+Claude.md per module or folder (function docstrings should help)
+Email Confirmations, newsletters***
+Dark Mode contrast on new report screens, icon color for calendar select
+DB/Accounts change - Look into different method for verifying school email
 
-Email Confirmations, newsletters
+Pricing Changes - Up subscription cost $400/year?? (discuss pricing with schools), Add form to request custom reports
 
 ------ Deferred from the /pitching + /batting restructure ------
 SECURITY: /storage/schools/<slug>/... routes are unauthenticated
@@ -33,6 +37,18 @@ PDF header subtitle format is wrong for multi-game reports
 Rule learned: any change to game_archive._build_entry needs a
   `flask --app app.main rebuild-game-index` run, or existing archives silently
   report defaults for the new field instead of real values.
+
+------ Deferred from the DataFrame -> typed StatTable refactor ------
+PitchType enum to replace pitch_order/pitch_point_colors dicts
+  app/services/report_theme.py -- these two dicts duplicate the DB's
+  Pitch_Types table (name -> abbreviation). Small/cosmetic, no behavior risk.
+
+Unify team_stats.add_outing_pitch_stats with report.py's pitch aggregation
+  app/services/team_stats.py runs its own independent pandas aggregation to
+  persist season stats to Postgres, duplicating report.py's per-pitch-type
+  logic. Deferred deliberately -- touches the persisted Outing_Pitch_Stat
+  write path and season-total correctness (CLAUDE.md: rate stats use totals,
+  never AVG of a percentage). Do this alone, not folded into another change.
 
 ------ Good for now ------
 Master Team Sheet
