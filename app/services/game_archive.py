@@ -352,7 +352,7 @@ def load_games(games_dir: str, content_hashes: list[str]) -> pd.DataFrame:
             continue
 
         frame['GameDate'] = entry.get('date')
-        frames.append(frame)
+        frames.append(frame.copy())
 
     if not frames:
         return pd.DataFrame()

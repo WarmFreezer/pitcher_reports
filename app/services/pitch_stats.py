@@ -8,6 +8,8 @@ dict -> pd.DataFrame -> post-hoc string-formatting to these dataclasses.
 """
 from dataclasses import dataclass
 
+import pandas as pd
+
 from app.services.stat_table import Column, ColumnFormat, StatTable
 
 
@@ -106,6 +108,63 @@ class PitchUsageSides:
     right: PitchUsageTable
 
 
+@dataclass(frozen=True)
+class CustomStat:
+    """One school-defined stat computed in report.py's custom_stats_table()."""
+    name: str
+    value: str  # pre-formatted by report.py -- a table column has one static format for every row
+
+
+class CustomStatsTable(StatTable[CustomStat]):
+    """The custom statistics table shown on the tier 3 custom pitcher report."""
+    columns = [
+        Column('name', 'Stat Name', ColumnFormat.TEXT),
+        Column('value', 'Value', ColumnFormat.TEXT),
+    ]
+
+@dataclass(frozen=True)
+class CustomPitchTypeStat:
+    """One pitch type's row in a runtime-defined custom stats table."""
+    pitch_type: str
+    stats: dict[str, str]  # stat name -> pre-formatted value; keys are whatever the custom module tracks
+
+
+class CustomPitchTypeStatsTable(StatTable[CustomPitchTypeStat]):
+    """
+    Pitch-type-broken-out custom stats table for the tier 3 custom pitcher report.
+
+    Unlike PitcherStatsTable/PitchUsageTable, the stat columns aren't fixed at
+    class-definition time -- custom_pitcher_report.py adds whatever stat/value
+    pairs it wants per pitch type, so headers are derived from the union of
+    each row's `stats` keys instead of a static `columns` list.
+
+    A report may need more than one of these (e.g. a left/right split, like
+    pitch_usage_left/right) -- `title` labels a table so PitcherReportRequest
+    can carry them as a plain list without a parallel list of titles.
+    """
+    def __init__(self, rows: list[CustomPitchTypeStat], title: str = '', col_widths: list[float] | None = None) -> None:
+        super().__init__(rows, col_widths)
+        self.title = title
+        seen: dict[str, None] = {}
+        for row in rows:
+            seen.update(dict.fromkeys(row.stats))
+        self.stat_names = list(seen)
+
+    def to_reportlab_rows(self) -> list[list[str]]:
+        header = ['Pitch'] + self.stat_names
+        body = [[row.pitch_type] + [row.stats.get(name, '') for name in self.stat_names] for row in self.rows]
+        return [header] + body
+
+    def to_dict(self) -> list[dict[str, str]]:
+        return [{'Pitch': row.pitch_type, **{name: row.stats.get(name, '') for name in self.stat_names}} for row in self.rows]
+
+    def to_html(self, css_class: str = '') -> str:
+        if not self.rows:
+            return ''
+        df = pd.DataFrame(self.to_dict())
+        return df.to_html(index=False, border=0, classes=css_class, escape=False, justify='left', na_rep='')
+
+
 @dataclass
 class PitcherReportRequest:
     """
@@ -129,3 +188,5 @@ class PitcherReportRequest:
     pitch_heat_map_left: str | None = None
     pitch_heat_map_right: str | None = None
     pitch_break_map: str | None = None
+    custom_stats: CustomStatsTable | None = None
+    custom_pitch_type_stats: list[CustomPitchTypeStatsTable] | None = None

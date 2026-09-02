@@ -5,7 +5,6 @@ Spin Efficiency
 Damage by type (90+mph with launch angle between 10-35deg)
 School -> Organization
 
-REFACTOR BACKEND WITH BETTER STRUCTURE (CLASSES, COMMENTS, ETC) <<<WIP>>>
 Claude.md per module or folder (function docstrings should help)
 Email Confirmations, newsletters***
 Dark Mode contrast on new report screens, icon color for calendar select

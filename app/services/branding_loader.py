@@ -15,14 +15,16 @@ class BrandingLoader:
         branding_path = os.path.join(BrandingLoader.SCHOOLS, str(school_id), 'assets', 'branding.json')
         if not os.path.exists(branding_path):
             print(f"Branding file not found for school: {school_id}")
-            return json.load(open(os.path.join(BrandingLoader.SCHOOLS, 'default.json'), 'r'))
+            with open(os.path.join(BrandingLoader.SCHOOLS, 'default.json'), 'r', encoding='utf-8') as f:
+                return json.load(f)
         try:
-            with open(branding_path, 'r') as f:
+            with open(branding_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
             # Fall back to defaults so the app stays usable even with a corrupt branding file
             print(f"Error loading branding for {school_id}: {e}")
-            return json.load(open(os.path.join(BrandingLoader.SCHOOLS, 'default.json'), 'r'))
+            with open(os.path.join(BrandingLoader.SCHOOLS, 'default.json'), 'r', encoding='utf-8') as f:
+                return json.load(f)
 
     @staticmethod
     def get_logo_path(school_id: int) -> str | None:

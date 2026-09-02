@@ -13,12 +13,16 @@ import numpy as np
 import pandas as pd
 import matplotlib
 
+from app.services.custom_report_loader import load_custom_module
 from app.services.hitter_stats import (
     BattedBallStat,
     BattedBallTable,
+    CustomHitTypeStat,
+    CustomHitTypeStatsTable,
     HitterDisciplineStat,
     HitterDisciplineTable,
 )
+from app.services.pitch_stats import CustomStat, CustomStatsTable, CustomPitchTypeStatsTable
 from app.services.report_theme import (
     EV_MAX_MPH,
     EV_MIN_MPH,
@@ -550,3 +554,91 @@ def hitter_spray_chart_by_pitcher_side(
 
     except Exception as e:
         print(f"Error generating spray chart for batter ID {batter_id}: {e}")
+
+
+def custom_stats_table(source: pd.DataFrame, batter_id: str | int, school_id: int) -> CustomStatsTable | None:
+    """Custom statistics table for one hitter, built by the school's custom_hitter_report.py (tier 3)."""
+    try:
+        custom_module = load_custom_module(school_id, 'custom_hitter_report.py')
+        if custom_module is None:
+            return None
+
+        get_stats = getattr(custom_module, "get_stats", None)
+        if get_stats is None:
+            return None
+
+        rows: list[CustomStat] = get_stats(source, batter_id) or []
+        return CustomStatsTable(rows) if rows else None
+    except Exception as e:
+        print(f"Error generating custom hitter stats table for batter ID {batter_id}: {e}")
+        return None
+
+
+def custom_hit_type_stats_table(source: pd.DataFrame, batter_id: str | int, school_id: int) -> list[CustomHitTypeStatsTable] | None:
+    """Custom hit-type-broken-out stats tables for one hitter, built by the school's custom_hitter_report.py (tier 3)."""
+    try:
+        custom_module = load_custom_module(school_id, 'custom_hitter_report.py')
+        if custom_module is None:
+            return None
+
+        get_hit_type_stats = getattr(custom_module, "get_hit_type_stats", None)
+        if get_hit_type_stats is None:
+            return None
+
+        tables: list[CustomHitTypeStatsTable] = get_hit_type_stats(source, batter_id) or []
+        return tables or None
+    except Exception as e:
+        print(f"Error generating custom hit-type stats table for batter ID {batter_id}: {e}")
+        return None
+
+
+def custom_pitch_type_stats_table(source: pd.DataFrame, batter_id: str | int, school_id: int) -> list[CustomPitchTypeStatsTable] | None:
+    """Custom pitch-type-broken-out stats tables for one hitter, built by the school's custom_hitter_report.py (tier 3)."""
+    try:
+        custom_module = load_custom_module(school_id, 'custom_hitter_report.py')
+        if custom_module is None:
+            return None
+
+        get_pitch_type_stats = getattr(custom_module, "get_pitch_type_stats", None)
+        if get_pitch_type_stats is None:
+            return None
+
+        tables: list[CustomPitchTypeStatsTable] = get_pitch_type_stats(source, batter_id) or []
+        return tables or None
+    except Exception as e:
+        print(f"Error generating custom pitch-type stats table for batter ID {batter_id}: {e}")
+        return None
+
+
+def custom_charts(
+    source: pd.DataFrame, batter_id: str | int, school_id: int, user_id: int, output_dir: str
+) -> list[tuple[str, str]] | None:
+    """
+    Custom chart image(s) for one hitter, rendered by the school's own
+    custom_hitter_report.py (tier 3) and saved into output_dir.
+
+    user_id is passed through to get_charts (not just batter_id) so the school's
+    script can namespace its own filenames the same way hitter_spray_chart_by_pitcher_side
+    above does -- every temp file in this app is prefixed by the requesting user's id,
+    not just the batter's, so two coaches at the same school generating reports for the
+    same batter at the same time can't clobber each other's output.
+
+    Returns (title, path) pairs. The school's script has full freedom to do its
+    own matplotlib rendering from the raw source rows -- same primitives
+    hitter_spray_chart_by_pitcher_side above already uses (report_theme.THEME_COLORS,
+    ev_colormap, classify_hit_type).
+    """
+    try:
+        custom_module = load_custom_module(school_id, 'custom_hitter_report.py')
+        if custom_module is None:
+            return None
+
+        get_charts = getattr(custom_module, "get_charts", None)
+        if get_charts is None:
+            return None
+
+        charts: list[tuple[str, str]] = get_charts(source, batter_id, user_id, output_dir) or []
+        return charts or None
+    except Exception as e:
+        print(f"Error generating custom charts for batter ID {batter_id}: {e}")
+        return None

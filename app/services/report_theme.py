@@ -9,7 +9,7 @@ from matplotlib.colors import Colormap, LinearSegmentedColormap, to_rgb
 from matplotlib.patches import Rectangle
 import matplotlib.patches as patches
 
-baseball_width = 0.24  # Approximate width of a baseball in feet
+BASEBALL_WIDTH = 0.24  # Approximate width of a baseball in feet
 
 # Strike zone bounds in feet. make_strike_zone() draws exactly this box, so any
 # zone/chase calculation must read from here rather than repeating the numbers.
@@ -29,6 +29,19 @@ def in_zone(plate_loc_side: pd.Series, plate_loc_height: pd.Series) -> pd.Series
         (plate_loc_side.abs() <= ZONE_SIDE)
         & (plate_loc_height >= ZONE_BOTTOM)
         & (plate_loc_height <= ZONE_TOP)
+    )
+
+def out_of_zone(plate_loc_side: pd.Series, plate_loc_height: pd.Series) -> pd.Series:
+    """
+    Boolean mask for pitches outside the strike zone.
+
+    Accepts Series (vectorized) or scalars. NaN locations fall out as True, which
+    is the safe reading -- an untracked pitch is not evidence of a strike.
+    """
+    return (
+        (plate_loc_side.abs() > ZONE_SIDE)
+        | (plate_loc_height < ZONE_BOTTOM)
+        | (plate_loc_height > ZONE_TOP)
     )
 
 # Exit velocity is a magnitude, so it takes a sequential ramp -- one that climbs
@@ -135,14 +148,14 @@ pitch_point_colors = {
 
 def make_strike_zone() -> Rectangle:
     """Dashed outline of the rulebook strike zone, in plate-location feet."""
-    return Rectangle((-0.83, 1.5), 1.66, 2.0,
+    return Rectangle((-ZONE_SIDE, ZONE_BOTTOM), 2 * ZONE_SIDE, ZONE_TOP - ZONE_BOTTOM,
         linewidth=2, edgecolor=matplotlib.rcParams['text.color'], facecolor='none', linestyle='--')
 
 def make_shadow_zone() -> Rectangle:
     """Dotted outline one baseball-width outside the strike zone, for borderline pitches."""
     return Rectangle(
-        (-0.83 - baseball_width, 1.5 - baseball_width),
-        1.66 + 2 * baseball_width, 2.0 + 2 * baseball_width,
+        (-ZONE_SIDE - BASEBALL_WIDTH, ZONE_BOTTOM - BASEBALL_WIDTH),
+        2 * ZONE_SIDE + 2 * BASEBALL_WIDTH, 2.0 + 2 * BASEBALL_WIDTH,
         linewidth=1, edgecolor=matplotlib.rcParams['xtick.color'], facecolor='none', linestyle=(0, (1, 10)))
 
 def make_homeplate() -> patches.Polygon:

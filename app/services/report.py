@@ -6,6 +6,7 @@ import pandas as pd
 import seaborn as sns
 import matplotlib
 
+from app.services.custom_report_loader import load_custom_module
 from app.services.pitch_stats import (
     GameReportHeader,
     PitchTypeStat,
@@ -14,9 +15,12 @@ from app.services.pitch_stats import (
     PitchUsageStat,
     PitchUsageTable,
     PitchUsageSides,
+    CustomStat,
+    CustomStatsTable,
+    CustomPitchTypeStatsTable,
 )
 from app.services.report_theme import (
-    baseball_width,
+    BASEBALL_WIDTH,
     THEME_COLORS,
     make_strike_zone,
     make_shadow_zone,
@@ -488,6 +492,40 @@ def strikeout_map(source, id, output_path, pitcher_id):
         print(f"Error generating strikeout map for pitcher ID {pitcher_id}: {e}")
         return
 '''
+
+def custom_stats_table(source: pd.DataFrame, pitcher_id: int, school_id: int) -> CustomStatsTable | None:
+    """Custom statistics table for one pitcher, built by the school's custom_pitcher_report.py (tier 3)."""
+    try:
+        custom_module = load_custom_module(school_id, 'custom_pitcher_report.py')
+        if custom_module is None:
+            return None
+
+        get_stats = getattr(custom_module, "get_stats", None)
+        if get_stats is None:
+            return None
+
+        rows: list[CustomStat] = get_stats(source, pitcher_id) or []
+        return CustomStatsTable(rows) if rows else None
+    except Exception as e:
+        print(f"Error generating custom pitcher stats table for pitcher ID {pitcher_id}: {e}")
+        return None
+
+def custom_pitch_type_stats_table(source: pd.DataFrame, pitcher_id: int, school_id: int) -> list[CustomPitchTypeStatsTable] | None:
+    """Custom pitch-type-broken-out stats tables for one pitcher, built by the school's custom_pitcher_report.py (tier 3)."""
+    try:
+        custom_module = load_custom_module(school_id, 'custom_pitcher_report.py')
+        if custom_module is None:
+            return None
+
+        get_pitch_type_stats = getattr(custom_module, "get_pitch_type_stats", None)
+        if get_pitch_type_stats is None:
+            return None
+
+        tables: list[CustomPitchTypeStatsTable] = get_pitch_type_stats(source, pitcher_id) or []
+        return tables or None
+    except Exception as e:
+        print(f"Error generating custom pitch-type stats table for pitcher ID {pitcher_id}: {e}")
+        return None
 
 if __name__ == "__main__":
     input_file = "C:\\Users\\thoma\\Downloads\\20260221-WinthropUniversity-1_unverified.csv"

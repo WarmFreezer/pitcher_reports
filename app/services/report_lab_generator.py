@@ -1,11 +1,11 @@
 import os
 import base64
+from datetime import datetime
 from typing import Any
 
 import pandas as pd
 from PIL import Image as PILImage
 from io import BytesIO
-import io
 
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
@@ -14,10 +14,12 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.platypus import (
     Paragraph, Spacer, Table, TableStyle,
-    Image, Frame, PageTemplate, BaseDocTemplate, KeepInFrame
+    Image, Frame, PageTemplate, BaseDocTemplate, KeepInFrame,
+    NextPageTemplate,
 )
 
 from app.db.models import User
+from app.services.custom_report_loader import load_custom_module
 from app.services.pitch_stats import (
     PitcherReportRequest,
     PitcherStatsTable,
@@ -25,6 +27,7 @@ from app.services.pitch_stats import (
     PitchUsageStat,
     PitchUsageTable,
 )
+from app.services.hitter_stats import HitterReportRequest
 from app.services.stat_table import StatTable
 from .branding_loader import BrandingLoader
 
@@ -35,6 +38,7 @@ class PDF_Generator:
     PAGE_W, PAGE_H = letter
     MARGIN = 0.65 * inch
     IMG_WIDTH = 2.5 * inch
+    FOOTER_HEIGHT = 0.45 * inch
     WHITE = colors.HexColor("#FFFFFF")
     BLACK = colors.HexColor("#000000")
 
@@ -70,6 +74,7 @@ class PDF_Generator:
         self.text_color = self.primary_color
         self.dark_color = colors.HexColor(branding['colors'].get('dark', '#000000'))
         self.light_color = colors.HexColor(branding['colors'].get('light', '#FFFFFF'))
+        self.footer_text = branding.get('report_settings', {}).get('footer_text', '')
 
         self.styles = {
             "title": ParagraphStyle(
@@ -200,6 +205,30 @@ class PDF_Generator:
         
         return elements
 
+    def _draw_custom_footer(self, canvas: Any, doc: Any) -> None:
+        """
+        Page decoration for the school's custom report section: draws the
+        school's copyright notice above the Stat-Line.app copyright, both
+        centered in the space FOOTER_HEIGHT reserves at the bottom of the page.
+        """
+        canvas.saveState()
+
+        width = self.PAGE_W - 2 * self.MARGIN
+
+        stat_line_notice = Paragraph(
+            f"© {datetime.now().year} Stat-Line.app. All rights reserved.",
+            self.styles["footer"],
+        )
+        _, stat_line_h = stat_line_notice.wrap(width, self.FOOTER_HEIGHT)
+        stat_line_notice.drawOn(canvas, self.MARGIN, 0.15 * inch)
+
+        if self.footer_text:
+            school_notice = Paragraph(self.footer_text, self.styles["footer"])
+            _, school_h = school_notice.wrap(width, self.FOOTER_HEIGHT)
+            school_notice.drawOn(canvas, self.MARGIN, 0.15 * inch + stat_line_h)
+
+        canvas.restoreState()
+
     def generate_pitcher_stats_table(self, stats: PitcherStatsTable) -> list[Any]:
         """Render a pitcher's per-pitch-type stats table. Formatting comes from PitcherStatsTable.columns."""
         elements: list[Any] = []
@@ -268,20 +297,21 @@ class PDF_Generator:
 
         return elements
 
-    def generate_stats_grid(self, stats_data: dict[str, Any]) -> list[Any]:
+    def generate_stats_grid(self, stats_data: dict[str, Any], title: str = "Key Statistics") -> list[Any]:
         """
         Generate a grid of key statistical boxes.
 
         Args:
             stats_data: Dictionary with stat names as keys and values as values
                        Example: {"Avg Velocity": "94.2", "Spin Rate": "2456", ...}
+            title: Section heading above the grid
 
         Returns:
             List of document elements containing the stats grid
         """
         elements: list[Any] = []
 
-        elements.append(Paragraph("Key Statistics", self.styles["section_header"]))
+        elements.append(Paragraph(title, self.styles["section_header"]))
 
         # Create a grid of stats (4 columns)
         stat_items = list(stats_data.items())
@@ -298,7 +328,9 @@ class PDF_Generator:
                     ]
                     row.append(stat_cell)
                 else:
-                    row.append(["", ""])
+                    # A list cell is stacked flowables to reportlab, not literal text --
+                    # plain strings here blow up Table.wrapOn() once building for real.
+                    row.append([Paragraph("", self.styles["stat_value"]), Paragraph("", self.styles["stat_label"])])
             grid_data.append(row)
         
         # Create table for stats grid
@@ -495,6 +527,9 @@ class PDF_Generator:
         # Resolve player pfp: player photo → school logo → statline logo
         pfp_path = os.path.join(STORAGE_SCHOOLS, str(self.current_user.school_id), 'assets', 'players', str(data.pitcher_id), 'pfp.png')
         player_pfp = pfp_path if os.path.exists(pfp_path) else self.school_logo
+        # Stashed on self so a school's custom_pitcher_report.py can read gen.player_pfp,
+        # matching the already-public gen.school_logo it also relies on.
+        self.player_pfp = player_pfp
 
         # Replace SimpleDocTemplate with this in generate_pitcher_report:
         frame = Frame(
@@ -502,6 +537,20 @@ class PDF_Generator:
             0,
             self.PAGE_W - 2 * self.MARGIN,
             self.PAGE_H,
+            leftPadding=0,
+            rightPadding=0,
+            topPadding=0,
+            bottomPadding=0,
+        )
+
+        # Reserves FOOTER_HEIGHT at the bottom of the page for _draw_custom_footer --
+        # used from the school's custom report section onward (see NextPageTemplate
+        # below), never on the standard report pages above it.
+        custom_frame = Frame(
+            self.MARGIN,
+            self.FOOTER_HEIGHT,
+            self.PAGE_W - 2 * self.MARGIN,
+            self.PAGE_H - self.FOOTER_HEIGHT,
             leftPadding=0,
             rightPadding=0,
             topPadding=0,
@@ -516,7 +565,10 @@ class PDF_Generator:
             topMargin=0,
             bottomMargin=0,
         )
-        pdf_file.addPageTemplates([PageTemplate(id='main', frames=[frame])])
+        pdf_file.addPageTemplates([
+            PageTemplate(id='main', frames=[frame]),
+            PageTemplate(id='custom', frames=[custom_frame], onPage=self._draw_custom_footer),
+        ])
 
         elements: list[Any] = []
 
@@ -562,14 +614,34 @@ class PDF_Generator:
         # Add pitch stats table
         if data.pitch_stats is not None:
             elements.extend(self.generate_pitcher_stats_table(data.pitch_stats))
-        '''
-        if (io.path.exists(io.path.join(STORAGE_SCHOOLS, self.current_user.school.slug, 'assets', 'custom_pitcher_report.py'))):
-            try:
+
+        # The custom report's own page break + header (school-defined, tier 3) has
+        # to come before the custom stats tables below, so those tables land on the
+        # new page it starts rather than trailing the standard content above.
+        try:
+            custom_module = load_custom_module(self.current_user.school_id, 'custom_pitcher_report.py')
+            if custom_module is not None:
                 print(f"[PDF] Generating custom pitcher report")
-            except Exception as e:
-                print(f"[PDF] Error generating custom pitcher report: {str(e)}")
-                raise
-        '''
+                # Switches to the footer'd page template for the page the custom
+                # script's own PageBreak starts, and everything after it.
+                elements.append(NextPageTemplate('custom'))
+                elements.extend(self._load_custom_elements(custom_module, data))
+        except Exception as e:
+            # A school's custom script is theirs to break -- don't let it take
+            # down the rest of an otherwise-normal report.
+            print(f"[PDF] Error generating custom pitcher report: {str(e)}")
+
+        # Add custom stats grid (school-defined, tier 3) -- tiles like the hitter
+        # report's Key Statistics, not a name/value row per stat
+        if data.custom_stats:
+            custom_stats_dict = {row.name: row.value for row in data.custom_stats}
+            elements.extend(self.generate_stats_grid(custom_stats_dict, title="Custom Stats"))
+
+        # Add custom pitch-type stats tables (school-defined, tier 3)
+        if data.custom_pitch_type_stats:
+            for custom_pitch_table in data.custom_pitch_type_stats:
+                elements.extend(self.generate_data_table(custom_pitch_table, custom_pitch_table.title or "Custom Pitch Type Stats"))
+
         # Build PDF
         try:
             for i, el in enumerate(elements):
@@ -585,14 +657,26 @@ class PDF_Generator:
             print(f"Error generating PDF: {str(e)}")
             raise
 
-    def generate_data_table(self, table: StatTable[Any] | None, title: str, available_width: float | None = None) -> list[Any]:
+    def _load_custom_elements(self, custom_module: Any, data: PitcherReportRequest) -> list[Any]:
+        get_elements = getattr(custom_module, "get_elements", None)
+        if get_elements is None:
+            raise AttributeError(f"Module {custom_module.__name__} does not have a 'get_elements' function")
+
+        return get_elements(self, data) or []
+
+    def generate_data_table(self, table: StatTable[Any] | None, title: str, available_width: float | None = None, col_widths: list[float] | None = None) -> list[Any]:
         """
         Render a StatTable as a titled table.
 
         Args:
             table: rows + column spec; formatting is declared on table.columns
             title: Section heading above the table
-            available_width: Total table width in points; defaults to the full frame
+            available_width: Total table width in points; defaults to the full frame.
+                Ignored once column widths are resolved (see col_widths).
+            col_widths: Explicit per-column widths in points, overriding the default
+                even split of available_width. Falls back to table.col_widths (set by
+                the table's producer, e.g. a school's custom_pitcher_report.py) when
+                not given here.
 
         Returns:
             List of document elements containing the table
@@ -609,7 +693,19 @@ class PDF_Generator:
 
         table_data = table.to_reportlab_rows()
 
-        data_table = Table(table_data, colWidths=[available_width / len(table.columns)] * len(table.columns))
+        # Column count comes from the rendered header row, not table.columns --
+        # CustomPitchTypeStatsTable derives its headers at runtime from stat_names
+        # and leaves the static `columns` classvar empty.
+        col_count = len(table_data[0]) if table_data else len(table.columns)
+
+        widths = col_widths if col_widths is not None else table.col_widths
+        if widths is not None and len(widths) != col_count:
+            print(f"[PDF] col_widths has {len(widths)} entries but '{title}' has {col_count} columns -- using an even split instead")
+            widths = None
+        if widths is None:
+            widths = [available_width / col_count] * col_count
+
+        data_table = Table(table_data, colWidths=widths)
         data_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), self.tertiary_color),
             ('TEXTCOLOR', (0, 0), (-1, 0), self.WHITE),
@@ -629,7 +725,7 @@ class PDF_Generator:
 
         return elements
 
-    def generate_hitter_report(self, data: dict[str, Any], output_path: str) -> str:
+    def generate_hitter_report(self, data: HitterReportRequest, output_path: str) -> str:
         """
         Generate a complete hitter report PDF covering a date range.
 
@@ -638,18 +734,7 @@ class PDF_Generator:
         game in the selected window.
 
         Args:
-            data: Dictionary containing report data with keys:
-                  - hitter_name: str
-                  - hitter_id: str
-                  - date_range: str (e.g. "02/01/2026 - 05/31/2026")
-                  - team: str
-                  - games: int (number of games in range)
-                  - summary: dict of slash-line / batted-ball stats
-                  - discipline_table: pandas DataFrame of plate discipline by pitch type
-                  - batted_ball_table: pandas DataFrame of batted-ball profile
-                  - spray_chart_left: image path (optional)
-                  - spray_chart_right: image path (optional)
-
+            data: Everything needed to build one hitter's report -- see HitterReportRequest.
             output_path: Full path where PDF should be saved
 
         Returns:
@@ -657,14 +742,31 @@ class PDF_Generator:
         """
 
         # Resolve player pfp: player photo → school logo → statline logo
-        pfp_path = os.path.join(STORAGE_SCHOOLS, str(self.current_user.school_id), 'assets', 'players', str(data.get('hitter_id')), 'pfp.png')
+        pfp_path = os.path.join(STORAGE_SCHOOLS, str(self.current_user.school_id), 'assets', 'players', str(data.hitter_id), 'pfp.png')
         player_pfp = pfp_path if os.path.exists(pfp_path) else self.school_logo
+        # Stashed on self so a school's custom_hitter_report.py can read gen.player_pfp,
+        # matching the already-public gen.school_logo it also relies on.
+        self.player_pfp = player_pfp
 
         frame = Frame(
             self.MARGIN,
             0,
             self.PAGE_W - 2 * self.MARGIN,
             self.PAGE_H,
+            leftPadding=0,
+            rightPadding=0,
+            topPadding=0,
+            bottomPadding=0,
+        )
+
+        # Reserves FOOTER_HEIGHT at the bottom of the page for _draw_custom_footer --
+        # used from the school's custom report section onward (see NextPageTemplate
+        # below), never on the standard report pages above it.
+        custom_frame = Frame(
+            self.MARGIN,
+            self.FOOTER_HEIGHT,
+            self.PAGE_W - 2 * self.MARGIN,
+            self.PAGE_H - self.FOOTER_HEIGHT,
             leftPadding=0,
             rightPadding=0,
             topPadding=0,
@@ -679,43 +781,82 @@ class PDF_Generator:
             topMargin=0,
             bottomMargin=0,
         )
-        pdf_file.addPageTemplates([PageTemplate(id='main', frames=[frame])])
+        pdf_file.addPageTemplates([
+            PageTemplate(id='main', frames=[frame]),
+            PageTemplate(id='custom', frames=[custom_frame], onPage=self._draw_custom_footer),
+        ])
 
         elements: list[Any] = []
 
         print(f"[PDF] Starting hitter report generation")
 
-        games = data.get('games')
+        games = data.games
         games_label = f"{games} game{'s' if games != 1 else ''}" if games else ''
 
         # generate_header's positional slots were named for pitchers; the last three
         # are free-form subtitle text, reused here for the team and game count
         elements.extend(self.generate_header(
             player_pfp,
-            data.get('hitter_name', 'Hitter'),
+            data.hitter_name,
             self.school_logo,
-            data.get('date_range', ''),
-            data.get('team', ''),
+            data.date_range,
+            data.team,
             games_label,
             '',
             '',
             None
         ))
 
-        if data.get('summary'):
-            elements.extend(self.generate_stats_grid(data['summary']))
+        if data.summary:
+            elements.extend(self.generate_stats_grid(data.summary))
 
         # Spray charts side by side, matching the heat-map row on pitcher reports
         half_width = (self.PAGE_W - 2 * self.MARGIN - 0.2 * inch) / 2
-        spray_left = data.get('spray_chart_left')
-        spray_right = data.get('spray_chart_right')
-        if spray_left or spray_right:
-            left_els = self.add_image_section(spray_left, "vs Left-Handed Pitching", max_width_pts=half_width) if spray_left else []
-            right_els = self.add_image_section(spray_right, "vs Right-Handed Pitching", max_width_pts=half_width) if spray_right else []
+        if data.spray_chart_left or data.spray_chart_right:
+            left_els = self.add_image_section(data.spray_chart_left, "vs Left-Handed Pitching", max_width_pts=half_width) if data.spray_chart_left else []
+            right_els = self.add_image_section(data.spray_chart_right, "vs Right-Handed Pitching", max_width_pts=half_width) if data.spray_chart_right else []
             elements.extend(self.generate_two_column_layout(left_els, right_els))
 
-        elements.extend(self.generate_data_table(data.get('batted_ball_table'), "Batted Ball Profile"))
-        elements.extend(self.generate_data_table(data.get('discipline_table'), "Plate Discipline"))
+        elements.extend(self.generate_data_table(data.batted_ball_table, "Batted Ball Profile"))
+        elements.extend(self.generate_data_table(data.discipline_table, "Plate Discipline"))
+
+        # The custom report's own page break + header (school-defined, tier 3) has
+        # to come before the custom stats/charts/tables below, so those land on the
+        # new page it starts rather than trailing the standard content above.
+        try:
+            custom_module = load_custom_module(self.current_user.school_id, 'custom_hitter_report.py')
+            if custom_module is not None:
+                print(f"[PDF] Generating custom hitter report")
+                # Switches to the footer'd page template for the page the custom
+                # script's own PageBreak starts, and everything after it.
+                elements.append(NextPageTemplate('custom'))
+                elements.extend(self._load_custom_hitter_elements(custom_module, data))
+        except Exception as e:
+            # A school's custom script is theirs to break -- don't let it take
+            # down the rest of an otherwise-normal report.
+            print(f"[PDF] Error generating custom hitter report: {str(e)}")
+
+        # Add custom stats grid (school-defined, tier 3) -- tiles like the
+        # pitcher report's Custom Stats
+        if data.custom_stats:
+            custom_stats_dict = {row.name: row.value for row in data.custom_stats}
+            elements.extend(self.generate_stats_grid(custom_stats_dict, title="Custom Stats"))
+
+        # Add custom chart(s) (school-defined, tier 3) -- stacked full-width since
+        # a school may return any number of them, unlike the fixed left/right spray pair
+        if data.custom_chart_paths:
+            for title, path in data.custom_chart_paths:
+                elements.extend(self.add_image_section(path, title))
+
+        # Add custom hit-type stats tables (school-defined, tier 3)
+        if data.custom_hit_type_stats:
+            for custom_hit_table in data.custom_hit_type_stats:
+                elements.extend(self.generate_data_table(custom_hit_table, custom_hit_table.title or "Custom Hit Type Stats"))
+
+        # Add custom pitch-type stats tables (school-defined, tier 3)
+        if data.custom_pitch_type_stats:
+            for custom_pitch_table in data.custom_pitch_type_stats:
+                elements.extend(self.generate_data_table(custom_pitch_table, custom_pitch_table.title or "Custom Pitch Type Stats"))
 
         try:
             for i, el in enumerate(elements):
@@ -730,6 +871,13 @@ class PDF_Generator:
         except Exception as e:
             print(f"Error generating hitter PDF: {str(e)}")
             raise
+
+    def _load_custom_hitter_elements(self, custom_module: Any, data: HitterReportRequest) -> list[Any]:
+        get_elements = getattr(custom_module, "get_elements", None)
+        if get_elements is None:
+            raise AttributeError(f"Module {custom_module.__name__} does not have a 'get_elements' function")
+
+        return get_elements(self, data) or []
 
     def generate_color_preview(self, output_path: str) -> str:
         """

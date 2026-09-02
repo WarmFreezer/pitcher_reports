@@ -66,8 +66,11 @@ class StatTable(Generic[RowT]):
 
     columns: ClassVar[list[Column]] = []
 
-    def __init__(self, rows: list[RowT]) -> None:
+    def __init__(self, rows: list[RowT], col_widths: list[float] | None = None) -> None:
         self.rows = rows
+        # Per-column widths in points, for callers that need to size a table
+        # programmatically instead of letting the renderer split evenly.
+        self.col_widths = col_widths
 
     def __len__(self) -> int:
         return len(self.rows)

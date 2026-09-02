@@ -187,6 +187,8 @@ def pitching_report() -> ResponseReturnValue:
     for pitcher_id in matching['PitcherId'].unique():
         try:
             arm_angle = None
+            custom_stats = None
+            custom_pitch_type_stats = None
             if current_user.school.is_active:
                 for theme in ('light', 'dark'):
                     report.pitch_heat_map_by_batter_side(
@@ -195,6 +197,9 @@ def pitching_report() -> ResponseReturnValue:
                         source, current_user.id, school_temp_folder, pitcher_id, 0.75, theme=theme)
                     if arm_angle is None and result is not None:
                         arm_angle = result
+
+                custom_stats = report.custom_stats_table(source, pitcher_id, school_id)
+                custom_pitch_type_stats = report.custom_pitch_type_stats_table(source, pitcher_id, school_id)
 
             game_report = report.build_table(source, pitcher_id)
             if game_report is None:
@@ -221,6 +226,8 @@ def pitching_report() -> ResponseReturnValue:
                 pitch_heat_map_left=os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_heat_map_left_light.png'),
                 pitch_heat_map_right=os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_heat_map_right_light.png'),
                 pitch_break_map=os.path.join(school_temp_folder, f'{current_user.id}_pitcher_{pitcher_id}_break_map_light.png'),
+                custom_stats=custom_stats,
+                custom_pitch_type_stats=custom_pitch_type_stats,
             ), os.path.abspath(os.path.join(
                 school_output_folder, f'{current_user.id}_pitcher_{pitcher_id}_report.pdf')))
 

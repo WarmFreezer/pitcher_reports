@@ -12,6 +12,7 @@ from flask_login import login_required, current_user
 
 from app.services import game_archive, hitter_report
 from app.services.branding_loader import BrandingLoader
+from app.services.hitter_stats import HitterReportRequest
 from app.services.report_lab_generator import PDF_Generator, merge_pdfs
 from app.routes.utils import get_school_directories, get_school_games_directory, flash_toast
 
@@ -152,6 +153,7 @@ def batting_report() -> ResponseReturnValue:
     # Clear this user's previous hitter output so a stale chart or PDF from an
     # earlier selection can never be served or swept into the merged file
     stale = glob.glob(os.path.join(school_temp_folder, f'{current_user.id}_hitter_*_spray_*.png'))
+    stale += glob.glob(os.path.join(school_temp_folder, f'{current_user.id}_hitter_*_custom_*.png'))
     stale += glob.glob(os.path.join(school_output_folder, f'{current_user.id}_hitter_*.pdf'))
     stale += glob.glob(os.path.join(school_output_folder, f'{current_user.id}_merged_hitter_*.pdf'))
     for path in stale:
@@ -172,10 +174,20 @@ def batting_report() -> ResponseReturnValue:
                 failed.append(batter_id)
                 continue
 
+            custom_stats = None
+            custom_hit_type_stats = None
+            custom_pitch_type_stats = None
+            custom_chart_paths = None
             if current_user.school.is_active:
                 for theme in ('light', 'dark'):
                     hitter_report.hitter_spray_chart_by_pitcher_side(
                         source, current_user.id, school_temp_folder, batter_id, theme=theme)
+
+                custom_stats = hitter_report.custom_stats_table(source, batter_id, school_id)
+                custom_hit_type_stats = hitter_report.custom_hit_type_stats_table(source, batter_id, school_id)
+                custom_pitch_type_stats = hitter_report.custom_pitch_type_stats_table(source, batter_id, school_id)
+                custom_chart_paths = hitter_report.custom_charts(
+                    source, batter_id, school_id, current_user.id, school_temp_folder)
 
             summary = hitter_report.build_hitter_summary(source, batter_id)
             discipline = hitter_report.build_hitter_discipline_table(source, batter_id)
@@ -189,18 +201,22 @@ def batting_report() -> ResponseReturnValue:
                     f'{current_user.id}_hitter_{batter_id}_spray_{side}_{theme}.png')
                 return path if os.path.exists(path) else None
 
-            gen.generate_hitter_report({
-                'hitter_name': hitter_name,
-                'hitter_id': str(batter_id),
-                'date_range': date_range,
-                'team': allowed[batter_id].get('team', ''),
-                'games': games,
-                'summary': summary,
-                'discipline_table': discipline,
-                'batted_ball_table': batted_ball,
-                'spray_chart_left': chart_path('left', 'light'),
-                'spray_chart_right': chart_path('right', 'light'),
-            }, _hitter_pdf_path(school_output_folder, batter_id))
+            gen.generate_hitter_report(HitterReportRequest(
+                hitter_name=hitter_name,
+                hitter_id=str(batter_id),
+                date_range=date_range,
+                team=allowed[batter_id].get('team', ''),
+                games=games,
+                summary=summary,
+                discipline_table=discipline,
+                batted_ball_table=batted_ball,
+                spray_chart_left=chart_path('left', 'light'),
+                spray_chart_right=chart_path('right', 'light'),
+                custom_stats=custom_stats,
+                custom_hit_type_stats=custom_hit_type_stats,
+                custom_pitch_type_stats=custom_pitch_type_stats,
+                custom_chart_paths=custom_chart_paths,
+            ), _hitter_pdf_path(school_output_folder, batter_id))
 
             chart_base = f'/storage/schools/{school_id}/temp/{current_user.id}_hitter_{batter_id}_spray'
             export = f'/api/batting/export?batter_id={batter_id}&target={target}' \

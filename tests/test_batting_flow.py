@@ -336,6 +336,88 @@ def test_zone_and_chase_ignore_pitches_with_no_tracked_location():
     assert row.swing_pct == 50.0
 
 
+# --- tier-3 custom hitter report --------------------------------------------
+
+def test_custom_collectors_return_none_without_a_school_script(monkeypatch):
+    """No custom_hitter_report.py on disk -> every tier-3 collector is a silent no-op."""
+    import pandas as pd
+    from app.services import hitter_report
+
+    monkeypatch.setattr(hitter_report, 'load_custom_module', lambda school_id, filename: None)
+
+    source = pd.DataFrame({'BatterId': [1]})
+    assert hitter_report.custom_stats_table(source, 1, 999) is None
+    assert hitter_report.custom_hit_type_stats_table(source, 1, 999) is None
+    assert hitter_report.custom_pitch_type_stats_table(source, 1, 999) is None
+    assert hitter_report.custom_charts(source, 1, 999, 1, str(FIXTURES)) is None
+
+
+def test_custom_collectors_wire_a_schools_hooks_through(monkeypatch, tmp_path):
+    """
+    A school's custom_hitter_report.py hooks land in the typed tables the PDF
+    renders -- get_stats -> CustomStatsTable, get_hit_type_stats ->
+    CustomHitTypeStatsTable, get_pitch_type_stats -> CustomPitchTypeStatsTable,
+    get_charts -> (title, path) pairs with the file actually written to disk.
+    """
+    import types
+    import pandas as pd
+    from app.services import hitter_report
+    from app.services.pitch_stats import CustomStat, CustomPitchTypeStat, CustomPitchTypeStatsTable
+    from app.services.hitter_stats import CustomHitTypeStat, CustomHitTypeStatsTable
+
+    fake_module = types.ModuleType('fake_custom_hitter_report')
+    fake_module.get_stats = lambda source, batter_id: [CustomStat(name='Barrel', value='42.0%')]
+    fake_module.get_hit_type_stats = lambda source, batter_id: [
+        CustomHitTypeStatsTable([CustomHitTypeStat(hit_type='Line', stats={'Hard-Hit': '10.0%'})])
+    ]
+    fake_module.get_pitch_type_stats = lambda source, batter_id: [
+        CustomPitchTypeStatsTable([CustomPitchTypeStat(pitch_type='Fastball', stats={'Damage': '5.0%'})])
+    ]
+
+    def get_charts(source, batter_id, user_id, output_dir):
+        path = os.path.join(output_dir, f'{user_id}_hitter_{batter_id}_custom_test.png')
+        with open(path, 'wb') as f:
+            f.write(b'not a real png -- just proving the hook wrote a file')
+        return [('Test Chart', path)]
+
+    fake_module.get_charts = get_charts
+
+    monkeypatch.setattr(hitter_report, 'load_custom_module', lambda school_id, filename: fake_module)
+
+    source = pd.DataFrame({'BatterId': [1]})
+
+    stats = hitter_report.custom_stats_table(source, 1, 999)
+    assert stats is not None and stats.rows[0].name == 'Barrel'
+
+    hit_type = hitter_report.custom_hit_type_stats_table(source, 1, 999)
+    assert hit_type is not None and hit_type[0].rows[0].hit_type == 'Line'
+
+    pitch_type = hitter_report.custom_pitch_type_stats_table(source, 1, 999)
+    assert pitch_type is not None and pitch_type[0].rows[0].pitch_type == 'Fastball'
+
+    charts = hitter_report.custom_charts(source, 1, 999, 7, str(tmp_path))
+    assert charts is not None
+    title, path = charts[0]
+    assert title == 'Test Chart'
+    assert os.path.exists(path)
+
+
+def test_custom_collectors_swallow_a_broken_scripts_exception(monkeypatch):
+    """A school's script raising on load must degrade to None, not blow up the report loop."""
+    import pandas as pd
+    from app.services import hitter_report
+
+    def load_custom_module(school_id, filename):
+        raise ImportError('simulated broken school script')
+
+    monkeypatch.setattr(hitter_report, 'load_custom_module', load_custom_module)
+
+    source = pd.DataFrame({'BatterId': [1]})
+    assert hitter_report.custom_stats_table(source, 1, 999) is None
+    assert hitter_report.custom_hit_type_stats_table(source, 1, 999) is None
+    assert hitter_report.custom_pitch_type_stats_table(source, 1, 999) is None
+
+
 # --- multi-hitter selection + merged PDF -----------------------------------
 
 def _all_own_ids(client):
