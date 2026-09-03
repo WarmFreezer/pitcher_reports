@@ -45,6 +45,9 @@
             <div style="padding: 0 20px;">
                 <p>School: {{ current_user.school.name }}</p>
                 <p>Role: {{ current_user.role|capitalize }}</p>
+                {% if current_user.role == 'master' %}
+                <p><a href="{{ url_for('master.schools_list') }}">Master Panel</a></p>
+                {% endif %}
             </div>
         </div>
 

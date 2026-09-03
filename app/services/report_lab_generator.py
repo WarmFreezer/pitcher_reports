@@ -18,7 +18,6 @@ from reportlab.platypus import (
     NextPageTemplate,
 )
 
-from app.db.models import User
 from app.services.custom_report_loader import load_custom_module
 from app.services.pitch_stats import (
     PitcherReportRequest,
@@ -60,11 +59,11 @@ class PDF_Generator:
         self.output_path = output_path
     '''
 
-    def __init__(self, current_user: User, branding: dict[str, Any]) -> None:
-        self.current_user = current_user
+    def __init__(self, school_id: int, branding: dict[str, Any]) -> None:
+        self.school_id = school_id
 
         # Always resolve logo from local storage; fall back to the app icon if not yet uploaded
-        logo_path = os.path.join(STORAGE_SCHOOLS, str(current_user.school_id), 'assets', 'logo.png')
+        logo_path = os.path.join(STORAGE_SCHOOLS, str(school_id), 'assets', 'logo.png')
         self.school_logo = logo_path if os.path.exists(logo_path) else os.path.join(STATIC_RESOURCES, 'statline-logo.png')
 
         self.primary_color = colors.HexColor(branding['colors']['primary'])
@@ -525,7 +524,7 @@ class PDF_Generator:
         """Generate complete pitcher report PDF. Returns the path it was saved to."""
 
         # Resolve player pfp: player photo → school logo → statline logo
-        pfp_path = os.path.join(STORAGE_SCHOOLS, str(self.current_user.school_id), 'assets', 'players', str(data.pitcher_id), 'pfp.png')
+        pfp_path = os.path.join(STORAGE_SCHOOLS, str(self.school_id), 'assets', 'players', str(data.pitcher_id), 'pfp.png')
         player_pfp = pfp_path if os.path.exists(pfp_path) else self.school_logo
         # Stashed on self so a school's custom_pitcher_report.py can read gen.player_pfp,
         # matching the already-public gen.school_logo it also relies on.
@@ -619,7 +618,7 @@ class PDF_Generator:
         # to come before the custom stats tables below, so those tables land on the
         # new page it starts rather than trailing the standard content above.
         try:
-            custom_module = load_custom_module(self.current_user.school_id, 'custom_pitcher_report.py')
+            custom_module = load_custom_module(self.school_id, 'custom_pitcher_report.py')
             if custom_module is not None:
                 print(f"[PDF] Generating custom pitcher report")
                 # Switches to the footer'd page template for the page the custom
@@ -742,7 +741,7 @@ class PDF_Generator:
         """
 
         # Resolve player pfp: player photo → school logo → statline logo
-        pfp_path = os.path.join(STORAGE_SCHOOLS, str(self.current_user.school_id), 'assets', 'players', str(data.hitter_id), 'pfp.png')
+        pfp_path = os.path.join(STORAGE_SCHOOLS, str(self.school_id), 'assets', 'players', str(data.hitter_id), 'pfp.png')
         player_pfp = pfp_path if os.path.exists(pfp_path) else self.school_logo
         # Stashed on self so a school's custom_hitter_report.py can read gen.player_pfp,
         # matching the already-public gen.school_logo it also relies on.
@@ -824,7 +823,7 @@ class PDF_Generator:
         # to come before the custom stats/charts/tables below, so those land on the
         # new page it starts rather than trailing the standard content above.
         try:
-            custom_module = load_custom_module(self.current_user.school_id, 'custom_hitter_report.py')
+            custom_module = load_custom_module(self.school_id, 'custom_hitter_report.py')
             if custom_module is not None:
                 print(f"[PDF] Generating custom hitter report")
                 # Switches to the footer'd page template for the page the custom

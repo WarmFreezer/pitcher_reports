@@ -9,7 +9,7 @@ import pandas as pd
 from io import BytesIO
 from datetime import datetime
 from PIL import Image
-from flask import Blueprint, request, jsonify, render_template, redirect, url_for, flash, current_app, send_file
+from flask import Blueprint, request, jsonify, render_template, redirect, url_for, flash, current_app, send_file, session
 from flask.typing import ResponseReturnValue
 from flask_login import login_required, current_user
 
@@ -17,6 +17,7 @@ from app.db.models import db
 from app.db import models as db_models
 from app.services import file_validator
 from app.services.branding_loader import BrandingLoader
+from app.routes.utils import get_active_school, get_active_school_id
 
 subscription_bp = Blueprint('subscription', __name__)
 
@@ -42,20 +43,23 @@ ROSTER_REQUIRED_COLUMNS = {
 @subscription_bp.route('/subscription')
 @login_required
 def subscription_page() -> ResponseReturnValue:
-    """Render the subscription/billing management page, admin only."""
-    # Only the school's admin email may access this page
-    if current_user.email != current_user.school.admin_email:
+    """Render the subscription/billing management page, admin only (or master, acting as this school)."""
+    active_school = get_active_school()
+    is_master_acting = current_user.role == 'master' and 'master_school_id' in session
+
+    # Only the school's admin email may access this page, unless master is acting as it
+    if not is_master_acting and current_user.email != active_school.admin_email:
         flash('You do not have permission to access that page.', 'danger')
         return redirect(url_for('pages.dashboard'))
 
-    branding = BrandingLoader.get_branding(current_user.school_id)
-    logo_path = f"/storage/schools/{current_user.school_id}/assets/logo.png"
+    branding = BrandingLoader.get_branding(active_school.id)
+    logo_path = f"/storage/schools/{active_school.id}/assets/logo.png"
 
     # Fetch up to 12 most recent invoices from Stripe for the billing history table
     invoices: list[dict[str, Any]] = []
-    if current_user.school.stripe_customer_id:
+    if active_school.stripe_customer_id:
         try:
-            result = stripe.Invoice.list(customer=current_user.school.stripe_customer_id, limit=12)
+            result = stripe.Invoice.list(customer=active_school.stripe_customer_id, limit=12)
             invoices = [{
                 'date': datetime.fromtimestamp(inv.created).strftime('%B %d, %Y'),
                 'amount': f"${inv.amount_paid / 100:.2f}",
@@ -65,7 +69,10 @@ def subscription_page() -> ResponseReturnValue:
         except Exception as e:
             current_app.logger.error(f"Error fetching invoices: {e}")
 
-    return render_template('subscription.html', branding=branding, logo_path=logo_path, invoices=invoices)
+    return render_template(
+        'subscription.html', branding=branding, logo_path=logo_path, invoices=invoices,
+        masquerading=is_master_acting, active_school=active_school,
+    )
 
 
 # ── Subscription management ───────────────────────────────────────────────────
@@ -74,15 +81,17 @@ def subscription_page() -> ResponseReturnValue:
 @login_required
 def cancel_subscription() -> ResponseReturnValue:
     """Cancel the school's subscription at the end of the current billing period."""
+    active_school = get_active_school()
+    is_master_acting = current_user.role == 'master' and 'master_school_id' in session
     # Accounts without a Stripe subscription ID are permanent and cannot be cancelled here
-    if not current_user.school.stripe_subscription_id:
+    if not active_school.stripe_subscription_id:
         return jsonify({'message': 'This is a permanent subscription and cannot be cancelled.', 'permanent': True}), 200
-    if current_user.email != current_user.school.admin_email:
+    if not is_master_acting and current_user.email != active_school.admin_email:
         return jsonify({'error': 'Only the school administrator can cancel the subscription.'}), 403
     try:
         # cancel_at_period_end keeps access active until the billing period expires
-        stripe.Subscription.modify(current_user.school.stripe_subscription_id, cancel_at_period_end=True)
-        current_user.school.stripe_subscription_status = 'canceled'
+        stripe.Subscription.modify(active_school.stripe_subscription_id, cancel_at_period_end=True)
+        active_school.stripe_subscription_status = 'canceled'
         db.session.commit()
         return jsonify({'message': 'Subscription cancelled successfully.'}), 200
     except Exception as e:
@@ -94,15 +103,17 @@ def cancel_subscription() -> ResponseReturnValue:
 @login_required
 def start_subscription() -> ResponseReturnValue:
     """Reactivate a pending-cancellation subscription, or start Stripe checkout for a new one."""
-    if current_user.email != current_user.school.admin_email:
+    active_school = get_active_school()
+    is_master_acting = current_user.role == 'master' and 'master_school_id' in session
+    if not is_master_acting and current_user.email != active_school.admin_email:
         return jsonify({'error': 'Only the school administrator can manage the subscription.'}), 403
     try:
         # If the subscription is still alive but pending cancellation, just undo it
-        if current_user.school.stripe_subscription_id:
-            sub = stripe.Subscription.retrieve(current_user.school.stripe_subscription_id)
+        if active_school.stripe_subscription_id:
+            sub = stripe.Subscription.retrieve(active_school.stripe_subscription_id)
             if sub.status in ('active', 'trialing') and sub.cancel_at_period_end:
-                stripe.Subscription.modify(current_user.school.stripe_subscription_id, cancel_at_period_end=False)
-                current_user.school.stripe_subscription_status = sub.status
+                stripe.Subscription.modify(active_school.stripe_subscription_id, cancel_at_period_end=False)
+                active_school.stripe_subscription_status = sub.status
                 db.session.commit()
                 return jsonify({'reactivated': True, 'message': 'Subscription reactivated successfully.'}), 200
 
@@ -112,9 +123,9 @@ def start_subscription() -> ResponseReturnValue:
             mode='subscription',
             ui_mode='embedded',
             return_url=f'{request.host_url}return?session_id={{CHECKOUT_SESSION_ID}}',
-            customer=current_user.school.stripe_customer_id or None,  # type: ignore[arg-type]  # stripe stub marks these NotRequired[str]; None omits the field at the API layer
-            customer_email=None if current_user.school.stripe_customer_id else current_user.school.admin_email,  # type: ignore[arg-type]
-            metadata={'school_id': str(current_user.school_id)}
+            customer=active_school.stripe_customer_id or None,  # type: ignore[arg-type]  # stripe stub marks these NotRequired[str]; None omits the field at the API layer
+            customer_email=None if active_school.stripe_customer_id else active_school.admin_email,  # type: ignore[arg-type]
+            metadata={'school_id': str(active_school.id)}
         )
         return jsonify({'client_secret': checkout_session.client_secret}), 200
     except Exception as e:
@@ -128,14 +139,16 @@ def start_subscription() -> ResponseReturnValue:
 @login_required
 def update_subscription_settings() -> ResponseReturnValue:
     """Update the school's admin email, admin only."""
-    if current_user.email != current_user.school.admin_email:
+    active_school = get_active_school()
+    is_master_acting = current_user.role == 'master' and 'master_school_id' in session
+    if not is_master_acting and current_user.email != active_school.admin_email:
         return jsonify({'error': 'Only the admin can update school settings.'}), 403
     data = request.get_json()
     new_email = data.get('admin_email', '').strip()
     if not new_email or '@' not in new_email:
         return jsonify({'error': 'Invalid email address.'}), 400
     try:
-        current_user.school.admin_email = new_email
+        active_school.admin_email = new_email
         db.session.commit()
         return jsonify({'message': 'Settings updated successfully.'}), 200
     except Exception as e:
@@ -160,9 +173,10 @@ def rebrand_subscription() -> ResponseReturnValue:
             return jsonify({'error': f'Invalid hex color for {token}: {value}'}), 400
 
     try:
-        branding = BrandingLoader.get_branding(current_user.school_id)
+        school_id = get_active_school_id()
+        branding = BrandingLoader.get_branding(school_id)
         branding['colors'].update(colors)
-        BrandingLoader.update_branding(current_user.school_id, branding)
+        BrandingLoader.update_branding(school_id, branding)
         return jsonify({'message': 'Branding updated successfully.'}), 200
     except Exception as e:
         current_app.logger.error(f"Error updating branding: {e}")
@@ -177,8 +191,9 @@ def preview_branding_pdf() -> ResponseReturnValue:
     """Render a sample PDF using the school's current branding, for the settings preview."""
     from app.services.report_lab_generator import PDF_Generator
 
-    branding = BrandingLoader.get_branding(current_user.school_id)
-    gen = PDF_Generator(current_user, branding)
+    school_id = get_active_school_id()
+    branding = BrandingLoader.get_branding(school_id)
+    gen = PDF_Generator(school_id, branding)
 
     with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
         tmp_path = f.name
@@ -227,10 +242,11 @@ def upload_logo() -> ResponseReturnValue:
         return jsonify({'error': 'Invalid or corrupt image file.'}), 400
 
     try:
-        assets_dir = os.path.join(current_app.config['STORAGE'], 'schools', str(current_user.school_id), 'assets')
+        school_id = get_active_school_id()
+        assets_dir = os.path.join(current_app.config['STORAGE'], 'schools', str(school_id), 'assets')
         os.makedirs(assets_dir, exist_ok=True)
         img.save(os.path.join(assets_dir, 'logo.png'), 'PNG')
-        return jsonify({'message': 'Logo uploaded successfully.', 'logo_url': f'/storage/schools/{current_user.school_id}/assets/logo.png'}), 200
+        return jsonify({'message': 'Logo uploaded successfully.', 'logo_url': f'/storage/schools/{school_id}/assets/logo.png'}), 200
     except Exception as e:
         current_app.logger.error(f"Error saving logo: {e}")
         return jsonify({'error': 'Failed to save logo.'}), 500
@@ -238,7 +254,7 @@ def upload_logo() -> ResponseReturnValue:
 
 # ── Roster helpers ───────────────────────────────────────────────────────────
 
-def _upsert_roster_rows(rows: list[dict[Any, Any]]) -> None:
+def _upsert_roster_rows(rows: list[dict[Any, Any]], school_id: int) -> None:
     """Create or update a Pitcher per roster row, keyed by Trackman ID; rows without one are skipped."""
     for row in rows:
         trackman_id = str(row.get('Trackman ID', '')).strip()
@@ -257,7 +273,7 @@ def _upsert_roster_rows(rows: list[dict[Any, Any]]) -> None:
             except Exception:
                 pass
         pitcher = db_models.Pitcher.query.filter_by(
-            trackman_id=trackman_id, school_id=current_user.school_id
+            trackman_id=trackman_id, school_id=school_id
         ).first()
         if pitcher:
             if name:
@@ -267,7 +283,7 @@ def _upsert_roster_rows(rows: list[dict[Any, Any]]) -> None:
             pitcher.weight    = weight
         else:
             db.session.add(db_models.Pitcher(
-                school_id=current_user.school_id,
+                school_id=school_id,
                 trackman_id=trackman_id,
                 name=name,
                 birthdate=birthdate,
@@ -282,7 +298,7 @@ def _upsert_roster_rows(rows: list[dict[Any, Any]]) -> None:
 @login_required
 def get_roster() -> ResponseReturnValue:
     """List the school's roster as display rows for the roster editor table."""
-    pitchers = db_models.Pitcher.query.filter_by(school_id=current_user.school_id).all()
+    pitchers = db_models.Pitcher.query.filter_by(school_id=get_active_school_id()).all()
     roster: list[dict[str, Any]] = []
     for p in pitchers:
         parts = (p.name or '').split(' ', 1)
@@ -305,7 +321,7 @@ def save_roster() -> ResponseReturnValue:
     data = request.get_json()
     rows = data.get('rows', [])
     try:
-        _upsert_roster_rows(rows)
+        _upsert_roster_rows(rows, get_active_school_id())
         db.session.commit()
         return jsonify({'message': 'Roster saved successfully.'}), 200
     except Exception as e:
@@ -358,7 +374,7 @@ def upload_roster() -> ResponseReturnValue:
         return jsonify({'error': result}), 400
 
     try:
-        _upsert_roster_rows(df.fillna('').to_dict(orient='records'))
+        _upsert_roster_rows(df.fillna('').to_dict(orient='records'), get_active_school_id())
         db.session.commit()
         os.remove(filepath)
         return jsonify({'message': 'Roster uploaded successfully.'}), 200
@@ -400,10 +416,11 @@ def upload_player_pfp(player_id: str) -> ResponseReturnValue:
         return jsonify({'error': 'Invalid or corrupt image file.'}), 400
 
     try:
-        player_dir = os.path.join(current_app.config['STORAGE'], 'schools', str(current_user.school_id), 'assets', 'players', player_id)
+        school_id = get_active_school_id()
+        player_dir = os.path.join(current_app.config['STORAGE'], 'schools', str(school_id), 'assets', 'players', player_id)
         os.makedirs(player_dir, exist_ok=True)
         img.save(os.path.join(player_dir, 'pfp.png'), 'PNG')
-        return jsonify({'message': 'Profile picture uploaded successfully.', 'pfp_url': f'/storage/schools/{current_user.school_id}/assets/players/{player_id}/pfp.png'}), 200
+        return jsonify({'message': 'Profile picture uploaded successfully.', 'pfp_url': f'/storage/schools/{school_id}/assets/players/{player_id}/pfp.png'}), 200
     except Exception as e:
         current_app.logger.error(f"Error saving player pfp: {e}")
         return jsonify({'error': 'Failed to save profile picture.'}), 500
@@ -423,7 +440,8 @@ def upload_player_pfp_bulk() -> ResponseReturnValue:
     if not files:
         return jsonify({'error': 'No files provided.'}), 400
 
-    pitchers = db_models.Pitcher.query.filter_by(school_id=current_user.school_id).all()
+    school_id = get_active_school_id()
+    pitchers = db_models.Pitcher.query.filter_by(school_id=school_id).all()
     if not pitchers:
         return jsonify({'error': 'No roster found. Please upload a roster first.'}), 400
 
@@ -464,7 +482,7 @@ def upload_player_pfp_bulk() -> ResponseReturnValue:
 
         try:
             img = Image.open(file).convert('RGBA')
-            player_dir = os.path.join(current_app.config['STORAGE'], 'schools', str(current_user.school_id), 'assets', 'players', matched_player_id)
+            player_dir = os.path.join(current_app.config['STORAGE'], 'schools', str(school_id), 'assets', 'players', matched_player_id)
             os.makedirs(player_dir, exist_ok=True)
             img.save(os.path.join(player_dir, 'pfp.png'), 'PNG')
             matched.append(file.filename)

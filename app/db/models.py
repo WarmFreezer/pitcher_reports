@@ -39,7 +39,7 @@ class School(BaseModel):
     stripe_customer_id: Mapped[str | None] = mapped_column(db.String(100), unique=True)
     stripe_subscription_id: Mapped[str | None] = mapped_column(db.String(100), unique=True)
     stripe_subscription_status: Mapped[str | None] = mapped_column(db.String(20), default='inactive')
-    trackman_id: Mapped[str | None] = mapped_column(db.String(20), unique=True)
+    trackman_id: Mapped[str | None] = mapped_column(db.String(20))
 
     users = db.relationship('User', backref='school', lazy=True)
 

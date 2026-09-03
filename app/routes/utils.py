@@ -2,6 +2,24 @@ import os
 from flask import current_app, session
 from flask_login import current_user
 
+from app.db.models import School, db
+
+
+def get_active_school_id() -> int:
+    """current_user's own school_id, unless they're a master currently acting as another school."""
+    if current_user.role == 'master':
+        acting_id = session.get('master_school_id')
+        if acting_id and db.session.get(School, acting_id):
+            return int(acting_id)
+    return current_user.school_id
+
+
+def get_active_school() -> School:
+    """The School current_user is currently scoped to (see get_active_school_id)."""
+    school = db.session.get(School, get_active_school_id())
+    assert school is not None
+    return school
+
 
 def flash_toast(message: str, type: str = 'info') -> None:
     """Queue a toast notification, shown on the next page render then cleared."""

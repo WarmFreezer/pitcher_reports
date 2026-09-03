@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html style="height: 100%;">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Master Panel</title>
+    <link rel="icon" href="{{ url_for('static', filename='resources/favicon.ico') }}" type="image/x-icon">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/forms.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tables.css') }}">
+
+    {% if branding %}
+    <style>
+        :root {
+            --primary: {{branding.colors.primary}};
+            --secondary: {{branding.colors.secondary}};
+            --tertiary: {{branding.colors.tertiary}};
+            --dark: {{branding.colors.dark}};
+            --light: {{branding.colors.light}};
+            --accent: {{branding.colors.accent}};
+        }
+    </style>
+    {% endif %}
+</head>
+<body onload="loadFooter(); loadNavbar('{{ logo_path }}');">
+    <div id="navbar-placeholder"></div>
+
+    <main class="main-content">
+        <div class="bubble">
+            <h2>Master Panel — Schools</h2>
+            <p>Act as a school to manage its subscription page, or upload its custom report scripts directly.</p>
+
+            <div style="overflow-x: auto;">
+                <table class="roster-table" style="margin-top: 12px;">
+                    <thead>
+                        <tr>
+                            <th>School</th>
+                            <th>Admin Email</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th></th>
+                            <th>Custom Pitcher Report</th>
+                            <th>Custom Hitter Report</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for school in schools %}
+                        <tr>
+                            <td>{{ school.name }}</td>
+                            <td>{{ school.admin_email }}</td>
+                            <td>{{ school.stripe_subscription_status }}</td>
+                            <td>{{ school.created_at.strftime('%b %d, %Y') if school.created_at else '' }}</td>
+                            <td>
+                                <form action="{{ url_for('master.act_as_school', school_id=school.id) }}" method="POST" style="margin: 0;">
+                                    <button type="submit" class="download-btn-small">Manage</button>
+                                </form>
+                            </td>
+                            <td>
+                                <form action="{{ url_for('master.upload_custom_report', school_id=school.id) }}" method="POST" enctype="multipart/form-data" style="margin: 0;">
+                                    <input type="hidden" name="report_type" value="pitcher">
+                                    <label class="download-btn-small" style="margin: 0;">
+                                        Upload
+                                        <input type="file" name="file" accept=".py" required style="display:none" onchange="this.form.submit()">
+                                    </label>
+                                </form>
+                            </td>
+                            <td>
+                                <form action="{{ url_for('master.upload_custom_report', school_id=school.id) }}" method="POST" enctype="multipart/form-data" style="margin: 0;">
+                                    <input type="hidden" name="report_type" value="hitter">
+                                    <label class="download-btn-small" style="margin: 0;">
+                                        Upload
+                                        <input type="file" name="file" accept=".py" required style="display:none" onchange="this.form.submit()">
+                                    </label>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <div id="footer-placeholder"></div>
+
+    <script src="{{ url_for('static', filename='js/core.js') }}"></script>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <script>
+        const _categoryMap = { danger: 'error', warning: 'info', success: 'success', info: 'info' };
+        {% for category, message in messages %}
+        window.addEventListener('load', () => toast({{ message | tojson }}, _categoryMap['{{ category }}'] || 'info'));
+        {% endfor %}
+    </script>
+    {% endif %}
+    {% endwith %}
+</body>
+</html>

@@ -12,6 +12,12 @@ DB/Accounts change - Look into different method for verifying school email
 
 Pricing Changes - Up subscription cost $400/year?? (discuss pricing with schools), Add form to request custom reports
 
+Admin allows access to subscription page
+
+Pitch by pitch csv downloads
+
+Setting for heatmap/pitch point
+
 ------ Deferred from the /pitching + /batting restructure ------
 SECURITY: /storage/schools/<slug>/... routes are unauthenticated
   app/main.py:96-106 -- the three send_from_directory routes have no
@@ -48,6 +54,16 @@ Unify team_stats.add_outing_pitch_stats with report.py's pitch aggregation
   logic. Deferred deliberately -- touches the persisted Outing_Pitch_Stat
   write path and season-total correctness (CLAUDE.md: rate stats use totals,
   never AVG of a percentage). Do this alone, not folded into another change.
+
+------ Deferred from the master role + custom-report upload feature ------
+SECURITY: custom-report uploads are unsandboxed arbitrary code execution
+  app/routes/master.py's upload_custom_report saves straight to
+  custom_report_path() after only a compile() syntax check (catches typos, not
+  malice) and a master-role gate. custom_report_loader.load_custom_module()
+  exec's the file server-side on every report generation for that school.
+  Accepted for now because provisioning master accounts is already a trusted,
+  CLI-only action -- but if that ever changes, this needs real sandboxing
+  (subprocess isolation, restricted exec environment) before it's safe.
 
 ------ Good for now ------
 Master Team Sheet

@@ -1,7 +1,7 @@
 [tool.mypy]
 python_version = "3.11"
 files = ["app"]
-exclude = ["^tests/", "^migrations/"]
+exclude = ["^tests/", "^migrations/", "^app/storage/"]
 
 # app/ has had a full typing/docstring pass (Phase 2), so untyped defs are
 # disallowed globally rather than ratcheted in module-by-module.

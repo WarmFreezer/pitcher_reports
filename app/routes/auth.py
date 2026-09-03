@@ -138,5 +138,6 @@ def login() -> ResponseReturnValue:
 def logout() -> ResponseReturnValue:
     """Log out the current user."""
     logout_user()
+    session.pop('master_school_id', None)
     flash('You have been logged out.', 'info')
     return redirect(url_for('pages.index'))

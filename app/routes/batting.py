@@ -148,7 +148,7 @@ def batting_report() -> ResponseReturnValue:
 
     school_temp_folder, school_output_folder = get_school_directories()
     branding = BrandingLoader.get_branding(current_user.school_id)
-    gen = PDF_Generator(current_user=current_user, branding=branding)
+    gen = PDF_Generator(school_id=current_user.school_id, branding=branding)
 
     # Clear this user's previous hitter output so a stale chart or PDF from an
     # earlier selection can never be served or swept into the merged file

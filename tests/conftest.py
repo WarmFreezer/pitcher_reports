@@ -10,7 +10,7 @@ from app.main import create_app
 from app.db import models
 from app.db.models import db
 from app.services.auth import Auth
-from app.services import branding_loader, report_lab_generator
+from app.services import branding_loader, custom_report_loader, report_lab_generator
 
 DEFAULT_PASSWORD = 'TestPass123!'
 
@@ -32,6 +32,7 @@ def app(monkeypatch, tmp_path):
     shutil.copy(real_default, schools_dir / 'default.json')
     monkeypatch.setattr(branding_loader.BrandingLoader, 'SCHOOLS', str(schools_dir))
     monkeypatch.setattr(report_lab_generator, 'STORAGE_SCHOOLS', str(schools_dir))
+    monkeypatch.setattr(custom_report_loader, 'STORAGE_SCHOOLS', str(schools_dir))
 
     flask_app = create_app({
         'TESTING': True,

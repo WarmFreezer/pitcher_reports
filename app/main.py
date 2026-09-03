@@ -30,6 +30,7 @@ from app.routes.batting import batting_bp
 from app.routes.pitching import pitching_bp
 from app.routes.subscription import subscription_bp
 from app.routes.upload import upload_bp
+from app.routes.master import master_bp
 
 STORAGE_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'storage')
 
@@ -121,6 +122,7 @@ def create_app(config_overrides: dict | None = None) -> Flask:
     app.register_blueprint(subscription_bp)
     app.register_blueprint(upload_bp)
     app.register_blueprint(payment_bp)
+    app.register_blueprint(master_bp)
 
     return app
 

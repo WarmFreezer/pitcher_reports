@@ -269,7 +269,7 @@
 
 .roster-table th {
     background-color: var(--tertiary);
-    color: var(--text-primary);
+    color: var(--text-on-accent);
     padding: 10px 12px;
     text-align: left;
     white-space: nowrap;
