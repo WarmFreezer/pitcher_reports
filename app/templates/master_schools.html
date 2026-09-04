@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/forms.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tables.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/subscription.css') }}">
 
     {% if branding %}
     <style>
@@ -28,6 +29,29 @@
     <div id="navbar-placeholder"></div>
 
     <main class="main-content">
+        <div class="bubble">
+            <h2>Default Branding</h2>
+            <p>These colors are used as a fallback for any school that hasn't set its own branding yet.</p>
+            <div class="color-grid">
+                {% for token in ['primary', 'secondary', 'tertiary', 'accent'] %}
+                <div class="color-card" id="default-color-card-{{ token }}"
+                     style="background-color: {{ default_branding.colors[token] }};"
+                     onclick="document.getElementById('default-color-{{ token }}').click()">
+                    <input type="color" class="color-picker" id="default-color-{{ token }}"
+                           value="{{ default_branding.colors[token] }}"
+                           oninput="syncDefaultColor('{{ token }}', this.value)">
+                    <div class="color-card-footer">
+                        <span class="color-card-label">{{ token | capitalize }}</span>
+                        <input type="text" class="color-card-hex" id="default-color-{{ token }}-text"
+                               value="{{ default_branding.colors[token] }}" maxlength="7" placeholder="#000000"
+                               oninput="syncDefaultColorText('{{ token }}', this.value)"
+                               onclick="event.stopPropagation()">
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
         <div class="bubble">
             <h2>Master Panel — Schools</h2>
             <p>Act as a school to manage its subscription page, or upload its custom report scripts directly.</p>
@@ -83,9 +107,12 @@
         </div>
     </main>
 
+    <button class="save-fab" onclick="saveDefaultBranding()">Save</button>
+
     <div id="footer-placeholder"></div>
 
     <script src="{{ url_for('static', filename='js/core.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/pages/master.js') }}"></script>
 
     {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}

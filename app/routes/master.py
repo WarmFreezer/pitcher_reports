@@ -2,11 +2,12 @@ import os
 from functools import wraps
 from typing import Callable, ParamSpec, TypeVar
 
-from flask import Blueprint, flash, redirect, render_template, request, session, url_for
+from flask import Blueprint, flash, jsonify, redirect, render_template, request, session, url_for
 from flask.typing import ResponseReturnValue
 from flask_login import current_user, login_required
 
 from app.db.models import School, db
+from app.services.branding_loader import BrandingLoader
 from app.services.custom_report_loader import custom_report_path
 
 master_bp = Blueprint('master', __name__, url_prefix='/master')
@@ -38,7 +39,27 @@ def master_required(view: Callable[P, R]) -> Callable[P, R | ResponseReturnValue
 def schools_list() -> ResponseReturnValue:
     """List every school — pick one to act as, or upload its custom report scripts."""
     all_schools = School.query.order_by(School.name).all()
-    return render_template('master_schools.html', schools=all_schools)
+    default_branding = BrandingLoader.get_default_branding()
+    return render_template('master_schools.html', schools=all_schools, default_branding=default_branding)
+
+
+@master_bp.route('/default-branding', methods=['POST'])
+@login_required
+@master_required
+def update_default_branding() -> ResponseReturnValue:
+    """Update the color tokens in the global default.json, used as a branding fallback for schools without their own branding.json."""
+    data = request.get_json()
+    colors = data.get('colors', {})
+
+    error = BrandingLoader.validate_colors(colors)
+    if error:
+        return jsonify({'error': error}), 400
+
+    try:
+        BrandingLoader.update_default_colors(colors)
+        return jsonify({'message': 'Default branding updated successfully.'}), 200
+    except Exception:
+        return jsonify({'error': 'Failed to update default branding.'}), 500
 
 
 @master_bp.route('/schools/<int:school_id>/act', methods=['POST'])

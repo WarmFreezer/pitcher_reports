@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -61,6 +62,34 @@ class BrandingLoader:
         with open(branding_path, 'w') as f:
             json.dump(branding_data, f, indent=4)
         return True
+
+    @staticmethod
+    def get_default_branding() -> dict[str, Any]:
+        """Load the global default.json used as a branding fallback for schools without their own branding.json."""
+        with open(os.path.join(BrandingLoader.SCHOOLS, 'default.json'), 'r', encoding='utf-8') as f:
+            return json.load(f)
+
+    @staticmethod
+    def update_default_colors(colors: dict[str, str]) -> None:
+        """Merge new color tokens into default.json's colors block."""
+        default_path = os.path.join(BrandingLoader.SCHOOLS, 'default.json')
+        with open(default_path, 'r', encoding='utf-8') as f:
+            default_data = json.load(f)
+        default_data['colors'].update(colors)
+        with open(default_path, 'w', encoding='utf-8') as f:
+            json.dump(default_data, f, indent=4)
+
+    @staticmethod
+    def validate_colors(colors: dict[str, Any]) -> str | None:
+        """Check that the four required color tokens are present and valid hex; returns an error message, or None if valid."""
+        required = {'primary', 'secondary', 'tertiary', 'accent'}
+        if not required.issubset(colors.keys()):
+            return 'Missing required color tokens.'
+        hex_re = re.compile(r'^#[0-9a-fA-F]{6}$')
+        for token, value in colors.items():
+            if not hex_re.match(value):
+                return f'Invalid hex color for {token}: {value}'
+        return None
 
     @staticmethod
     def is_dark(color_hex: str) -> bool:

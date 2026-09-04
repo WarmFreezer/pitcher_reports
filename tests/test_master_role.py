@@ -4,8 +4,15 @@ session context, and the custom-report upload endpoint. See
 app/routes/master.py and app/routes/utils.py's get_active_school[_id]().
 """
 import io
+import json
+from pathlib import Path
 
+from app.services.branding_loader import BrandingLoader
 from app.services.custom_report_loader import custom_report_path
+
+
+def _read_default_colors():
+    return json.loads((Path(BrandingLoader.SCHOOLS) / 'default.json').read_text())['colors']
 
 
 def test_non_master_cannot_list_schools(client, login_as, make_school, make_user):
@@ -152,6 +159,51 @@ def test_custom_report_upload_rejects_non_python_extension(client, login_as, mak
     )
 
     assert not custom_report_path(target_school.id, 'custom_hitter_report.py').exists()
+
+
+def test_non_master_cannot_update_default_branding(client, login_as, make_school, make_user):
+    school = make_school()
+    user = make_user(school, role='member')
+    login_as(client, user)
+    original = _read_default_colors()
+
+    client.post(
+        '/master/default-branding',
+        json={'colors': {'primary': '#111111', 'secondary': '#222222', 'tertiary': '#333333', 'accent': '#444444'}},
+    )
+
+    assert _read_default_colors() == original
+
+
+def test_master_can_update_default_branding(client, login_as, make_school, make_user):
+    home_school = make_school()
+    master = make_user(home_school, role='master')
+    login_as(client, master)
+
+    resp = client.post(
+        '/master/default-branding',
+        json={'colors': {'primary': '#111111', 'secondary': '#222222', 'tertiary': '#333333', 'accent': '#444444'}},
+    )
+
+    assert resp.status_code == 200
+    assert _read_default_colors() == {
+        'primary': '#111111', 'secondary': '#222222', 'tertiary': '#333333', 'accent': '#444444',
+    }
+
+
+def test_master_update_default_branding_rejects_invalid_hex(client, login_as, make_school, make_user):
+    home_school = make_school()
+    master = make_user(home_school, role='master')
+    login_as(client, master)
+    original = _read_default_colors()
+
+    resp = client.post(
+        '/master/default-branding',
+        json={'colors': {'primary': 'not-a-color', 'secondary': '#222222', 'tertiary': '#333333', 'accent': '#444444'}},
+    )
+
+    assert resp.status_code == 400
+    assert _read_default_colors() == original
 
 
 def test_custom_report_upload_rejects_syntax_error(client, login_as, make_school, make_user):
