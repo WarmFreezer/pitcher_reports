@@ -29,6 +29,6 @@
     "report_settings": {
         "header_height_px": 120,
         "show_logo": true,
-        "footer_text": "© Eubank Technologies. All rights reserved."
+        "footer_text": "© {school_name}. All rights reserved."
     }
 }

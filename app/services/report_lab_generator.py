@@ -15,7 +15,7 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.platypus import (
     Paragraph, Spacer, Table, TableStyle,
     Image, Frame, PageTemplate, BaseDocTemplate, KeepInFrame,
-    NextPageTemplate,
+    NextPageTemplate, KeepTogether,
 )
 
 from app.services.custom_report_loader import load_custom_module
@@ -38,6 +38,9 @@ class PDF_Generator:
     MARGIN = 0.65 * inch
     IMG_WIDTH = 2.5 * inch
     FOOTER_HEIGHT = 0.45 * inch
+    # Reserved at the top of every page after the first for _draw_running_header --
+    # page 1 already carries the full header (photo/name/logo) from generate_header.
+    HEADER_HEIGHT = 0.3 * inch
     WHITE = colors.HexColor("#FFFFFF")
     BLACK = colors.HexColor("#000000")
 
@@ -73,7 +76,14 @@ class PDF_Generator:
         self.text_color = self.primary_color
         self.dark_color = colors.HexColor(branding['colors'].get('dark', '#000000'))
         self.light_color = colors.HexColor(branding['colors'].get('light', '#FFFFFF'))
-        self.footer_text = branding.get('report_settings', {}).get('footer_text', '')
+        footer_text = branding.get('report_settings', {}).get('footer_text', '')
+        school_name = branding.get('school', {}).get('name', '')
+        try:
+            self.footer_text = footer_text.format(school_name=school_name)
+        except (KeyError, IndexError):
+            # A school-authored custom footer_text with its own literal {braces}
+            # (not the {school_name} placeholder) -- show it as written.
+            self.footer_text = footer_text
 
         self.styles = {
             "title": ParagraphStyle(
@@ -228,17 +238,52 @@ class PDF_Generator:
 
         canvas.restoreState()
 
+    def _draw_running_header(self, canvas: Any, doc: Any) -> None:
+        """
+        Slim repeating header, for the 'continuation' page template only.
+
+        Any page that opens with its own full header (photo/name/logo) --
+        page 1, and the first page of the school's custom report section,
+        both via generate_header() -- uses the 'header' template instead,
+        which reserves no HEADER_HEIGHT band at all, so that header sits
+        flush at the top with no gap above it (see generate_pitcher_report/
+        generate_hitter_report's NextPageTemplate switching). This one is
+        for everything else: a table or image section that overflows onto a
+        later page has nothing above it identifying whose report it is --
+        this fills that gap with a single line (set as self._page_header_text
+        by the report generator before doc.build()) plus a rule, in the space
+        HEADER_HEIGHT reserves at the top of the 'continuation' frame.
+        """
+        text = getattr(self, '_page_header_text', '')
+        if not text:
+            return
+
+        canvas.saveState()
+        width = self.PAGE_W - 2 * self.MARGIN
+        top = self.PAGE_H - self.HEADER_HEIGHT
+
+        header_line = Paragraph(text, self.styles["footer"])
+        _, h = header_line.wrap(width, self.HEADER_HEIGHT)
+        header_line.drawOn(canvas, self.MARGIN, top + (self.HEADER_HEIGHT - h) / 2)
+
+        canvas.setStrokeColor(self.secondary_color)
+        canvas.setLineWidth(1)
+        canvas.line(self.MARGIN, top, self.PAGE_W - self.MARGIN, top)
+
+        canvas.restoreState()
+
+    def _draw_page_decorations(self, canvas: Any, doc: Any) -> None:
+        """Combined onPage callback for the 'continuation' template: running header + footer."""
+        self._draw_running_header(canvas, doc)
+        self._draw_custom_footer(canvas, doc)
+
     def generate_pitcher_stats_table(self, stats: PitcherStatsTable) -> list[Any]:
         """Render a pitcher's per-pitch-type stats table. Formatting comes from PitcherStatsTable.columns."""
-        elements: list[Any] = []
-
-        elements.append(Paragraph("Pitch Statistics", self.styles["section_header"]))
-
         table_data = stats.to_reportlab_rows()
 
         # Create table
         col_widths = [(self.PAGE_W - 2 * self.MARGIN) / len(stats.columns)]
-        stats_table = Table(table_data, colWidths=col_widths)
+        stats_table = Table(table_data, colWidths=col_widths, repeatRows=1)
 
         # Style the table
         table_style = [
@@ -256,24 +301,23 @@ class PDF_Generator:
         ]
 
         stats_table.setStyle(TableStyle(table_style))
-        elements.append(stats_table)
-        elements.append(Spacer(1, 0.05 * inch))
 
-        return elements
+        # KeepTogether so the section header never gets orphaned at the bottom of
+        # a page while the table it labels starts on the next one.
+        return [
+            KeepTogether([Paragraph("Pitch Statistics", self.styles["section_header"]), stats_table]),
+            Spacer(1, 0.05 * inch),
+        ]
 
     def generate_usage_table(self, usage: PitchUsageTable, batter_side: str = "Right", available_width: float | None = None) -> list[Any]:
         """Render a pitch-usage-by-count table for one batter side. Formatting comes from PitchUsageTable.columns."""
-        elements: list[Any] = []
-
-        elements.append(Paragraph(f"Pitch Usage vs {batter_side}-Handed Batters", self.styles["section_header"]))
-
         table_data = usage.to_reportlab_rows()
 
         # Create table with adjusted column widths
         if available_width is None:
             available_width = (self.PAGE_W - 2 * self.MARGIN) / 2
         col_widths = available_width / len(usage.columns)
-        usage_table = Table(table_data, colWidths=col_widths)
+        usage_table = Table(table_data, colWidths=col_widths, repeatRows=1)
 
         # Style the table
         table_style = [
@@ -291,10 +335,18 @@ class PDF_Generator:
         ]
 
         usage_table.setStyle(TableStyle(table_style))
-        elements.append(usage_table)
-        elements.append(Spacer(1, 0.05 * inch))
 
-        return elements
+        # No KeepTogether here (unlike generate_data_table etc.) -- this table's
+        # elements are sometimes handed to generate_two_column_layout, whose
+        # KeepInFrame draws its content directly rather than through a real
+        # Frame's split-aware layout, and KeepTogether relies on exactly that
+        # (it reports a deliberately oversized height to force a split, which
+        # KeepInFrame can't honor and crashes on with "no attribute 'draw'").
+        return [
+            Paragraph(f"Pitch Usage vs {batter_side}-Handed Batters", self.styles["section_header"]),
+            usage_table,
+            Spacer(1, 0.05 * inch),
+        ]
 
     def generate_stats_grid(self, stats_data: dict[str, Any], title: str = "Key Statistics") -> list[Any]:
         """
@@ -308,10 +360,6 @@ class PDF_Generator:
         Returns:
             List of document elements containing the stats grid
         """
-        elements: list[Any] = []
-
-        elements.append(Paragraph(title, self.styles["section_header"]))
-
         # Create a grid of stats (4 columns)
         stat_items = list(stats_data.items())
         grid_data: list[Any] = []
@@ -348,11 +396,11 @@ class PDF_Generator:
             ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
             ('GRID', (0, 0), (-1, -1), 1, self.accent_color),
         ]))
-        
-        elements.append(stats_grid_table)
-        elements.append(Spacer(1, 0.05 * inch))
-        
-        return elements
+
+        return [
+            KeepTogether([Paragraph(title, self.styles["section_header"]), stats_grid_table]),
+            Spacer(1, 0.05 * inch),
+        ]
 
     def add_image_section(self, image_path: str, title: str, max_width_pts: float | None = None) -> list[Any]:
         """
@@ -376,15 +424,21 @@ class PDF_Generator:
             return elements
         
         try:
+            # No KeepTogether here (unlike generate_data_table etc.) -- this is
+            # sometimes handed to generate_two_column_layout, whose KeepInFrame
+            # draws its content directly rather than through a real Frame's
+            # split-aware layout, and KeepTogether relies on exactly that (it
+            # reports a deliberately oversized height to force a split, which
+            # KeepInFrame can't honor and crashes on with "no attribute 'draw'").
             elements.append(Paragraph(title, self.styles["section_header"]))
-            
+
             # Calculate height to maintain aspect ratio
             from PIL import Image as PILImage
             img = PILImage.open(image_path)
             aspect_ratio = img.height / img.width
             img_w = max_width_pts
             img_h = img_w * aspect_ratio
-            
+
             max_height_pts = (self.PAGE_H - 2 * self.MARGIN) / 3.5
             if img_h > max_height_pts:
                 img_h = max_height_pts
@@ -394,7 +448,7 @@ class PDF_Generator:
             img_element = Image(image_path, width=img_w, height=img_h)
             elements.append(img_element)
             elements.append(Spacer(1, 0.05 * inch))
-            
+
         except Exception as e:
             elements.append(Paragraph(f"<i>Error loading image: {str(e)}</i>", self.styles["body"]))
         
@@ -501,10 +555,17 @@ class PDF_Generator:
             List containing a table with two columns
         """
         col_width = (self.PAGE_W - 2 * self.MARGIN - 0.2 * inch) / 2
-        
+
+        # Bounded by the smallest frame this can land on (the 'custom' template,
+        # which reserves both HEADER_HEIGHT and FOOTER_HEIGHT) rather than the raw
+        # page height -- self.PAGE_H here is taller than any actual frame now that
+        # HEADER_HEIGHT is reserved on every page, which made KeepInFrame promise a
+        # size no frame could actually satisfy and crash the whole build.
+        max_height = self.PAGE_H - self.HEADER_HEIGHT - self.FOOTER_HEIGHT
+
         # Wrap elements in KeepInFrame to constrain width for table cells
-        left_frame = KeepInFrame(col_width, self.PAGE_H, left_elements, hAlign='LEFT')
-        right_frame = KeepInFrame(col_width, self.PAGE_H, right_elements, hAlign='LEFT')
+        left_frame = KeepInFrame(col_width, max_height, left_elements, hAlign='LEFT')
+        right_frame = KeepInFrame(col_width, max_height, right_elements, hAlign='LEFT')
         
         layout_table = Table(
             [[left_frame, right_frame]],
@@ -529,27 +590,34 @@ class PDF_Generator:
         # Stashed on self so a school's custom_pitcher_report.py can read gen.player_pfp,
         # matching the already-public gen.school_logo it also relies on.
         self.player_pfp = player_pfp
+        # Read by _draw_running_header on every page after the first, so a section
+        # that overflows past page 1 still carries its own context.
+        self._page_header_text = f"{data.pitcher_name}  |  {data.date}  |  {data.home_team} @ {data.away_team}"
 
-        # Replace SimpleDocTemplate with this in generate_pitcher_report:
-        frame = Frame(
+        # 'header': used for any page that opens with its own full generate_header()
+        # call (page 1, and the custom report section's own first page) -- no
+        # HEADER_HEIGHT reservation, so that header sits flush at the top with no
+        # gap above it. Only FOOTER_HEIGHT is reserved, for the copyright footer.
+        header_frame = Frame(
             self.MARGIN,
-            0,
+            self.FOOTER_HEIGHT,
             self.PAGE_W - 2 * self.MARGIN,
-            self.PAGE_H,
+            self.PAGE_H - self.FOOTER_HEIGHT,
             leftPadding=0,
             rightPadding=0,
             topPadding=0,
             bottomPadding=0,
         )
 
-        # Reserves FOOTER_HEIGHT at the bottom of the page for _draw_custom_footer --
-        # used from the school's custom report section onward (see NextPageTemplate
-        # below), never on the standard report pages above it.
-        custom_frame = Frame(
+        # 'continuation': used for every other page -- one that picks up mid-section
+        # with no header of its own. Also reserves HEADER_HEIGHT at the top for
+        # _draw_running_header, so a table/image that overflows this far still
+        # carries some context for whose report it is.
+        continuation_frame = Frame(
             self.MARGIN,
             self.FOOTER_HEIGHT,
             self.PAGE_W - 2 * self.MARGIN,
-            self.PAGE_H - self.FOOTER_HEIGHT,
+            self.PAGE_H - self.FOOTER_HEIGHT - self.HEADER_HEIGHT,
             leftPadding=0,
             rightPadding=0,
             topPadding=0,
@@ -565,8 +633,9 @@ class PDF_Generator:
             bottomMargin=0,
         )
         pdf_file.addPageTemplates([
-            PageTemplate(id='main', frames=[frame]),
-            PageTemplate(id='custom', frames=[custom_frame], onPage=self._draw_custom_footer),
+            # 'header' first so it's the default template page 1 starts on.
+            PageTemplate(id='header', frames=[header_frame], onPage=self._draw_custom_footer),
+            PageTemplate(id='continuation', frames=[continuation_frame], onPage=self._draw_page_decorations),
         ])
 
         elements: list[Any] = []
@@ -585,6 +654,9 @@ class PDF_Generator:
             data.pitcher_weight,
             data.pitcher_age,
         ))
+        # Anything that overflows past this page has no header of its own --
+        # switch to the reserved-band template so it gets the running header.
+        elements.append(NextPageTemplate('continuation'))
         # Add pitch heatmap images (left and right) below header
         half_width = (self.PAGE_W - 2 * self.MARGIN - 0.2 * inch) / 2
         if data.pitch_heat_map_left or data.pitch_heat_map_right:
@@ -621,10 +693,13 @@ class PDF_Generator:
             custom_module = load_custom_module(self.school_id, 'custom_pitcher_report.py')
             if custom_module is not None:
                 print(f"[PDF] Generating custom pitcher report")
-                # Switches to the footer'd page template for the page the custom
-                # script's own PageBreak starts, and everything after it.
-                elements.append(NextPageTemplate('custom'))
+                # The custom script's own PageBreak() lands on this switch -- 'header'
+                # so its generate_header() call sits flush at the top with no gap,
+                # same as page 1. Anything the custom script/tables below add that
+                # overflows past that page switches back to 'continuation'.
+                elements.append(NextPageTemplate('header'))
                 elements.extend(self._load_custom_elements(custom_module, data))
+                elements.append(NextPageTemplate('continuation'))
         except Exception as e:
             # A school's custom script is theirs to break -- don't let it take
             # down the rest of an otherwise-normal report.
@@ -644,6 +719,12 @@ class PDF_Generator:
         # Build PDF
         try:
             for i, el in enumerate(elements):
+                # KeepTogether.wrap() needs a live canvas (set during the real build
+                # below), so it always raises here regardless of whether its content
+                # is fine -- skip it rather than log a false "failed" for every
+                # section header+table pairing.
+                if isinstance(el, KeepTogether):
+                    continue
                 try:
                     el.wrap(self.PAGE_W - 2 * self.MARGIN, self.PAGE_H)
                 except Exception as e:
@@ -680,15 +761,11 @@ class PDF_Generator:
         Returns:
             List of document elements containing the table
         """
-        elements: list[Any] = []
-
         if table is None or not table:
-            return elements
+            return []
 
         if available_width is None:
             available_width = self.PAGE_W - 2 * self.MARGIN
-
-        elements.append(Paragraph(title, self.styles["section_header"]))
 
         table_data = table.to_reportlab_rows()
 
@@ -704,7 +781,7 @@ class PDF_Generator:
         if widths is None:
             widths = [available_width / col_count] * col_count
 
-        data_table = Table(table_data, colWidths=widths)
+        data_table = Table(table_data, colWidths=widths, repeatRows=1)
         data_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), self.tertiary_color),
             ('TEXTCOLOR', (0, 0), (-1, 0), self.WHITE),
@@ -719,10 +796,10 @@ class PDF_Generator:
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [self.WHITE, self.light_color]),
         ]))
 
-        elements.append(data_table)
-        elements.append(Spacer(1, 0.05 * inch))
-
-        return elements
+        return [
+            KeepTogether([Paragraph(title, self.styles["section_header"]), data_table]),
+            Spacer(1, 0.05 * inch),
+        ]
 
     def generate_hitter_report(self, data: HitterReportRequest, output_path: str) -> str:
         """
@@ -746,26 +823,36 @@ class PDF_Generator:
         # Stashed on self so a school's custom_hitter_report.py can read gen.player_pfp,
         # matching the already-public gen.school_logo it also relies on.
         self.player_pfp = player_pfp
+        # Read by _draw_running_header on every page after the first, so a section
+        # that overflows past page 1 still carries its own context.
+        games_label = f"{data.games} game{'s' if data.games != 1 else ''}" if data.games else ''
+        header_bits = [data.hitter_name, data.date_range, data.team, games_label]
+        self._page_header_text = '  |  '.join(bit for bit in header_bits if bit)
 
-        frame = Frame(
+        # 'header': used for any page that opens with its own full generate_header()
+        # call (page 1, and the custom report section's own first page) -- no
+        # HEADER_HEIGHT reservation, so that header sits flush at the top with no
+        # gap above it. Only FOOTER_HEIGHT is reserved, for the copyright footer.
+        header_frame = Frame(
             self.MARGIN,
-            0,
+            self.FOOTER_HEIGHT,
             self.PAGE_W - 2 * self.MARGIN,
-            self.PAGE_H,
+            self.PAGE_H - self.FOOTER_HEIGHT,
             leftPadding=0,
             rightPadding=0,
             topPadding=0,
             bottomPadding=0,
         )
 
-        # Reserves FOOTER_HEIGHT at the bottom of the page for _draw_custom_footer --
-        # used from the school's custom report section onward (see NextPageTemplate
-        # below), never on the standard report pages above it.
-        custom_frame = Frame(
+        # 'continuation': used for every other page -- one that picks up mid-section
+        # with no header of its own. Also reserves HEADER_HEIGHT at the top for
+        # _draw_running_header, so a table/image that overflows this far still
+        # carries some context for whose report it is.
+        continuation_frame = Frame(
             self.MARGIN,
             self.FOOTER_HEIGHT,
             self.PAGE_W - 2 * self.MARGIN,
-            self.PAGE_H - self.FOOTER_HEIGHT,
+            self.PAGE_H - self.FOOTER_HEIGHT - self.HEADER_HEIGHT,
             leftPadding=0,
             rightPadding=0,
             topPadding=0,
@@ -781,8 +868,9 @@ class PDF_Generator:
             bottomMargin=0,
         )
         pdf_file.addPageTemplates([
-            PageTemplate(id='main', frames=[frame]),
-            PageTemplate(id='custom', frames=[custom_frame], onPage=self._draw_custom_footer),
+            # 'header' first so it's the default template page 1 starts on.
+            PageTemplate(id='header', frames=[header_frame], onPage=self._draw_custom_footer),
+            PageTemplate(id='continuation', frames=[continuation_frame], onPage=self._draw_page_decorations),
         ])
 
         elements: list[Any] = []
@@ -805,6 +893,9 @@ class PDF_Generator:
             '',
             None
         ))
+        # Anything that overflows past this page has no header of its own --
+        # switch to the reserved-band template so it gets the running header.
+        elements.append(NextPageTemplate('continuation'))
 
         if data.summary:
             elements.extend(self.generate_stats_grid(data.summary))
@@ -826,10 +917,13 @@ class PDF_Generator:
             custom_module = load_custom_module(self.school_id, 'custom_hitter_report.py')
             if custom_module is not None:
                 print(f"[PDF] Generating custom hitter report")
-                # Switches to the footer'd page template for the page the custom
-                # script's own PageBreak starts, and everything after it.
-                elements.append(NextPageTemplate('custom'))
+                # The custom script's own PageBreak() lands on this switch -- 'header'
+                # so its generate_header() call sits flush at the top with no gap,
+                # same as page 1. Anything the custom script/tables below add that
+                # overflows past that page switches back to 'continuation'.
+                elements.append(NextPageTemplate('header'))
                 elements.extend(self._load_custom_hitter_elements(custom_module, data))
+                elements.append(NextPageTemplate('continuation'))
         except Exception as e:
             # A school's custom script is theirs to break -- don't let it take
             # down the rest of an otherwise-normal report.
@@ -859,6 +953,12 @@ class PDF_Generator:
 
         try:
             for i, el in enumerate(elements):
+                # KeepTogether.wrap() needs a live canvas (set during the real build
+                # below), so it always raises here regardless of whether its content
+                # is fine -- skip it rather than log a false "failed" for every
+                # section header+table pairing.
+                if isinstance(el, KeepTogether):
+                    continue
                 try:
                     el.wrap(self.PAGE_W - 2 * self.MARGIN, self.PAGE_H)
                 except Exception as e:

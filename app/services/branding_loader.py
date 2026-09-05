@@ -4,11 +4,26 @@ import re
 from pathlib import Path
 from typing import Any
 
+from app.db.models import db, School
+
 class BrandingLoader:
     """Reads/writes each school's branding.json and locates its logo on disk, keyed by school id."""
 
     # Resolved at import time relative to this file so it works regardless of cwd
     SCHOOLS = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'storage', 'schools')
+
+    @staticmethod
+    def _with_live_school_name(school_id: int, branding: dict[str, Any]) -> dict[str, Any]:
+        """
+        Overrides branding['school']['name'] with the school's actual name from the
+        schools table, so a branding.json/default.json placeholder (or another
+        school's leftover name) never gets shown in place of this tenant's own name --
+        e.g. in the default footer_text template (see default.json).
+        """
+        school = db.session.get(School, school_id)
+        if school is not None:
+            branding.setdefault('school', {})['name'] = school.name
+        return branding
 
     @staticmethod
     def get_branding(school_id: int) -> dict[str, Any]:
@@ -17,15 +32,15 @@ class BrandingLoader:
         if not os.path.exists(branding_path):
             print(f"Branding file not found for school: {school_id}")
             with open(os.path.join(BrandingLoader.SCHOOLS, 'default.json'), 'r', encoding='utf-8') as f:
-                return json.load(f)
+                return BrandingLoader._with_live_school_name(school_id, json.load(f))
         try:
             with open(branding_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                return BrandingLoader._with_live_school_name(school_id, json.load(f))
         except Exception as e:
             # Fall back to defaults so the app stays usable even with a corrupt branding file
             print(f"Error loading branding for {school_id}: {e}")
             with open(os.path.join(BrandingLoader.SCHOOLS, 'default.json'), 'r', encoding='utf-8') as f:
-                return json.load(f)
+                return BrandingLoader._with_live_school_name(school_id, json.load(f))
 
     @staticmethod
     def get_logo_path(school_id: int) -> str | None:
