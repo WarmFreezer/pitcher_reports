@@ -36,6 +36,37 @@
             <button class="download-btn btn-warn" onclick="updateInformation()">Update Information</button>
         </div>
 
+        <div class="bubble" style="max-width: clamp(280px, 33%, 600px);">
+            <h2>Report Settings</h2>
+
+            <div style="display: flex; flex-direction: column;">
+                <div class="switch-row">
+                    <label class="switch-field switch-field-subtle" style="margin: 0;">
+                        <span class="switch-text switch-label-fixed">Auto</span>
+                        <input type="checkbox" id="chart-style-toggle" class="switch-input" {% if current_user.chart_style == 'pitch_point' %}checked{% endif %}>
+                        <span class="switch-slider switch-slider-subtle"></span>
+                        <span class="switch-text">Always Points</span>
+                    </label>
+                    <span class="hint-icon" tabindex="0">?
+                        <span class="hint-tooltip">Auto shows a heatmap once a pitch type has enough pitches to trust one, and individual points below that. Always Points skips the heatmap entirely.</span>
+                    </span>
+                </div>
+                <div class="switch-row">
+                    <label class="switch-field switch-field-subtle" style="margin: 0;">
+                        <span class="switch-text switch-label-fixed">Full Color</span>
+                        <input type="checkbox" id="ink-mode-toggle" class="switch-input" {% if current_user.ink_mode == 'light_ink' %}checked{% endif %}>
+                        <span class="switch-slider switch-slider-subtle"></span>
+                        <span class="switch-text">Light Ink</span>
+                    </label>
+                    <span class="hint-icon" tabindex="0">?
+                        <span class="hint-tooltip">Colored headers use more ink/toner when printed. Light ink drops those fills in favor of a plain rule.</span>
+                    </span>
+                </div>
+            </div>
+
+            <button class="download-btn btn-warn" onclick="updateReportSettings()">Save Preferences</button>
+        </div>
+
 <div class="bubble" style="max-width: clamp(280px, 33%, 600px); justify-items: center;">
             <div id="change-password-btn-wrap">
                 <button class="download-btn btn-warn" onclick="showPasswordForm()">Change Password</button>

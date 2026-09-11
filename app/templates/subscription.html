@@ -47,14 +47,14 @@
         </div>
 
         <div class="bubble">
-            <h2>School Branding</h2>
+            <h2>Organization Branding</h2>
             <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
                 <p>Check out the preview to see how your branding will look</p>
                 <a href="/api/subscription/preview-pdf" target="_blank" class="download-btn-small">Preview PDF</a>
             </div>
             <div class="color-grid">
                 <div class="color-card logo-card" onclick="document.getElementById('logo-upload').click()">
-                    <img id="logo-preview" src="{{ logo_path }}" alt="School Logo" class="logo-card-img" onerror="this.src='/static/resources/'+(document.documentElement.getAttribute('data-theme')==='dark'?'statline-logo':'statline-logo-light')+'.svg';this.onerror=null;">
+                    <img id="logo-preview" src="{{ logo_path }}" alt="Organization Logo" class="logo-card-img" onerror="this.src='/static/resources/'+(document.documentElement.getAttribute('data-theme')==='dark'?'statline-logo':'statline-logo-light')+'.svg';this.onerror=null;">
                     <input type="file" id="logo-upload" accept=".png,.jpg,.jpeg" style="display:none" onchange="handleLogoUpload(event)">
                     <div class="color-card-footer">
                         <span class="color-card-label">Logo</span>
@@ -94,6 +94,43 @@
                     <button class="upload-btn" onclick="document.getElementById('roster-upload').click()">Upload Roster</button>
                     <input type="file" id="pfp-folder-upload" accept=".png,.jpg,.jpeg" multiple webkitdirectory style="display: none;" onchange="handleFolderUpload(event)">
                     <button class="upload-btn" onclick="document.getElementById('pfp-folder-upload').click()">Upload Photo Folder</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="bubble">
+            <h2 class="section-toggle" onclick="toggleSection('team-members-content', this)">Team Members <span class="toggle-arrow">▶</span></h2>
+            <div id="team-members-content" class="collapsible collapsible-lg">
+                <p>Promote a member to admin to give them access to this page.</p>
+                <div style="overflow-x: auto;">
+                    <table class="roster-table" style="margin-top: 12px;">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in school_users %}
+                            <tr>
+                                <td>{{ user.first_name }} {{ user.last_name }}</td>
+                                <td>{{ user.email }}</td>
+                                <td>{{ user.role|capitalize }}{% if user.email == active_school.admin_email %} (Billing Admin){% endif %}</td>
+                                <td>
+                                    {% if user.role == 'master' %}
+                                    <span style="color: var(--text-secondary);">—</span>
+                                    {% elif user.role == 'admin' %}
+                                    <button class="download-btn-small" onclick="updateUserRole({{ user.id }}, 'member')">Demote to Member</button>
+                                    {% else %}
+                                    <button class="download-btn-small" onclick="updateUserRole({{ user.id }}, 'admin')">Promote to Admin</button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>

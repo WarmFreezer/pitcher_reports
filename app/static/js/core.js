@@ -48,7 +48,7 @@ function loadNavbar(logo = '') {
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     const _logoFallback = `/static/resources/${isDark ? 'statline-logo' : 'statline-logo-light'}.svg`;
     const _isFallback = !logo;
-    const avatarHTML = `<div class="avatar"><img src="${logo || _logoFallback}" alt="School logo" data-is-statline-fallback="${_isFallback}" onerror="this.src='${_logoFallback}'; this.dataset.isStatlineFallback='true'"></div>`;
+    const avatarHTML = `<div class="avatar"><img src="${logo || _logoFallback}" alt="Organization logo" data-is-statline-fallback="${_isFallback}" onerror="this.src='${_logoFallback}'; this.dataset.isStatlineFallback='true'"></div>`;
 
     const p = window.location.pathname;
     const active = {
@@ -211,6 +211,72 @@ function loadFooter() {
     document.getElementById('footer-placeholder').innerHTML = footerHTML;
 }
 
+// Reads a fetch Response body as newline-delimited JSON, yielding each parsed
+// line as it arrives. Shared by pitching.js/batting.js's streaming report routes,
+// which send one line per pitcher/hitter as their report finishes.
+async function* readNdjson(response) {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        let newlineIndex;
+        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+            const line = buffer.slice(0, newlineIndex);
+            buffer = buffer.slice(newlineIndex + 1);
+            if (line.trim()) yield JSON.parse(line);
+        }
+    }
+
+    if (buffer.trim()) yield JSON.parse(buffer);
+}
+
+// Renders a {label: value} object as .summary-grid tiles (see reports.css) --
+// shared by the hitter summary grid and the custom-stats section on both
+// /pitching and /batting, so a name/value stat always looks like a stat tile
+// rather than a table, matching the PDF's generate_stats_grid.
+function renderStatTiles(container, stats) {
+    if (!container) return;
+    container.innerHTML = Object.entries(stats || {})
+        .map(([label, value]) => `
+            <div class="summary-tile">
+                <div class="tile-value">${value}</div>
+                <div class="tile-label">${label}</div>
+            </div>`).join('');
+}
+
+// Generic custom dropdown: a trigger button + menu of option buttons, used in
+// place of a native <select> (e.g. organization picker, chart style picker).
+// Expects: .custom-dropdown > .dropdown-trigger, .dropdown-value (hidden input), .dropdown-option[data-value]
+function dropdownInit() {
+    document.querySelectorAll('.custom-dropdown').forEach(picker => {
+        const trigger = picker.querySelector('.dropdown-trigger');
+        const hidden = picker.querySelector('.dropdown-value');
+        const options = picker.querySelectorAll('.dropdown-option');
+
+        if (!trigger || !hidden || options.length === 0) return;
+
+        trigger.addEventListener('click', () => picker.classList.toggle('open'));
+
+        options.forEach(btn => {
+            btn.addEventListener('click', () => {
+                hidden.value = btn.dataset.value;
+                trigger.textContent = `${btn.textContent.trim()} ▼`;
+                picker.classList.remove('open');
+            });
+        });
+
+        // Close the dropdown when the user clicks anywhere outside it
+        document.addEventListener('click', (e) => {
+            if (!picker.contains(e.target)) picker.classList.remove('open');
+        });
+    });
+}
+
 function _swapChartImages(theme) {
     document.querySelectorAll('img[data-light-src]').forEach(img => {
         img.src = theme === 'dark' ? img.dataset.darkSrc : img.dataset.lightSrc;
@@ -222,6 +288,8 @@ const saved = localStorage.getItem('theme') ?? 'light';
 document.documentElement.setAttribute('data-theme', saved);
 
 document.addEventListener('DOMContentLoaded', async () => {
+    dropdownInit();
+
     const res = await fetch('/api/toasts');
     if (!res.ok) return;
     const toasts = await res.json();

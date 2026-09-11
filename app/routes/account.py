@@ -68,6 +68,37 @@ def update_information() -> ResponseReturnValue:
         return jsonify({'error': 'Failed to update information.'}), 500
 
 
+# ── Report display preferences ──────────────────────────────────────────────
+
+CHART_STYLES = {'auto', 'pitch_point'}
+INK_MODES = {'full_color', 'light_ink'}
+
+
+@account_bp.route('/api/account/preferences', methods=['POST'])
+@login_required
+def update_preferences() -> ResponseReturnValue:
+    """Update the current user's report display preferences. Each preference is
+    independent -- a request only needs to include the one(s) it's changing."""
+    data = request.get_json()
+
+    if 'chart_style' in data:
+        if data['chart_style'] not in CHART_STYLES:
+            return jsonify({'error': 'Invalid chart style.'}), 400
+        current_user.chart_style = data['chart_style']
+
+    if 'ink_mode' in data:
+        if data['ink_mode'] not in INK_MODES:
+            return jsonify({'error': 'Invalid ink mode.'}), 400
+        current_user.ink_mode = data['ink_mode']
+
+    try:
+        db.session.commit()
+        return jsonify({'message': 'Preferences updated successfully.'}), 200
+    except Exception:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to update preferences.'}), 500
+
+
 # ── Account deletion ──────────────────────────────────────────────────────────
 
 @account_bp.route('/api/account/delete', methods=['POST'])

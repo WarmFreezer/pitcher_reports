@@ -37,12 +37,12 @@ def register() -> ResponseReturnValue:
         # Validate school exists and email domain matches
         school = School.query.filter_by(name=school_name).first()
         if not school:
-            flash('School not found. Please enter a valid school.', 'danger')
+            flash('Organization not found. Please enter a valid organization.', 'danger')
             return redirect(url_for('auth.register'))
 
         school_domain = school.admin_email.split('@')[-1]
         if not email.endswith(f"@{school_domain}"):
-            flash('Email does not match school domain. Please use a valid school email.', 'danger')
+            flash('Email does not match organization domain. Please use a valid organization email.', 'danger')
             return redirect(url_for('auth.register'))
 
         # Grant admin role if email matches the school's designated admin address
@@ -76,7 +76,7 @@ def schools() -> ResponseReturnValue:
 
         # Validate uniqueness and admin email confirmation before touching Stripe
         if School.query.filter_by(name=school_name).first():
-            flash('School name already exists. Please choose a different name.', 'danger')
+            flash('Organization name already exists. Please choose a different name.', 'danger')
             return redirect(url_for('auth.schools'))
 
         if admin_email != confirm_admin_email:

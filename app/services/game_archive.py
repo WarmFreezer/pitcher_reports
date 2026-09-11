@@ -351,8 +351,14 @@ def load_games(games_dir: str, content_hashes: list[str]) -> pd.DataFrame:
             print(f"Could not read archived game {path}: {e}")
             continue
 
+        # .copy() before assigning, not after: a freshly-read CSV/XLSX frame with many
+        # mixed-dtype columns can already be block-fragmented, and adding a column
+        # via item-assignment on top of that is what triggers pandas' fragmentation
+        # warning. Copying first consolidates it into one block, so the new column
+        # is a single clean insert.
+        frame = frame.copy()
         frame['GameDate'] = entry.get('date')
-        frames.append(frame.copy())
+        frames.append(frame)
 
     if not frames:
         return pd.DataFrame()
@@ -438,6 +444,10 @@ def load_range(games_dir: str, start_date: str, end_date: str) -> pd.DataFrame:
             print(f"Could not read archived game {path}: {e}")
             continue
 
+        # See load_games' identical .copy()-before-assign for why: a freshly-read
+        # frame can already be block-fragmented, and this avoids the pandas
+        # PerformanceWarning that item-assignment on top of that triggers.
+        frame = frame.copy()
         frame['GameDate'] = date
         frames.append(frame)
 

@@ -42,10 +42,14 @@ class PitchTypeStat:
     zone_pct: float
     chase_pct: float
     csw_pct: float
+    # % of this pitch type's balls in play hit 90+ mph exit velo with a 10-35 deg
+    # launch angle (TODO's "Damage by type" definition -- not the per-school custom
+    # report scripts' own "damage" stats, which use a different metric/threshold).
+    damage_pct: float
 
 
 class PitcherStatsTable(StatTable[PitchTypeStat]):
-    """The 17-column per-pitch-type stats table shown on a pitcher report."""
+    """The 18-column per-pitch-type stats table shown on a pitcher report."""
     columns = [
         Column('pitch_type', 'Pitch', ColumnFormat.TEXT),
         Column('thrown_pct', 'Thrown', ColumnFormat.PERCENT),
@@ -64,6 +68,7 @@ class PitcherStatsTable(StatTable[PitchTypeStat]):
         Column('zone_pct', 'Zone', ColumnFormat.PERCENT),
         Column('chase_pct', 'Chase', ColumnFormat.PERCENT),
         Column('csw_pct', 'CSW', ColumnFormat.PERCENT),
+        Column('damage_pct', 'Damage', ColumnFormat.PERCENT),
     ]
 
 
@@ -72,6 +77,39 @@ class PitcherGameReport:
     """Replaces build_table()'s positional [date, home_team, away_team, pitcher_name, DataFrame] return."""
     header: GameReportHeader
     stats: PitcherStatsTable
+
+
+@dataclass(frozen=True)
+class PitchByPitchPitch:
+    """One pitch within an at-bat, for the numbered pitch-by-pitch report."""
+    number: int
+    pitch_type: str
+    velo: float | None
+    balls: int
+    strikes: int
+    result: str  # this pitch's own PitchCall (e.g. "StrikeSwinging", "BallCalled", "InPlay")
+
+
+@dataclass(frozen=True)
+class PitchByPitchAtBat:
+    """One plate appearance faced, with every pitch thrown during it."""
+    inning: str  # e.g. "Top 3"
+    batter_name: str
+    batter_side: str
+    result: str  # final PA outcome (PlayResult, or KorBB for a walk/strikeout)
+    pitches: list[PitchByPitchPitch]
+
+
+@dataclass(frozen=True)
+class PitchByPitchReport:
+    """
+    Simplified pitch-by-pitch report data: a header plus every at-bat this
+    pitcher faced. Replaces the old raw-CSV-plus-chart-ZIP export.
+    """
+    pitcher_name: str
+    date: str
+    matchup: str
+    at_bats: list[PitchByPitchAtBat]
 
 
 @dataclass(frozen=True)
@@ -179,6 +217,10 @@ class PitcherReportRequest:
     date: str = ''
     home_team: str = ''
     away_team: str = ''
+    # 'vs' reads correctly for an aggregated range (home_team/away_team aren't a
+    # real single-game home/away pair here -- see routes/pitching.py). Callers
+    # set '@' only for a genuine single selected game.
+    matchup_separator: str = 'vs'
     pitcher_height: str = ''
     pitcher_weight: str = ''
     pitcher_age: int | None = None

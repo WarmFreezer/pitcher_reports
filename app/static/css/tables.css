@@ -3,7 +3,8 @@
    ============================================================================ */
 
 .pitcher-data-table,
-.pitch-usage-table {
+.pitch-usage-table,
+.custom-stats-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 12px;
@@ -12,6 +13,7 @@
 
 .pitcher-data-table { margin: 0 0; }
 .pitch-usage-table  { margin: 0 0; }
+.custom-stats-table { margin: 0 0; }
 
 .table-scroll {
     overflow-x: auto;
@@ -47,7 +49,9 @@
 .pitcher-data-table th,
 .pitcher-data-table td,
 .pitch-usage-table th,
-.pitch-usage-table td {
+.pitch-usage-table td,
+.custom-stats-table th,
+.custom-stats-table td {
     border: 1px solid var(--border);
     padding: 8px 12px;
     text-align: center;
@@ -56,7 +60,8 @@
 }
 
 .pitcher-data-table th,
-.pitch-usage-table th {
+.pitch-usage-table th,
+.custom-stats-table th {
     background-color: var(--tertiary);
     color: var(--text-on-accent);
     font-weight: bold;
@@ -75,7 +80,8 @@
 }
 
 .pitcher-data-table tr:nth-child(even),
-.pitch-usage-table tr:nth-child(even) {
+.pitch-usage-table tr:nth-child(even),
+.custom-stats-table tr:nth-child(even) {
     background-color: var(--bg-card);
 }
 
@@ -84,7 +90,8 @@
 }
 
 .pitcher-data-table tr:hover,
-.pitch-usage-table tr:hover {
+.pitch-usage-table tr:hover,
+.custom-stats-table tr:hover {
     background-color: var(--bg-hover);
 }
 

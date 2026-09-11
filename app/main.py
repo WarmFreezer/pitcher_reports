@@ -17,7 +17,7 @@ from flask import Flask, send_from_directory, render_template
 from flask.typing import ResponseReturnValue
 from flask_cors import CORS
 from flask_migrate import Migrate
-from flask_login import LoginManager, current_user
+from flask_login import LoginManager, current_user, login_required
 
 from app.db.models import db, User
 from app.services.branding_loader import BrandingLoader
@@ -101,16 +101,33 @@ def create_app(config_overrides: dict | None = None) -> Flask:
     def server_error(e: Exception) -> ResponseReturnValue:
         return render_template('500.html'), 500
 
+    # Anything not belonging to the caller's own school resolves 404 rather than
+    # 403, matching _selected_games() in routes/pitching.py -- a probe can't
+    # distinguish "not yours" from "does not exist".
+    def _require_own_school(school_id: int) -> ResponseReturnValue | None:
+        if not current_user.is_authenticated or school_id != current_user.school_id:
+            return render_template('404.html'), 404
+        return None
+
     @app.route('/storage/schools/<int:school_id>/assets/<path:filename>')
+    @login_required
     def school_files(school_id: int, filename: str) -> ResponseReturnValue:
+        if (denied := _require_own_school(school_id)) is not None:
+            return denied
         return send_from_directory(os.path.join(app.config['STORAGE'], 'schools', str(school_id), 'assets'), filename)
 
     @app.route('/storage/schools/<int:school_id>/temp/<path:filename>')
+    @login_required
     def school_temp_files(school_id: int, filename: str) -> ResponseReturnValue:
+        if (denied := _require_own_school(school_id)) is not None:
+            return denied
         return send_from_directory(os.path.join(app.config['STORAGE'], 'schools', str(school_id), 'temp'), filename)
 
     @app.route('/storage/schools/<int:school_id>/reports/<path:filename>')
+    @login_required
     def school_report_files(school_id: int, filename: str) -> ResponseReturnValue:
+        if (denied := _require_own_school(school_id)) is not None:
+            return denied
         return send_from_directory(os.path.join(app.config['STORAGE'], 'schools', str(school_id), 'reports'), filename)
 
     # Register blueprints

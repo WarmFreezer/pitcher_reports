@@ -155,6 +155,8 @@ async function generateBattingReports() {
     if (summaryArea) summaryArea.innerHTML = '';
     if (button) button.disabled = true;
 
+    let reportCount = 0;
+
     try {
         const response = await fetch('/api/batting/report', {
             method: 'POST',
@@ -172,20 +174,26 @@ async function generateBattingReports() {
             return;
         }
 
-        const result = await response.json();
         if (reportOutput) reportOutput.innerHTML = '';
 
-        renderRunSummary(result);
-
-        if (result.reports && result.reports.length > 0) {
-            result.reports.forEach(report => renderHitterCard(report));
-        } else if (reportOutput) {
-            reportOutput.innerHTML = '<p style="margin: 32px;">No reports generated.</p>';
+        // Server streams one NDJSON line per hitter as their report finishes
+        // (built in parallel), plus a final 'done' line -- render each card as
+        // its line arrives instead of waiting for the whole selection.
+        for await (const msg of readNdjson(response)) {
+            if (msg.type === 'report') {
+                renderHitterCard(msg);
+                reportCount++;
+            } else if (msg.type === 'done') {
+                renderRunSummary({ ...msg, count: reportCount });
+                if (msg.merged_pdf_url) updateDownloadLink(true, msg.merged_pdf_url);
+                if (msg.failed && msg.failed.length) {
+                    toast(`${msg.failed.length} hitter(s) could not be generated.`, 'error');
+                }
+            }
         }
 
-        if (result.merged_pdf_url) updateDownloadLink(true, result.merged_pdf_url);
-        if (result.failed && result.failed.length) {
-            toast(`${result.failed.length} hitter(s) could not be generated.`, 'error');
+        if (reportCount === 0 && reportOutput) {
+            reportOutput.innerHTML = '<p style="margin: 32px;">No reports generated.</p>';
         }
     } catch (error) {
         console.error('Error generating batting reports:', error);
@@ -200,7 +208,7 @@ function renderRunSummary(result) {
     const area = document.getElementById('battingSummary');
     if (!area) return;
 
-    const count = (result.reports || []).length;
+    const count = result.count ?? 0;
     const mergedButton = result.merged_pdf_url
         ? `<a href="${result.merged_pdf_url}" class="download-btn" download style="text-decoration: none;">Download All (${count})</a>`
         : '';
@@ -235,14 +243,15 @@ function renderHitterCard(data) {
             <a href="${data.pdf_url}" download class="download-btn-small">
                 📄 Download PDF
             </a>`;
+        if (data.pitch_by_pitch_url) {
+            downloadContainer.innerHTML += `
+                <a href="${data.pitch_by_pitch_url}" download class="download-btn-small">
+                    🧾 Pitch-by-Pitch
+                </a>`;
+        }
     }
 
-    clone.querySelector('.summary-grid').innerHTML = Object.entries(data.summary || {})
-        .map(([label, value]) => `
-            <div class="summary-tile">
-                <div class="tile-value">${value}</div>
-                <div class="tile-label">${label}</div>
-            </div>`).join('');
+    renderStatTiles(clone.querySelector('.summary-grid'), data.summary);
 
     // data-light-src / data-dark-src let core.js _swapChartImages() react to the theme toggle
     const currentTheme = document.documentElement.getAttribute('data-theme') ?? 'light';
@@ -277,6 +286,49 @@ function renderHitterCard(data) {
         data.batted_ball_table || '<p class="filter-note">No batted balls in this range.</p>';
     clone.querySelector('.discipline-table').innerHTML =
         data.discipline_table || '<p class="filter-note">No pitch data in this range.</p>';
+
+    // Custom stats/charts from the school's own uploaded report script, if any --
+    // most schools have none, so the section stays hidden.
+    const hasCustom = data.custom_stats
+        || (data.custom_hit_type_stats_tables && data.custom_hit_type_stats_tables.length)
+        || (data.custom_pitch_type_stats_tables && data.custom_pitch_type_stats_tables.length)
+        || (data.custom_chart_urls && data.custom_chart_urls.length);
+    if (hasCustom) {
+        const customSection = clone.querySelector('.custom-stats-section');
+        if (customSection) customSection.hidden = false;
+        renderStatTiles(clone.querySelector('.custom-stats'), data.custom_stats);
+
+        const chartsContainer = clone.querySelector('.custom-charts');
+        if (chartsContainer && data.custom_chart_urls) {
+            for (const { title, url, dark_url } of data.custom_chart_urls) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'graph-block';
+                wrapper.innerHTML = `<p class="graph-title">${title}</p>`;
+                const img = document.createElement('img');
+                // data-light-src / data-dark-src let core.js _swapChartImages()
+                // react to the theme toggle, same as every other chart here.
+                img.dataset.lightSrc = url;
+                img.dataset.darkSrc = dark_url;
+                img.src = currentTheme === 'dark' && dark_url ? dark_url : url;
+                img.alt = `${data.hitter_name} ${title}`;
+                img.className = 'report-img report-img-custom-chart';
+                wrapper.appendChild(img);
+                chartsContainer.appendChild(wrapper);
+            }
+        }
+
+        const renderStatSections = (container, tables) => {
+            if (!container || !tables) return;
+            for (const { title, html } of tables) {
+                const section = document.createElement('div');
+                section.style.cssText = 'max-width:1200px; margin: 8px auto;';
+                section.innerHTML = `<p class="graph-title">${title}</p><div class="table-section"><div class="table-scroll">${html}</div></div>`;
+                container.appendChild(section);
+            }
+        };
+        renderStatSections(clone.querySelector('.custom-hit-type-stats'), data.custom_hit_type_stats_tables);
+        renderStatSections(clone.querySelector('.custom-pitch-type-stats'), data.custom_pitch_type_stats_tables);
+    }
 
     const header = clone.querySelector('.report-card-header');
     const body = clone.querySelector('.report-card-body');

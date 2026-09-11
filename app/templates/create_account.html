@@ -43,14 +43,14 @@
                     <input class="bubble" type="email" name="email" placeholder="Email" required style="color: var(--text-primary); margin: 8px 0; background-color: var(--bg-card); border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
                     <input class="bubble" type="password" name="password" placeholder="Password" required style="color: var(--text-primary); margin: 8px 0; background-color: var(--bg-card); border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
                     <input class="bubble" type="password" name="confirm_password" placeholder="Confirm Password" required style="color: var(--text-primary); margin: 8px 0; background-color: var(--bg-card); border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
-                    <div class="school-picker dropdown">
-                        <input type="hidden" name="school" id="school-value" required>
-                        <button class="bubble" type="button" id="school-trigger" class="school-trigger" style="color: var(--text-primary); margin: 8px 0; background-color: var(--bg-card); border: 2px solid var(--accent); font-size: 16px; padding: 16px; width: 100%;">
-                            Select School ▼
+                    <div class="custom-dropdown">
+                        <input type="hidden" name="school" id="school-value" class="dropdown-value" required>
+                        <button type="button" id="school-trigger" class="dropdown-trigger bubble" style="color: var(--text-primary); margin: 8px 0; background-color: var(--bg-card); border: 2px solid var(--accent); font-size: 16px; padding: 16px; width: 100%;">
+                            Select Organization ▼
                         </button>
-                        <div id="school-menu" class="dropdown-content school-menu">
+                        <div class="dropdown-content">
                             {% for school in schools %}
-                                <button type="button" class="school-option" data-school="{{school.name}}">
+                                <button type="button" class="dropdown-option" data-value="{{school.name}}">
                                     {{ school.name }}
                                 </button>
                             {% endfor %}
@@ -59,7 +59,7 @@
                     <button type="submit" class="upload-btn" style="max-width: 750px; width: 100%;">Create Account</button>
                 </form>
                 <div style="display: flex;">
-                    <a href="/schools" style="color: var(--text-secondary); font-size: 16px; text-align: left;">Dont See Your School?</a>
+                    <a href="/schools" style="color: var(--text-secondary); font-size: 16px; text-align: left;">Dont See Your Organization?</a>
                 </div>
             </div>
             <div class="auth-visual-panel">
@@ -73,9 +73,5 @@
 
     <script src="{{ url_for('static', filename='js/core.js') }}"></script>
     <script src="{{ url_for('static', filename='js/pages/auth.js') }}"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {});
-        dropdownInit();
-    </script>
 </body>
 </html>

@@ -10,6 +10,7 @@ single, a ground out, and a home run, all vs RHP) and two on 2026-03-08 (a doubl
 and a ground out, both vs LHP). Several assertions below depend on that split.
 """
 import io
+import json
 import os
 from pathlib import Path
 
@@ -64,8 +65,42 @@ def _report(client, **overrides):
     return client.post('/api/batting/report', json=payload)
 
 
-def _first_report(resp):
-    reports = resp.get_json()['reports']
+def _report_data(client, **overrides):
+    """
+    /api/batting/report streams one NDJSON line per hitter (built in parallel)
+    plus a final 'done' summary line, instead of one JSON blob -- reconstruct the
+    old single-dict shape, and force the whole stream to be read (a bare
+    _report(client) only guarantees the generator advanced to its first
+    'report' line, not through to 'done' and whatever runs after the per-hitter
+    loop, like the merge).
+    """
+    resp = _report(client, **overrides)
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+
+    reports = []
+    done = {}
+    for line in resp.get_data(as_text=True).splitlines():
+        if not line.strip():
+            continue
+        msg = json.loads(line)
+        if msg['type'] == 'report':
+            reports.append(msg)
+        elif msg['type'] == 'done':
+            done = msg
+
+    return {
+        'reports': reports,
+        'failed': done.get('failed', []),
+        'merged_pdf_url': done.get('merged_pdf_url'),
+        'date_range': done.get('date_range'),
+        'start_date': done.get('start_date'),
+        'end_date': done.get('end_date'),
+        'games': done.get('games'),
+    }
+
+
+def _first_report(data):
+    reports = data['reports']
     assert len(reports) == 1, reports
     return reports[0]
 
@@ -215,7 +250,7 @@ def test_hitters_endpoint_separates_own_from_opponent(archived_games, client):
 # --- report ----------------------------------------------------------------
 
 def test_report_over_full_range_aggregates_both_games(archived_games, client):
-    report = _first_report(_report(client))
+    report = _first_report(_report_data(client))
 
     assert report['hitter_name'] == BATTER_NAME
     assert report['games'] == 2
@@ -229,7 +264,7 @@ def test_report_over_full_range_aggregates_both_games(archived_games, client):
 
 
 def test_date_range_narrows_to_a_single_game(archived_games, client):
-    report = _first_report(_report(client, start_date='2026-03-01', end_date='2026-03-01'))
+    report = _first_report(_report_data(client, start_date='2026-03-01', end_date='2026-03-01'))
 
     assert report['games'] == 1
     assert report['summary']['PA'] == '5'
@@ -245,7 +280,7 @@ def test_range_covering_no_games_returns_404_not_500(archived_games, client):
 
 
 def test_report_generates_both_themes_of_both_spray_charts(archived_games, client, app, home_school, home_user):
-    report = _first_report(_report(client))
+    report = _first_report(_report_data(client))
 
     temp_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'temp')
     for side in ('left', 'right'):
@@ -260,7 +295,7 @@ def test_report_generates_both_themes_of_both_spray_charts(archived_games, clien
 
 
 def test_report_includes_rendered_tables(archived_games, client):
-    report = _first_report(_report(client))
+    report = _first_report(_report_data(client))
 
     assert 'Ground' in report['batted_ball_table']
     assert 'Line' in report['batted_ball_table']
@@ -428,7 +463,7 @@ def test_selecting_multiple_hitters_returns_one_report_each(archived_games, clie
     ids = _all_own_ids(client)
     assert len(ids) >= 2, 'fixture should provide more than one own-team hitter'
 
-    data = _report(client, batter_ids=ids).get_json()
+    data = _report_data(client, batter_ids=ids)
 
     assert len(data['reports']) == len(ids)
     assert {r['hitter_id'] for r in data['reports']} == set(ids)
@@ -437,7 +472,7 @@ def test_selecting_multiple_hitters_returns_one_report_each(archived_games, clie
 
 def test_multi_hitter_run_produces_a_merged_pdf(archived_games, client, app, home_school, home_user):
     ids = _all_own_ids(client)
-    data = _report(client, batter_ids=ids).get_json()
+    data = _report_data(client, batter_ids=ids)
 
     assert data['merged_pdf_url'], 'a multi-hitter run must produce a merged PDF'
 
@@ -465,7 +500,7 @@ def test_merged_pdf_excludes_pitcher_reports(archived_games, client, app, home_s
     c.save()
 
     ids = _all_own_ids(client)
-    _report(client, batter_ids=ids)
+    _report_data(client, batter_ids=ids)
 
     resp = client.get('/api/batting/export?merged=1&target=own')
     assert resp.status_code == 200
@@ -485,9 +520,9 @@ def test_merged_pdf_excludes_pitcher_reports(archived_games, client, app, home_s
 def test_regenerating_clears_the_previous_selection(archived_games, client, app, home_school, home_user):
     """A stale PDF from a wider selection must not survive into a narrower one."""
     ids = _all_own_ids(client)
-    _report(client, batter_ids=ids)
+    _report_data(client, batter_ids=ids)
 
-    _report(client, batter_ids=[BATTER_ID])
+    _report_data(client, batter_ids=[BATTER_ID])
 
     reports_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'reports')
     remaining = {f for f in os.listdir(reports_dir) if '_hitter_' in f and 'merged' not in f}
@@ -497,7 +532,7 @@ def test_regenerating_clears_the_previous_selection(archived_games, client, app,
 # --- export ----------------------------------------------------------------
 
 def test_export_streams_a_single_hitter_pdf(archived_games, client):
-    _report(client)
+    _report_data(client)
 
     resp = client.get(f'/api/batting/export?batter_id={BATTER_ID}&target=own')
 

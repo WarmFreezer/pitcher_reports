@@ -6,8 +6,31 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
-from app.services.pitch_stats import CustomStatsTable, CustomPitchTypeStatsTable
+from app.services.pitch_stats import CustomStatsTable, CustomPitchTypeStatsTable, PitchByPitchPitch
 from app.services.stat_table import Column, ColumnFormat, StatTable
+
+
+@dataclass(frozen=True)
+class HitterPitchByPitchAtBat:
+    """One plate appearance, with every pitch the hitter saw during it."""
+    inning: str  # e.g. "Top 3"
+    pitcher_name: str
+    pitcher_throws: str
+    result: str  # final PA outcome (PlayResult, or KorBB for a walk/strikeout)
+    pitches: list[PitchByPitchPitch]
+
+
+@dataclass(frozen=True)
+class HitterPitchByPitchReport:
+    """
+    Simplified pitch-by-pitch report data for a hitter: a header plus every
+    at-bat over the selected date range. Mirrors PitchByPitchReport (report.py's
+    pitcher-side equivalent) but grouped from the hitter's perspective -- the
+    opponent shown per at-bat is the pitcher, not the batter.
+    """
+    hitter_name: str
+    date_range: str
+    at_bats: list[HitterPitchByPitchAtBat]
 
 
 @dataclass(frozen=True)

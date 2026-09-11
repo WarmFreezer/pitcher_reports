@@ -68,7 +68,7 @@ def update_default_branding() -> ResponseReturnValue:
 def act_as_school(school_id: int) -> ResponseReturnValue:
     """Start acting as the given school on the subscription blueprint."""
     if not db.session.get(School, school_id):
-        flash('School not found.', 'danger')
+        flash('Organization not found.', 'danger')
         return redirect(url_for('master.schools_list'))
     session['master_school_id'] = school_id
     return redirect(url_for('subscription.subscription_page'))
@@ -95,7 +95,7 @@ def upload_custom_report(school_id: int) -> ResponseReturnValue:
     """
     school = db.session.get(School, school_id)
     if not school:
-        flash('School not found.', 'danger')
+        flash('Organization not found.', 'danger')
         return redirect(url_for('master.schools_list'))
 
     filename = CUSTOM_REPORT_FILENAMES.get(request.form.get('report_type', ''))

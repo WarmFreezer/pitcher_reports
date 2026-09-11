@@ -8,6 +8,7 @@ Both fixture games are HOME vs AWAY with Doe (1001) pitching for HOME and Smith
 (2002) for AWAY, so target='own' yields one pitcher and 'opponent' the other.
 """
 import io
+import json
 import os
 from pathlib import Path
 
@@ -60,6 +61,36 @@ def _report(client, hashes=None, target='own'):
                        json={'content_hashes': hashes, 'target': target})
 
 
+def _report_data(client, hashes=None, target='own'):
+    """
+    /api/pitching/report streams one NDJSON line per pitcher (built in parallel)
+    plus a final 'done' summary line, instead of one JSON blob -- reconstruct the
+    old single-dict shape so the assertions below don't need to know that.
+    """
+    resp = _report(client, hashes=hashes, target=target)
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+
+    reports = []
+    done = {}
+    for line in resp.get_data(as_text=True).splitlines():
+        if not line.strip():
+            continue
+        msg = json.loads(line)
+        if msg['type'] == 'report':
+            reports.append(msg)
+        elif msg['type'] == 'done':
+            done = msg
+
+    return {
+        'reports': reports,
+        'failed': done.get('failed', []),
+        'merged_pdf_url': done.get('merged_pdf_url'),
+        'date_range': done.get('date_range'),
+        'opponent': done.get('opponent'),
+        'games': done.get('games'),
+    }
+
+
 # --- game listing -----------------------------------------------------------
 
 def test_games_endpoint_lists_the_archive_with_bounds(archived_games, client):
@@ -101,7 +132,7 @@ def test_games_endpoint_is_empty_before_anything_is_saved(client, login_as, home
 # --- report generation ------------------------------------------------------
 
 def test_report_covers_every_pitcher_on_the_selected_side(archived_games, client):
-    data = _report(client).get_json()
+    data = _report_data(client)
 
     assert len(data['reports']) == 1
     assert data['reports'][0]['pitcher_name'] == 'Doe, John'
@@ -110,7 +141,7 @@ def test_report_covers_every_pitcher_on_the_selected_side(archived_games, client
 
 
 def test_opponent_target_reports_the_other_dugout(archived_games, client):
-    data = _report(client, target='opponent').get_json()
+    data = _report_data(client, target='opponent')
 
     assert [r['pitcher_name'] for r in data['reports']] == ['Smith, Jane']
 
@@ -118,20 +149,24 @@ def test_opponent_target_reports_the_other_dugout(archived_games, client):
 def test_selecting_one_game_narrows_the_range_in_the_header(archived_games, client):
     one = _hashes(client, start_date='2026-03-01', end_date='2026-03-01')
 
-    data = _report(client, hashes=one).get_json()
+    data = _report_data(client, hashes=one)
 
     assert data['games'] == 1
     assert data['date_range'] == '03/01/2026'
 
 
 def test_multi_game_selection_spans_the_dates(archived_games, client):
-    data = _report(client).get_json()
+    data = _report_data(client)
 
     assert data['date_range'] == '03/01/2026 - 03/08/2026'
 
 
 def test_report_generates_charts_in_both_themes(archived_games, client, app, home_school, home_user):
-    _report(client)
+    # _report_data forces the streamed response to be fully read -- a bare
+    # _report(client) only guarantees the generator advanced far enough to
+    # yield its first 'report' line, not that it ran to the trailing 'done'
+    # line (and whatever happens after the per-pitcher loop, like the merge).
+    _report_data(client)
 
     temp_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'temp')
     for name in (
@@ -144,7 +179,7 @@ def test_report_generates_charts_in_both_themes(archived_games, client, app, hom
 
 
 def test_report_produces_a_merged_pdf(archived_games, client, app, home_school, home_user):
-    data = _report(client).get_json()
+    data = _report_data(client)
 
     assert data['merged_pdf_url']
     reports_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'reports')
@@ -179,7 +214,7 @@ def test_report_with_no_pitchers_on_that_side_explains_why(client, login_as, mak
 # --- export -----------------------------------------------------------------
 
 def test_export_streams_a_single_pitcher_pdf(archived_games, client):
-    _report(client)
+    _report_data(client)
 
     resp = client.get('/api/pitching/export?pitcher_id=1001')
 
@@ -189,7 +224,7 @@ def test_export_streams_a_single_pitcher_pdf(archived_games, client):
 
 
 def test_export_streams_the_merged_pdf(archived_games, client):
-    _report(client)
+    _report_data(client)
 
     resp = client.get('/api/pitching/export?merged=1')
 
@@ -210,6 +245,6 @@ def test_practice_games_can_still_be_reported_on(client, login_as, home_user):
     login_as(client, home_user)
     _save_game(client, GAME_1, practice=True)
 
-    data = _report(client).get_json()
+    data = _report_data(client)
 
     assert len(data['reports']) == 1

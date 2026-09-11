@@ -31,6 +31,11 @@
     max-width: none;
 }
 
+/* Native calendar icon renders dark and is invisible against the dark-mode input background */
+[data-theme="dark"] .filter-field input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+}
+
 .filter-note {
     color: var(--text-secondary);
     font-size: 0.85rem;
@@ -210,8 +215,25 @@
     max-width: 420px;
 }
 
+.custom-charts {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+/* Custom (tier-3) charts render wider (landscape) than the other report charts,
+   so they get a larger cap rather than reusing report-img-spray's -- still
+   capped, just not squeezed to the same width as a portrait-ish chart. */
+.report-img-custom-chart {
+    width: 100%;
+    max-width: 560px;
+}
+
 @media (max-width: 900px) {
-    .report-img-spray {
+    .report-img-spray,
+    .report-img-custom-chart {
         max-width: 100%;
     }
 }

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Schools</title>
+    <title>Organizations</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
@@ -32,15 +32,15 @@
                     {% endif %}
                 {% endwith %}
 
-                <h2>Create a School</h2>
-                <p>To access the full features of MSU Baseball Analytics, please create a school.</p>
+                <h2>Create an Organization</h2>
+                <p>To access the full features of MSU Baseball Analytics, please create an organization.</p>
                 <form method="POST" class="auth-form">
-                    <input class="bubble" type="name" name="name" placeholder="School Name" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
-                    <input class="bubble" type="slug" name="slug" placeholder="School Slug" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
+                    <input class="bubble" type="name" name="name" placeholder="Organization Name" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
+                    <input class="bubble" type="slug" name="slug" placeholder="Organization Slug" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
                     <input class="bubble" type="email" name="admin_email" placeholder="Admin Email" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
                     <input class="bubble" type="email" name="confirm_admin_email" placeholder="Confirm Admin Email" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
                     <input class="bubble" type="text" name="trackman_id" placeholder="TrackMan Team ID" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
-                    <button type="submit" class="upload-btn" id="create-school-button" style="max-width: 750px; width: 100%;">Create School</button>
+                    <button type="submit" class="upload-btn" id="create-school-button" style="max-width: 750px; width: 100%;">Create Organization</button>
                 </form>
             </div>
             <div class="auth-visual-panel">

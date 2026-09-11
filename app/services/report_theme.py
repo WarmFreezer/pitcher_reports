@@ -1,3 +1,5 @@
+from typing import NamedTuple
+
 import matplotlib
 import numpy as np
 import pandas as pd
@@ -119,32 +121,30 @@ matplotlib.rcParams.update({
     'font.weight': 'bold',
 })
 
+# Single source of truth for the pitch type name list -- pitch_order and
+# pitch_point_colors below are kept as plain dicts (not folded into one lookup)
+# because school-owned custom report scripts (app/storage/schools/*/assets/*.py,
+# exec'd server-side) import and .get()/.map() them directly by name.
+class _PitchType(NamedTuple):
+    abbreviation: str
+    color: str
+
+_PITCH_TYPES: dict[str, _PitchType] = {
+    'Fastball':    _PitchType('FB', '#d22d49'),
+    'Curveball':   _PitchType('CB', '#00d1ed'),
+    'Slider':      _PitchType('SL', '#004400'),
+    'ChangeUp':    _PitchType('CH', '#1dbe3a'),
+    'Splitter':    _PitchType('SP', '#4f0010'),
+    'Knuckleball': _PitchType('KB', '#472cee'),
+    'Cutter':      _PitchType('CT', '#933f2c'),
+    'Sinker':      _PitchType('SK', '#fe9d00'),
+    'Four-Seam':   _PitchType('FF', '#FF0088'),
+    'Undefined':   _PitchType('UN', '#888888'),
+}
+
 # Order to display pitch types in tables and plots
-pitch_order = {
-    'Fastball': 'FB',
-    'Curveball': 'CB',
-    'Slider': 'SL',
-    'ChangeUp': 'CH',
-    'Splitter': 'SP',
-    'Knuckleball': 'KB',
-    'Cutter': 'CT',
-    'Sinker': 'SK',
-    'Four-Seam': 'FF',
-    'Undefined': 'UN'
-}
-    
-pitch_point_colors = {
-    'Fastball': '#d22d49',
-    'Curveball': '#00d1ed',
-    'Slider': '#004400',
-    'ChangeUp': '#1dbe3a',
-    'Splitter': '#4f0010',
-    'Knuckleball': '#472cee',
-    'Cutter': '#933f2c',
-    'Sinker': '#fe9d00',
-    'Four-Seam': '#FF0088',
-    'Undefined': '#888888'
-}
+pitch_order = {name: pt.abbreviation for name, pt in _PITCH_TYPES.items()}
+pitch_point_colors = {name: pt.color for name, pt in _PITCH_TYPES.items()}
 
 def make_strike_zone() -> Rectangle:
     """Dashed outline of the rulebook strike zone, in plate-location feet."""

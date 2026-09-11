@@ -68,6 +68,15 @@ class User(UserMixin, BaseModel):
     school_id: Mapped[int] = mapped_column(db.ForeignKey('schools.id'))
     role: Mapped[str] = mapped_column(db.String(20), default='student')
     is_active: Mapped[bool | None] = mapped_column(default=True)
+    # Pitch-location chart style on this user's own generated reports: 'auto' (today's
+    # behavior -- heatmap once a pitch type has enough pitches, scatter points below
+    # that) or 'pitch_point' to always force points. No "always heatmap" -- it would
+    # fit a KDE density on too few points to trust (see report._show_heatmap). A
+    # stale 'heatmap' value from before this option existed just behaves like 'auto'.
+    chart_style: Mapped[str] = mapped_column(db.String(20), default='auto')
+    # PDF print style: 'full_color' (today's branded headers/fills) or 'light_ink',
+    # which drops those fills in favor of a plain rule to cut toner use when printed.
+    ink_mode: Mapped[str] = mapped_column(db.String(20), default='full_color')
     created_at: Mapped[datetime | None] = mapped_column(default=db.func.current_timestamp())
 
 

@@ -18,6 +18,9 @@ from app.services.pitch_stats import (
     CustomStat,
     CustomStatsTable,
     CustomPitchTypeStatsTable,
+    PitchByPitchPitch,
+    PitchByPitchAtBat,
+    PitchByPitchReport,
 )
 from app.services.report_theme import (
     BASEBALL_WIDTH,
@@ -96,7 +99,15 @@ def build_table(source: pd.DataFrame, pitcher_id: int) -> PitcherGameReport | No
             away_team = ''
             home_team = ''
 
-        table = source[['Pitcher', 'PitcherId', 'TaggedPitchType', 'RelSpeed', 'InducedVertBreak', 'HorzBreak', 'SpinRate', 'VertApprAngle', 'HorzApprAngle', 'RelHeight', 'RelSide', 'Extension', 'Tilt', 'ZoneTime', 'PlateLocHeight', 'PlateLocSide', 'PitchCall']]
+        # ExitSpeed/Angle are batted-ball-only fields and aren't in required_columns
+        # (unlike hitter_report.py's own required_columns, which does require them) --
+        # reindex rather than a plain [[...]] selection so an export that omits them
+        # fills NaN instead of KeyError-ing the whole report.
+        table = source.reindex(columns=[
+            'Pitcher', 'PitcherId', 'TaggedPitchType', 'RelSpeed', 'InducedVertBreak', 'HorzBreak',
+            'SpinRate', 'VertApprAngle', 'HorzApprAngle', 'RelHeight', 'RelSide', 'Extension', 'Tilt',
+            'ZoneTime', 'PlateLocHeight', 'PlateLocSide', 'PitchCall', 'ExitSpeed', 'Angle',
+        ])
 
         pitcher_data = table[table['PitcherId'] == pitcher_id]
         pitcher = pitcher_data['Pitcher'].iloc[0]
@@ -150,6 +161,20 @@ def build_table(source: pd.DataFrame, pitcher_id: int) -> PitcherGameReport | No
                 # CSW (Called Strike + Whiff) % — industry-standard pitcher effectiveness metric
                 csw_percent = (called_strike_count + swinging_strike_count) / len(pitch_type_data) * 100.00
 
+                # Damage %: of this pitch type's balls in play, how many were hit
+                # 90+ mph with a 10-35 deg launch angle. NaN ExitSpeed/Angle (untracked
+                # contact) compare False rather than raising, so they're excluded --
+                # same "untracked isn't evidence" reasoning as report_theme.in_zone().
+                in_play_mask = pitch_type_data['PitchCall'] == 'InPlay'
+                in_play_count = int(in_play_mask.sum())
+                damage_count = (
+                    in_play_mask
+                    & (pitch_type_data['ExitSpeed'] >= 90.0)
+                    & (pitch_type_data['Angle'] > 10.0)
+                    & (pitch_type_data['Angle'] <= 35.0)
+                ).sum()
+                damage_percent = (damage_count / in_play_count * 100.00) if in_play_count > 0 else 0.0
+
                 stats.append(PitchTypeStat(
                     pitch_type=pitch_order.get(pitch_type, pitch_type),
                     thrown_pct=len(pitch_type_data) / len(pitcher_data) * 100,
@@ -168,6 +193,7 @@ def build_table(source: pd.DataFrame, pitcher_id: int) -> PitcherGameReport | No
                     zone_pct=pitch_type_data['ZoneTime'].mean() * 100,
                     chase_pct=chase_count / len(pitch_type_data) * 100.00,
                     csw_pct=csw_percent,
+                    damage_pct=damage_percent,
                 ))
 
         # Top 6 most-thrown pitches, then sorted into the canonical pitch_order
@@ -180,6 +206,22 @@ def build_table(source: pd.DataFrame, pitcher_id: int) -> PitcherGameReport | No
         print(f"Error building table for pitcher ID {pitcher_id}: {e}")
         return None
 
+def _show_heatmap(count: int, chart_style: str) -> bool:
+    """
+    Whether a pitch type's location plot renders as a KDE heatmap vs individual points.
+
+    No "always heatmap" option -- fitting a KDE density on too few points (as low
+    as sns.kdeplot's minimum of 2) produces a smooth-looking surface that
+    overstates how confident that shape actually is. 'auto's count threshold
+    exists specifically to avoid that; forcing it defeats the purpose. A stale
+    chart_style='heatmap' value from before this option was removed falls
+    through to the same 'auto' behavior below, not an error.
+    """
+    if chart_style == 'pitch_point':
+        return False
+    return count >= 8  # 'auto' (default) threshold
+
+
 def pitch_heat_map_by_batter_side(
     source: pd.DataFrame,
     id: int,
@@ -187,8 +229,16 @@ def pitch_heat_map_by_batter_side(
     pitcher_id: int,
     threshold: float = 0.1,
     theme: str = 'light',
+    chart_style: str = 'auto',
 ) -> None:
-    """Save a left/right-handed-batter KDE heat map pair of pitch locations to output_path."""
+    """Save a left/right-handed-batter heat map pair of pitch locations to output_path.
+
+    chart_style is the viewing user's preference (User.chart_style): 'auto' renders a
+    KDE heatmap once a pitch type has enough pitches and scatter points below that,
+    'pitch_point' forces points regardless of count (see _show_heatmap for why
+    there's no equivalent "always heatmap" -- it would fit a density on too few
+    points to trust).
+    """
     try:
         matplotlib.rcParams.update(THEME_COLORS.get(theme, THEME_COLORS['light']))
 
@@ -201,11 +251,23 @@ def pitch_heat_map_by_batter_side(
                 fig, ax = plt.subplots(1, 1, figsize=(9, 8))
                 batter_data = pitcher_data[pitcher_data['BatterSide'] == batter_side]
 
+                # Zone geometry and axis setup apply whether or not there's data --
+                # savefig below uses bbox_inches='tight', which crops to whatever
+                # was actually drawn. Skipping this for the empty case (as before)
+                # left only a small text label for it to crop to, shrinking that
+                # image well below the normal chart's size.
+                ax.set_xlabel('Plate Location Side (ft)', fontsize=18, labelpad=8)
+                ax.set_ylabel('Plate Location Height (ft)', fontsize=18, labelpad=8)
+                ax.set_xlim(-2.5, 2.5)
+                ax.set_ylim(0, 5)
+                ax.set_aspect('equal', adjustable='box')
+                ax.add_patch(make_strike_zone())
+                ax.add_patch(make_shadow_zone())
+                ax.add_patch(make_homeplate())
+
                 if len(batter_data) == 0:
                     ax.text(0, 2.5, f'No data for {batter_side}-handed batters',
                         ha='center', va='center', fontsize=14)
-                    ax.set_xlim(-2.5, 2.5)
-                    ax.set_ylim(0, 5)
                 else:
                     pitch_types = list(batter_data['TaggedPitchType'].unique())
                     pitch_types = [pt for pt in pitch_types if pt != 'n/a']
@@ -215,7 +277,7 @@ def pitch_heat_map_by_batter_side(
                         cmap = pitch_colors.get(pitch_type, 'viridis')
                         point_color = pitch_point_colors.get(pitch_type, '#000000')
 
-                        if len(pitch_data) >= 8:
+                        if _show_heatmap(len(pitch_data), chart_style):
                             bw_adjust = 1.5 if len(pitch_data) < 20 else 1.0
                             point_color = pitch_point_colors.get(pitch_type, '#000000')
                             sns.kdeplot(
@@ -252,15 +314,6 @@ def pitch_heat_map_by_batter_side(
                                 label=f'{pitch_order.get(pitch_type, pitch_type)}: {len(pitch_data)} pitches'
                             )
 
-                    ax.set_xlabel('Plate Location Side (ft)', fontsize=18, labelpad=8)
-                    ax.set_ylabel('Plate Location Height (ft)', fontsize=18, labelpad=8)
-                    ax.set_xlim(-2.5, 2.5)
-                    ax.set_ylim(0, 5)
-                    ax.set_aspect('equal', adjustable='box')
-                    ax.add_patch(make_strike_zone())
-                    ax.add_patch(make_shadow_zone())
-                    ax.add_patch(make_homeplate())
-
                 side_label = batter_side.lower()
                 fig.subplots_adjust(left=0.1, right=0.96, top=0.88, bottom=0.1)
                 fig.savefig(os.path.join(output_path, f'{id}_pitcher_{pitcher_id}_heat_map_{side_label}_{theme}.png'), pad_inches=0.3, dpi=300, bbox_inches='tight', transparent=True)
@@ -294,10 +347,21 @@ def pitch_break_map(
         fig, ax = plt.subplots(figsize=(9, 8))
 
         if len(pitcher_data) == 0:
-            ax.text(0, 2.5, f'No data for pitcher ID {pitcher_id}',
+            # Same axis/grid/aspect setup as the has-data path below (not the
+            # plate-location chart's -2.5..2.5/0..5 limits, which don't apply to
+            # break data at all) -- savefig uses bbox_inches='tight', which crops
+            # to whatever was actually drawn, so skipping this left only a small
+            # text label for it to crop to, shrinking the image well below the
+            # normal chart's size.
+            ax.text(0, 0, f'No data for pitcher ID {pitcher_id}',
                 ha='center', va='center', fontsize=14)
-            ax.set_xlim(-2.5, 2.5)
-            ax.set_ylim(0, 5)
+            ax.set_xlabel('Horizontal Break (in)', fontsize=18, labelpad=8)
+            ax.set_ylabel('Induced Vertical Break (in)', fontsize=18, labelpad=8)
+            ax.set_xlim(-25, 25)
+            ax.set_ylim(-25, 25)
+            ax.grid(True, linestyle='--', alpha=0.5)
+            ax.set_aspect('equal', adjustable='box')
+            fig.subplots_adjust(left=0.06, right=0.96, top=0.88, bottom=0.1, wspace=0.2)
             fig.savefig(os.path.join(output_path, f'{id}_pitcher_{pitcher_id}_break_map_{theme}.png'), pad_inches=0.3, dpi=300, bbox_inches='tight', transparent=True)
             return None
 
@@ -430,6 +494,86 @@ def usage_table(source: pd.DataFrame, pitcher_id: int) -> PitchUsageSides | None
 
     except Exception as e:
         print(f"Error building table for pitcher ID {pitcher_id}: {e}")
+        return None
+
+
+# GameID (not just Date) so a multi-game selection can't collide two different
+# games' "Inning 1, 1st PA" into one at-bat.
+_AB_KEY_COLUMNS = ['GameID', 'Inning', 'Top/Bottom', 'PAofInning']
+
+
+def build_pitch_by_pitch_report(source: pd.DataFrame, pitcher_id: int) -> PitchByPitchReport | None:
+    """
+    Group one pitcher's pitches into at-bats for the simplified pitch-by-pitch
+    report: a header (pitcher, date range, matchup) plus every plate appearance
+    faced, each with its pitches numbered in the order thrown. Replaces the old
+    raw-CSV-plus-chart-ZIP export, which dumped the full Trackman column set.
+    """
+    try:
+        pitcher_data = source[source['PitcherId'] == pitcher_id]
+        if pitcher_data.empty:
+            return None
+
+        pitcher_name = str(pitcher_data['Pitcher'].iloc[0]) if 'Pitcher' in pitcher_data.columns else ''
+        # A multi-game selection can mix .xlsx sources (Date already parsed to
+        # pandas Timestamp) with .csv ones (Date still a plain string) -- sorting
+        # the raw column crashes comparing Timestamp to str. Route everything
+        # through pd.to_datetime first, matching game_archive._game_date's fix
+        # for the identical problem.
+        if 'Date' in pitcher_data.columns:
+            dates = sorted(pd.to_datetime(pitcher_data['Date'], errors='coerce').dropna().dt.date.unique())
+        else:
+            dates = []
+        date_display = dates[0].isoformat() if len(dates) == 1 else f'{dates[0].isoformat()} - {dates[-1].isoformat()}' if dates else ''
+        pitcher_team = pitcher_data['PitcherTeam'].mode()[0] if 'PitcherTeam' in pitcher_data.columns and not pitcher_data['PitcherTeam'].empty else ''
+        batter_team = pitcher_data['BatterTeam'].mode()[0] if 'BatterTeam' in pitcher_data.columns and not pitcher_data['BatterTeam'].empty else ''
+        matchup = f'{pitcher_team} vs {batter_team}' if pitcher_team and batter_team else (pitcher_team or batter_team)
+
+        table = pitcher_data.reindex(columns=_AB_KEY_COLUMNS + [
+            'Batter', 'BatterSide', 'PitchofPA', 'TaggedPitchType', 'RelSpeed',
+            'Balls', 'Strikes', 'PitchCall', 'PlayResult', 'KorBB',
+        ])
+        table = table.dropna(subset=_AB_KEY_COLUMNS)
+        table = table.sort_values(['Inning', 'PAofInning', 'PitchofPA'], kind='stable')
+
+        at_bats: list[PitchByPitchAtBat] = []
+        for _, group in table.groupby(_AB_KEY_COLUMNS, sort=False):
+            pitches_df = group.sort_values('PitchofPA', kind='stable')
+            if pitches_df.empty:
+                continue
+
+            first_row = pitches_df.iloc[0]
+            last_row = pitches_df.iloc[-1]
+            batter = str(first_row['Batter']) if pd.notna(first_row['Batter']) else ''
+            batter_side = str(first_row['BatterSide']) if pd.notna(first_row['BatterSide']) else ''
+            # The final-outcome result only lands on the pitch that ended the AB --
+            # everything before it is 'Undefined', so read it off the last pitch.
+            result = last_row['PlayResult'] if pd.notna(last_row['PlayResult']) and last_row['PlayResult'] != 'Undefined' else last_row['KorBB']
+            result = str(result) if pd.notna(result) else ''
+            inning_label = f"{first_row['Top/Bottom']} {int(first_row['Inning'])}" if pd.notna(first_row['Inning']) else ''
+
+            pitches: list[PitchByPitchPitch] = [
+                PitchByPitchPitch(
+                    number=i,
+                    pitch_type=str(pitch['TaggedPitchType']) if pd.notna(pitch['TaggedPitchType']) else '',
+                    velo=float(pitch['RelSpeed']) if pd.notna(pitch['RelSpeed']) else None,
+                    balls=int(pitch['Balls']) if pd.notna(pitch['Balls']) else 0,
+                    strikes=int(pitch['Strikes']) if pd.notna(pitch['Strikes']) else 0,
+                    result=str(pitch['PitchCall']) if pd.notna(pitch['PitchCall']) else '',
+                )
+                for i, (_, pitch) in enumerate(pitches_df.iterrows(), start=1)
+            ]
+
+            at_bats.append(PitchByPitchAtBat(
+                inning=inning_label, batter_name=batter, batter_side=batter_side,
+                result=result, pitches=pitches,
+            ))
+
+        return PitchByPitchReport(
+            pitcher_name=pitcher_name, date=date_display, matchup=matchup, at_bats=at_bats,
+        )
+    except Exception as e:
+        print(f"Error building pitch-by-pitch report for pitcher ID {pitcher_id}: {e}")
         return None
 
 '''

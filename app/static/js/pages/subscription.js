@@ -297,6 +297,27 @@ function toggleSection(id, heading) {
     heading.classList.toggle('open');
 }
 
+// ── Team members ────────────────────────────────────────────────────────────
+
+async function updateUserRole(userId, role) {
+    try {
+        const response = await fetch(`/api/subscription/users/${userId}/role`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            toast(data.message, 'success');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            toast(data.error || 'Failed to update role.', 'error');
+        }
+    } catch {
+        toast('An error occurred. Please try again.', 'error');
+    }
+}
+
 // ── Subscription management ───────────────────────────────────────────────────
 
 async function startSubscription() {

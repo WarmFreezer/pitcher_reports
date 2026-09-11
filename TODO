@@ -1,53 +1,29 @@
 ------ TODO ------
-Strikeouts
-Share Page??
-Spin Efficiency
-Damage by type (90+mph with launch angle between 10-35deg)
-School -> Organization
+Strikeouts - Skip for now
+Share Page?? - Skip for now
 
-Claude.md per module or folder (function docstrings should help)
-Email Confirmations, newsletters***
-Dark Mode contrast on new report screens, icon color for calendar select
-DB/Accounts change - Look into different method for verifying school email
+Instead of spin, map trajectory on a 'break map' following each section of trajectory -- BLOCKED: waiting on Trackman trajectory column names before starting
+Email Confirmations, newsletters - high priority
+DB/Accounts change - Look into different method for verifying school email - med priority (discuss with me)
 
-Pricing Changes - Up subscription cost $400/year?? (discuss pricing with schools), Add form to request custom reports
+Team Overview reworked since same stats can be found in a pitcher/hitter report (later)
 
-Admin allows access to subscription page
-
-Pitch by pitch csv downloads
-
-Setting for heatmap/pitch point
+Pricing Changes - 3 tiers, Add form to request custom reports - med priority (discuss with me and should be its own commit)
+- Tier 1: 249/yr, access to tables, not charts
+- Tier 2: 499/yr, access to tables and chart
+- Tier 3: 899/999/year access to tables, charts, and custom pitching report (payments up to 3 after custom reports are added)
 
 ------ Deferred from the /pitching + /batting restructure ------
-SECURITY: /storage/schools/<slug>/... routes are unauthenticated
-  app/main.py:96-106 -- the three send_from_directory routes have no
-  @login_required and never check the slug against current_user.school.slug.
-  Anyone who guesses a path downloads another school's charts. PDFs are already
-  safe (exports stream via send_file behind the login); chart PNGs are not.
-  Fix: require login + verify the slug matches, or serve charts through an
-  authenticated route the way /api/*/export does.
-
 outings.date is String(20) holding dates -- should be db.Date
   Works today only because ISO strings sort chronologically. Needs a migration
   plus a look at the dashboard queries in app/routes/pages.py. Blocks proper
   date arithmetic (e.g. "last 30 days") on the DB side.
-
-PDF header subtitle format is wrong for multi-game reports
-  generate_header hardcodes "{a} @ {b}" (report_lab_generator.py:145), giving
-  "HOME @ 2 games" on hitter reports and "HOME @ AWAY" on pitching ones -- the
-  latter is also backwards from the away-@-home convention, inherited from the
-  old upload.py call. Make the separator a parameter so each report type picks
-  its own ("vs" for aggregated ranges, "@" for a true single away game).
 
 Rule learned: any change to game_archive._build_entry needs a
   `flask --app app.main rebuild-game-index` run, or existing archives silently
   report defaults for the new field instead of real values.
 
 ------ Deferred from the DataFrame -> typed StatTable refactor ------
-PitchType enum to replace pitch_order/pitch_point_colors dicts
-  app/services/report_theme.py -- these two dicts duplicate the DB's
-  Pitch_Types table (name -> abbreviation). Small/cosmetic, no behavior risk.
-
 Unify team_stats.add_outing_pitch_stats with report.py's pitch aggregation
   app/services/team_stats.py runs its own independent pandas aggregation to
   persist season stats to Postgres, duplicating report.py's per-pitch-type
@@ -68,4 +44,14 @@ SECURITY: custom-report uploads are unsandboxed arbitrary code execution
 ------ Good for now ------
 Master Team Sheet
 Custom Stripe Checkout for Dark Mode
-Header includes pitcher info+
+Header includes pitcher info
+
+Spin Efficiency
+  Not pursuing for now. Trackman's own SpinAxis/Tilt is inferred from ball
+  movement, not independently measured, so there's no second axis to compare
+  it against -- true spin efficiency (transverse spin / total spin) needs
+  transverse spin back-solved from the break via the Magnus-force physics
+  model, not a formula droppable from the raw CSV columns with confidence.
+
+School -> Organization (user-facing copy done -- templates, flash messages, navbar alt text.
+  DB columns/routes/URLs (school_id, /schools, /storage/schools/...) still say school, entirety deferred)

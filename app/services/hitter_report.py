@@ -6,6 +6,7 @@ incoming frame usually spans several games. Nothing here assumes a single game; 
 only per-row requirement is the TrackMan schema below.
 '''
 
+import inspect
 import os
 from typing import Protocol, TypeVar, overload
 
@@ -21,8 +22,10 @@ from app.services.hitter_stats import (
     CustomHitTypeStatsTable,
     HitterDisciplineStat,
     HitterDisciplineTable,
+    HitterPitchByPitchAtBat,
+    HitterPitchByPitchReport,
 )
-from app.services.pitch_stats import CustomStat, CustomStatsTable, CustomPitchTypeStatsTable
+from app.services.pitch_stats import CustomStat, CustomStatsTable, CustomPitchTypeStatsTable, PitchByPitchPitch
 from app.services.report_theme import (
     EV_MAX_MPH,
     EV_MIN_MPH,
@@ -161,6 +164,72 @@ def batter_name(source: pd.DataFrame, batter_id: str | int) -> str:
         return str(batter_id)
     names = rows['Batter'].dropna()
     return str(names.iloc[0]) if not names.empty else str(batter_id)
+
+
+# GameID (not just Date) so a multi-game selection can't collide two different
+# games' "Inning 1, 1st PA" into one at-bat. Mirrors report.py's _AB_KEY_COLUMNS.
+_AB_KEY_COLUMNS = ['GameID', 'Inning', 'Top/Bottom', 'PAofInning']
+
+
+def build_pitch_by_pitch_report(source: pd.DataFrame, batter_id: str | int, date_range: str) -> HitterPitchByPitchReport | None:
+    """
+    Group one hitter's plate appearances into at-bats for the simplified
+    pitch-by-pitch report: a header (hitter, date range) plus every pitch seen,
+    numbered in the order thrown. Mirrors report.build_pitch_by_pitch_report,
+    grouped from the hitter's perspective -- the opponent per at-bat is the
+    pitcher faced, not a batter.
+    """
+    try:
+        rows = batter_rows(source, batter_id)
+        if rows.empty:
+            return None
+
+        hitter_name = batter_name(source, batter_id)
+
+        table = rows.reindex(columns=_AB_KEY_COLUMNS + [
+            'Pitcher', 'PitcherThrows', 'PitchofPA', 'TaggedPitchType', 'RelSpeed',
+            'Balls', 'Strikes', 'PitchCall', 'PlayResult', 'KorBB',
+        ])
+        table = table.dropna(subset=_AB_KEY_COLUMNS)
+        table = table.sort_values(['Inning', 'PAofInning', 'PitchofPA'], kind='stable')
+
+        at_bats: list[HitterPitchByPitchAtBat] = []
+        for _, group in table.groupby(_AB_KEY_COLUMNS, sort=False):
+            pitches_df = group.sort_values('PitchofPA', kind='stable')
+            if pitches_df.empty:
+                continue
+
+            first_row = pitches_df.iloc[0]
+            last_row = pitches_df.iloc[-1]
+            pitcher_name = str(first_row['Pitcher']) if pd.notna(first_row['Pitcher']) else ''
+            pitcher_throws = str(first_row['PitcherThrows']) if pd.notna(first_row['PitcherThrows']) else ''
+            # The final-outcome result only lands on the pitch that ended the AB --
+            # everything before it is 'Undefined', so read it off the last pitch.
+            result = last_row['PlayResult'] if pd.notna(last_row['PlayResult']) and last_row['PlayResult'] != 'Undefined' else last_row['KorBB']
+            result = str(result) if pd.notna(result) else ''
+            inning_label = f"{first_row['Top/Bottom']} {int(first_row['Inning'])}" if pd.notna(first_row['Inning']) else ''
+
+            pitches: list[PitchByPitchPitch] = [
+                PitchByPitchPitch(
+                    number=i,
+                    pitch_type=str(pitch['TaggedPitchType']) if pd.notna(pitch['TaggedPitchType']) else '',
+                    velo=float(pitch['RelSpeed']) if pd.notna(pitch['RelSpeed']) else None,
+                    balls=int(pitch['Balls']) if pd.notna(pitch['Balls']) else 0,
+                    strikes=int(pitch['Strikes']) if pd.notna(pitch['Strikes']) else 0,
+                    result=str(pitch['PitchCall']) if pd.notna(pitch['PitchCall']) else '',
+                )
+                for i, (_, pitch) in enumerate(pitches_df.iterrows(), start=1)
+            ]
+
+            at_bats.append(HitterPitchByPitchAtBat(
+                inning=inning_label, pitcher_name=pitcher_name, pitcher_throws=pitcher_throws,
+                result=result, pitches=pitches,
+            ))
+
+        return HitterPitchByPitchReport(hitter_name=hitter_name, date_range=date_range, at_bats=at_bats)
+    except Exception as e:
+        print(f"Error building pitch-by-pitch report for batter ID {batter_id}: {e}")
+        return None
 
 
 def _swings(pitch_calls: pd.Series) -> pd.Series:
@@ -611,7 +680,8 @@ def custom_pitch_type_stats_table(source: pd.DataFrame, batter_id: str | int, sc
 
 
 def custom_charts(
-    source: pd.DataFrame, batter_id: str | int, school_id: int, user_id: int, output_dir: str
+    source: pd.DataFrame, batter_id: str | int, school_id: int, user_id: int, output_dir: str,
+    theme: str = 'light',
 ) -> list[tuple[str, str]] | None:
     """
     Custom chart image(s) for one hitter, rendered by the school's own
@@ -626,7 +696,9 @@ def custom_charts(
     Returns (title, path) pairs. The school's script has full freedom to do its
     own matplotlib rendering from the raw source rows -- same primitives
     hitter_spray_chart_by_pitcher_side above already uses (report_theme.THEME_COLORS,
-    ev_colormap, classify_hit_type).
+    ev_colormap, classify_hit_type). theme is only passed to scripts whose
+    get_charts declares a theme parameter -- older scripts without one keep
+    rendering whatever single theme they always have, rather than raising.
     """
     try:
         custom_module = load_custom_module(school_id, 'custom_hitter_report.py')
@@ -637,7 +709,10 @@ def custom_charts(
         if get_charts is None:
             return None
 
-        charts: list[tuple[str, str]] = get_charts(source, batter_id, user_id, output_dir) or []
+        if 'theme' in inspect.signature(get_charts).parameters:
+            charts: list[tuple[str, str]] = get_charts(source, batter_id, user_id, output_dir, theme=theme) or []
+        else:
+            charts = get_charts(source, batter_id, user_id, output_dir) or []
         return charts or None
     except Exception as e:
         print(f"Error generating custom charts for batter ID {batter_id}: {e}")

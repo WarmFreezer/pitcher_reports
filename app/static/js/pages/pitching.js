@@ -158,6 +158,8 @@ async function generatePitchingReports() {
     if (summaryArea) summaryArea.innerHTML = '';
     if (button) button.disabled = true;
 
+    let reportCount = 0;
+
     try {
         const response = await fetch('/api/pitching/report', {
             method: 'POST',
@@ -175,20 +177,26 @@ async function generatePitchingReports() {
             return;
         }
 
-        const result = await response.json();
         if (reportOutput) reportOutput.innerHTML = '';
 
-        renderRunSummary(result);
-
-        if (result.reports && result.reports.length > 0) {
-            result.reports.forEach(report => renderPitcherCard(report));
-        } else if (reportOutput) {
-            reportOutput.innerHTML = '<p style="margin: 32px;">No reports generated.</p>';
+        // Server streams one NDJSON line per pitcher as their report finishes
+        // (built in parallel), plus a final 'done' line -- render each card as
+        // its line arrives instead of waiting for the whole staff.
+        for await (const msg of readNdjson(response)) {
+            if (msg.type === 'report') {
+                renderPitcherCard(msg);
+                reportCount++;
+            } else if (msg.type === 'done') {
+                renderRunSummary({ ...msg, count: reportCount });
+                if (msg.merged_pdf_url) updateDownloadLink(true, msg.merged_pdf_url);
+                if (msg.failed && msg.failed.length) {
+                    toast(`${msg.failed.length} pitcher(s) could not be generated.`, 'error');
+                }
+            }
         }
 
-        if (result.merged_pdf_url) updateDownloadLink(true, result.merged_pdf_url);
-        if (result.failed && result.failed.length) {
-            toast(`${result.failed.length} pitcher(s) could not be generated.`, 'error');
+        if (reportCount === 0 && reportOutput) {
+            reportOutput.innerHTML = '<p style="margin: 32px;">No reports generated.</p>';
         }
     } catch (error) {
         console.error('Error generating pitching reports:', error);
@@ -203,7 +211,7 @@ function renderRunSummary(result) {
     const area = document.getElementById('pitchingSummary');
     if (!area) return;
 
-    const count = (result.reports || []).length;
+    const count = result.count ?? 0;
     const mergedButton = result.merged_pdf_url
         ? `<a href="${result.merged_pdf_url}" class="download-btn" download style="text-decoration: none;">Download All (${count})</a>`
         : '';
@@ -235,6 +243,12 @@ function renderPitcherCard(data) {
             <a href="${data.pdf_url}" download class="download-btn-small">
                 📄 Download PDF
             </a>`;
+        if (data.pitch_by_pitch_url) {
+            downloadContainer.innerHTML += `
+                <a href="${data.pitch_by_pitch_url}" download class="download-btn-small">
+                    🧾 Pitch-by-Pitch
+                </a>`;
+        }
     }
 
     // data-light-src / data-dark-src let core.js _swapChartImages() react to the theme toggle
@@ -263,6 +277,26 @@ function renderPitcherCard(data) {
     clone.querySelector('.pitcher-table').innerHTML = data.pitcher_table || '';
     clone.querySelector('.left-usage').innerHTML = data.left_usage_table || '';
     clone.querySelector('.right-usage').innerHTML = data.right_usage_table || '';
+
+    // Custom stats from the school's own uploaded report script, if any --
+    // most schools have none, so the section stays hidden.
+    const hasCustom = data.custom_stats || (data.custom_pitch_type_stats_tables && data.custom_pitch_type_stats_tables.length);
+    if (hasCustom) {
+        const customSection = clone.querySelector('.custom-stats-section');
+        if (customSection) customSection.hidden = false;
+        renderStatTiles(clone.querySelector('.custom-stats'), data.custom_stats);
+
+        const pitchTypeContainer = clone.querySelector('.custom-pitch-type-stats');
+        if (pitchTypeContainer && data.custom_pitch_type_stats_tables) {
+            for (const { title, html } of data.custom_pitch_type_stats_tables) {
+                const section = document.createElement('div');
+                section.className = 'table-section';
+                section.style.cssText = 'max-width:1200px; margin: 8px auto;';
+                section.innerHTML = `<p class="graph-title">${title}</p><div class="table-scroll">${html}</div>`;
+                pitchTypeContainer.appendChild(section);
+            }
+        }
+    }
 
     const header = clone.querySelector('.report-card-header');
     const body = clone.querySelector('.report-card-body');

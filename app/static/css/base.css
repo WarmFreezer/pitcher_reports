@@ -75,6 +75,16 @@
     background: var(--bg-card);
 }
 
+/* Default link color for plain <a> tags that don't set their own -- prevents
+   the browser's default blue/purple-on-visited from showing through. */
+a {
+    color: var(--text-primary);
+}
+
+a:visited {
+    color: var(--text-primary);
+}
+
 body {
     background-color: var(--bg-page);
     font-family: Cambria, serif;

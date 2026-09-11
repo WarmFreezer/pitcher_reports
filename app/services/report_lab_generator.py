@@ -25,8 +25,9 @@ from app.services.pitch_stats import (
     PitchTypeStat,
     PitchUsageStat,
     PitchUsageTable,
+    PitchByPitchReport,
 )
-from app.services.hitter_stats import HitterReportRequest
+from app.services.hitter_stats import HitterReportRequest, HitterPitchByPitchReport
 from app.services.stat_table import StatTable
 from .branding_loader import BrandingLoader
 
@@ -62,8 +63,12 @@ class PDF_Generator:
         self.output_path = output_path
     '''
 
-    def __init__(self, school_id: int, branding: dict[str, Any]) -> None:
+    def __init__(self, school_id: int, branding: dict[str, Any], ink_mode: str = 'full_color') -> None:
         self.school_id = school_id
+        # 'full_color' (default): branded fills on report/table headers, as today.
+        # 'light_ink': those same headers drop their color fill entirely and use a
+        # plain thin rule instead -- less toner than even a substituted gray fill.
+        self.ink_mode = ink_mode
 
         # Always resolve logo from local storage; fall back to the app icon if not yet uploaded
         logo_path = os.path.join(STORAGE_SCHOOLS, str(school_id), 'assets', 'logo.png')
@@ -85,16 +90,22 @@ class PDF_Generator:
             # (not the {school_name} placeholder) -- show it as written.
             self.footer_text = footer_text
 
+        # The masthead title/subtitle are normally white/secondary-on-tertiary-fill;
+        # in light-ink mode that fill is dropped, so they need a color that's
+        # actually visible against the bare page instead.
+        title_color = self.dark_color if self.ink_mode == 'light_ink' else self.WHITE
+        subtitle_color = self.dark_color if self.ink_mode == 'light_ink' else self.secondary_color
+
         self.styles = {
             "title": ParagraphStyle(
                 "ReportTitle",
-                fontSize=22, textColor=self.WHITE,
+                fontSize=22, textColor=title_color,
                 fontName="Helvetica-Bold",
                 alignment=TA_LEFT, leading=26,
             ),
             "subtitle": ParagraphStyle(
                 "ReportSubtitle",
-                fontSize=11, textColor=self.secondary_color,
+                fontSize=11, textColor=subtitle_color,
                 fontName="Helvetica",
                 alignment=TA_LEFT, leading=14,
             ),
@@ -145,7 +156,21 @@ class PDF_Generator:
             ),
         }
 
-    def generate_header(self, player_pfp: str, pitcher_name: str, school_logo: str, game_date: str, home_team: str, away_team: str, pitcher_height: str = '', pitcher_weight: str = '', age: int | None = None) -> list[Any]:
+    def _header_fill_commands(self, fill_color: Any, row_start: tuple[int, int] = (0, 0), row_end: tuple[int, int] = (-1, 0)) -> list[tuple[Any, ...]]:
+        """TableStyle commands for a header/section-bar row: a colored fill with
+        white text in full-color mode, or -- to save ink -- no fill at all, dark
+        text, and a plain thin rule underneath as the section separator instead."""
+        if self.ink_mode == 'light_ink':
+            return [
+                ('TEXTCOLOR', row_start, row_end, self.dark_color),
+                ('LINEBELOW', row_start, row_end, 1, self.dark_color),
+            ]
+        return [
+            ('BACKGROUND', row_start, row_end, fill_color),
+            ('TEXTCOLOR', row_start, row_end, self.WHITE),
+        ]
+
+    def generate_header(self, player_pfp: str, pitcher_name: str, school_logo: str, game_date: str, home_team: str, away_team: str, pitcher_height: str = '', pitcher_weight: str = '', age: int | None = None, matchup_separator: str = '@') -> list[Any]:
         """
         Generate document header with pitcher info and game details.
 
@@ -159,17 +184,23 @@ class PDF_Generator:
             pitcher_height: Pitcher's height
             pitcher_weight: Pitcher's weight
             age: Pitcher's age
-            
+            matchup_separator: Text between home_team and away_team -- '@' only
+                reads correctly for a true single away game (away @ home); pass
+                'vs' or similar for an aggregated range where the two aren't a
+                real single-game home/away pair (see report_lab_generator.py TODO)
+
         Returns:
             List of document elements for the header
         """
         elements: list[Any] = []
 
         # Create center column content with title and subtitle stacked vertically
+        matchup = f"{home_team} {matchup_separator} {away_team}" if home_team and away_team else (home_team or away_team)
+        subtitle = ' | '.join(part for part in (game_date, matchup) if part)
         center_content = [
             Paragraph(f"<b>{pitcher_name}</b>", self.styles["title"]),
             Spacer(1, 0.05 * inch),
-            Paragraph(f"{game_date} | {home_team} @ {away_team}", self.styles["subtitle"]),
+            Paragraph(subtitle, self.styles["subtitle"]),
             Paragraph(f"{pitcher_height} {f'| {pitcher_weight}' if pitcher_weight else ''} {f'| {age}' if age else ''}", self.styles["subtitle"]),
         ]
         
@@ -189,9 +220,7 @@ class PDF_Generator:
         ]]
 
         header_table = Table(header_data, colWidths=[1.25*inch, self.PAGE_W - 2.5*inch, 1.25*inch])
-        header_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), self.tertiary_color),
-            ('TEXTCOLOR', (0, 0), (-1, -1), self.WHITE),
+        header_style = [
             ('ALIGN', (0, 0), (0, 0), 'CENTER'),
             ('ALIGN', (1, 0), (1, 0), 'CENTER'),
             ('ALIGN', (2, 0), (2, 0), 'CENTER'),
@@ -204,8 +233,14 @@ class PDF_Generator:
             ('RIGHTPADDING', (2, 0), (2, 0), 30),
             ('TOPPADDING', (0, 0), (-1, -1), 12),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
-            ('LINEBELOW', (0, 0), (-1, 0), 4, self.secondary_color),
-        ]))
+        ]
+        if self.ink_mode == 'light_ink':
+            header_style.append(('LINEBELOW', (0, 0), (-1, 0), 1, self.dark_color))
+        else:
+            header_style.append(('BACKGROUND', (0, 0), (-1, -1), self.tertiary_color))
+            header_style.append(('TEXTCOLOR', (0, 0), (-1, -1), self.WHITE))
+            header_style.append(('LINEBELOW', (0, 0), (-1, 0), 4, self.secondary_color))
+        header_table.setStyle(TableStyle(header_style))
         header_table.spaceAfter = 0
         header_table.spaceBefore = 0
 
@@ -287,8 +322,7 @@ class PDF_Generator:
 
         # Style the table
         table_style = [
-            ('BACKGROUND', (0, 0), (-1, 0), self.tertiary_color),
-            ('TEXTCOLOR', (0, 0), (-1, 0), self.WHITE),
+            *self._header_fill_commands(self.tertiary_color),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
@@ -321,8 +355,7 @@ class PDF_Generator:
 
         # Style the table
         table_style = [
-            ('BACKGROUND', (0, 0), (-1, 0), self.tertiary_color),
-            ('TEXTCOLOR', (0, 0), (-1, 0), self.WHITE),
+            *self._header_fill_commands(self.tertiary_color),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
@@ -385,17 +418,20 @@ class PDF_Generator:
         stats_grid_table = Table(grid_data, colWidths=[col_width] * 4)
         
         # Light tiles with dark text: accent is a saturated brand colour, and the
-        # tertiary-on-accent pairing it replaced was unreadable on the default palette
-        stats_grid_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), self.light_color),
+        # tertiary-on-accent pairing it replaced was unreadable on the default palette.
+        # In light-ink mode, drop the tile fill entirely and rely on the grid lines.
+        grid_style = [
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('LEFTPADDING', (0, 0), (-1, -1), 8),
             ('RIGHTPADDING', (0, 0), (-1, -1), 8),
             ('TOPPADDING', (0, 0), (-1, -1), 8),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-            ('GRID', (0, 0), (-1, -1), 1, self.accent_color),
-        ]))
+            ('GRID', (0, 0), (-1, -1), 1, self.dark_color if self.ink_mode == 'light_ink' else self.accent_color),
+        ]
+        if self.ink_mode != 'light_ink':
+            grid_style.append(('BACKGROUND', (0, 0), (-1, -1), self.light_color))
+        stats_grid_table.setStyle(TableStyle(grid_style))
 
         return [
             KeepTogether([Paragraph(title, self.styles["section_header"]), stats_grid_table]),
@@ -486,17 +522,20 @@ class PDF_Generator:
         
         summary_table = Table(summary_data, colWidths=[(self.PAGE_W - 2 * self.MARGIN) / 3] * 3)
         
-        summary_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), self.accent_color),
-            ('TEXTCOLOR', (0, 0), (-1, 0), self.WHITE),
+        summary_style = [
+            *self._header_fill_commands(self.accent_color),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 10),
             ('FONTSIZE', (0, 1), (-1, -1), 9),
             ('GRID', (0, 0), (-1, -1), 1, colors.grey),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [self.WHITE, self.tertiary_color]),
-        ]))
+        ]
+        # Full-saturation zebra stripe -- heavier than the pale light_color stripe
+        # used elsewhere, so it's the one other zebra this mode also drops.
+        if self.ink_mode != 'light_ink':
+            summary_style.append(('ROWBACKGROUNDS', (0, 1), (-1, -1), [self.WHITE, self.tertiary_color]))
+        summary_table.setStyle(TableStyle(summary_style))
         
         elements.append(summary_table)
         elements.append(Spacer(1, 0.05 * inch))
@@ -592,7 +631,7 @@ class PDF_Generator:
         self.player_pfp = player_pfp
         # Read by _draw_running_header on every page after the first, so a section
         # that overflows past page 1 still carries its own context.
-        self._page_header_text = f"{data.pitcher_name}  |  {data.date}  |  {data.home_team} @ {data.away_team}"
+        self._page_header_text = f"{data.pitcher_name}  |  {data.date}  |  {data.home_team} {data.matchup_separator} {data.away_team}"
 
         # 'header': used for any page that opens with its own full generate_header()
         # call (page 1, and the custom report section's own first page) -- no
@@ -653,6 +692,7 @@ class PDF_Generator:
             data.pitcher_height,
             data.pitcher_weight,
             data.pitcher_age,
+            data.matchup_separator,
         ))
         # Anything that overflows past this page has no header of its own --
         # switch to the reserved-band template so it gets the running header.
@@ -744,6 +784,159 @@ class PDF_Generator:
 
         return get_elements(self, data) or []
 
+    def generate_pitch_by_pitch_report(self, data: PitchByPitchReport, output_path: str) -> str:
+        """
+        Generate the simplified pitch-by-pitch PDF: a plain header (pitcher, date,
+        matchup) followed by every at-bat faced, each with its pitches numbered in
+        the order thrown. Deliberately lighter than generate_pitcher_report -- no
+        photo/logo banner, no heat maps -- since the whole point of this report is
+        to trim the old raw-CSV export down to what a coach actually reads.
+        """
+        frame = Frame(
+            self.MARGIN, self.FOOTER_HEIGHT,
+            self.PAGE_W - 2 * self.MARGIN, self.PAGE_H - self.FOOTER_HEIGHT - self.HEADER_HEIGHT,
+            leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0,
+        )
+        self._page_header_text = '  |  '.join(part for part in (data.pitcher_name, data.date, data.matchup) if part)
+
+        doc = BaseDocTemplate(
+            output_path, pagesize=letter,
+            rightMargin=self.MARGIN, leftMargin=self.MARGIN, topMargin=0, bottomMargin=0,
+        )
+        doc.addPageTemplates([PageTemplate(id='continuation', frames=[frame], onPage=self._draw_page_decorations)])
+
+        title_style = ParagraphStyle(
+            "PbpTitle", fontSize=18, textColor=self.dark_color,
+            fontName="Helvetica-Bold", leading=22, spaceAfter=2,
+        )
+        subtitle_style = ParagraphStyle(
+            "PbpSubtitle", fontSize=10, textColor=self.dark_color,
+            fontName="Helvetica", leading=13, spaceAfter=10,
+        )
+        ab_heading_style = ParagraphStyle(
+            "PbpAbHeading", fontSize=10, textColor=self.dark_color,
+            fontName="Helvetica-Bold", spaceBefore=10, spaceAfter=4,
+        )
+
+        elements: list[Any] = [
+            Paragraph(data.pitcher_name, title_style),
+            Paragraph(' | '.join(part for part in (data.date, data.matchup) if part), subtitle_style),
+        ]
+
+        if not data.at_bats:
+            elements.append(Paragraph("No pitches found for the selected games.", self.styles["body"]))
+
+        available_width = self.PAGE_W - 2 * self.MARGIN
+        fixed_widths = [0.4 * inch, 1.4 * inch, 0.8 * inch, 0.8 * inch]
+        col_widths = fixed_widths + [available_width - sum(fixed_widths)]
+
+        for ab in data.at_bats:
+            heading_parts = [ab.inning, ab.batter_name]
+            side_abbr = {'Left': 'LHH', 'Right': 'RHH'}.get(ab.batter_side)
+            if side_abbr:
+                heading_parts[-1] += f" ({side_abbr})"
+            if ab.result:
+                heading_parts.append(ab.result)
+            heading = ' — '.join(part for part in heading_parts if part)
+
+            rows = [["#", "Pitch", "Velo", "Count", "Result"]]
+            for p in ab.pitches:
+                velo_str = f"{p.velo:.1f}" if p.velo is not None else ""
+                rows.append([str(p.number), p.pitch_type, velo_str, f"{p.balls}-{p.strikes}", p.result])
+
+            ab_table = Table(rows, colWidths=col_widths, repeatRows=1)
+            ab_table.setStyle(TableStyle([
+                *self._header_fill_commands(self.tertiary_color),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [self.WHITE, self.light_color]),
+            ]))
+
+            elements.append(KeepTogether([Paragraph(heading, ab_heading_style), ab_table]))
+            elements.append(Spacer(1, 0.05 * inch))
+
+        doc.build(elements)
+        return output_path
+
+    def generate_hitter_pitch_by_pitch_report(self, data: HitterPitchByPitchReport, output_path: str) -> str:
+        """
+        Generate the simplified pitch-by-pitch PDF for a hitter: a plain header
+        (hitter, date range) followed by every at-bat, each with the pitches seen
+        numbered in the order thrown. Mirrors generate_pitch_by_pitch_report, with
+        the opponent per at-bat shown as the pitcher faced rather than a batter.
+        """
+        frame = Frame(
+            self.MARGIN, self.FOOTER_HEIGHT,
+            self.PAGE_W - 2 * self.MARGIN, self.PAGE_H - self.FOOTER_HEIGHT - self.HEADER_HEIGHT,
+            leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0,
+        )
+        self._page_header_text = '  |  '.join(part for part in (data.hitter_name, data.date_range) if part)
+
+        doc = BaseDocTemplate(
+            output_path, pagesize=letter,
+            rightMargin=self.MARGIN, leftMargin=self.MARGIN, topMargin=0, bottomMargin=0,
+        )
+        doc.addPageTemplates([PageTemplate(id='continuation', frames=[frame], onPage=self._draw_page_decorations)])
+
+        title_style = ParagraphStyle(
+            "PbpTitle", fontSize=18, textColor=self.dark_color,
+            fontName="Helvetica-Bold", leading=22, spaceAfter=2,
+        )
+        subtitle_style = ParagraphStyle(
+            "PbpSubtitle", fontSize=10, textColor=self.dark_color,
+            fontName="Helvetica", leading=13, spaceAfter=10,
+        )
+        ab_heading_style = ParagraphStyle(
+            "PbpAbHeading", fontSize=10, textColor=self.dark_color,
+            fontName="Helvetica-Bold", spaceBefore=10, spaceAfter=4,
+        )
+
+        elements: list[Any] = [
+            Paragraph(data.hitter_name, title_style),
+            Paragraph(data.date_range, subtitle_style),
+        ]
+
+        if not data.at_bats:
+            elements.append(Paragraph("No pitches found for the selected range.", self.styles["body"]))
+
+        available_width = self.PAGE_W - 2 * self.MARGIN
+        fixed_widths = [0.4 * inch, 1.4 * inch, 0.8 * inch, 0.8 * inch]
+        col_widths = fixed_widths + [available_width - sum(fixed_widths)]
+
+        for ab in data.at_bats:
+            heading_parts = [ab.inning, ab.pitcher_name]
+            throws_abbr = {'Left': 'LHP', 'Right': 'RHP'}.get(ab.pitcher_throws)
+            if throws_abbr:
+                heading_parts[-1] += f" ({throws_abbr})"
+            if ab.result:
+                heading_parts.append(ab.result)
+            heading = ' — '.join(part for part in heading_parts if part)
+
+            rows = [["#", "Pitch", "Velo", "Count", "Result"]]
+            for p in ab.pitches:
+                velo_str = f"{p.velo:.1f}" if p.velo is not None else ""
+                rows.append([str(p.number), p.pitch_type, velo_str, f"{p.balls}-{p.strikes}", p.result])
+
+            ab_table = Table(rows, colWidths=col_widths, repeatRows=1)
+            ab_table.setStyle(TableStyle([
+                *self._header_fill_commands(self.tertiary_color),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [self.WHITE, self.light_color]),
+            ]))
+
+            elements.append(KeepTogether([Paragraph(heading, ab_heading_style), ab_table]))
+            elements.append(Spacer(1, 0.05 * inch))
+
+        doc.build(elements)
+        return output_path
+
     def generate_data_table(self, table: StatTable[Any] | None, title: str, available_width: float | None = None, col_widths: list[float] | None = None) -> list[Any]:
         """
         Render a StatTable as a titled table.
@@ -783,8 +976,7 @@ class PDF_Generator:
 
         data_table = Table(table_data, colWidths=widths, repeatRows=1)
         data_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), self.tertiary_color),
-            ('TEXTCOLOR', (0, 0), (-1, 0), self.WHITE),
+            *self._header_fill_commands(self.tertiary_color),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
@@ -881,7 +1073,9 @@ class PDF_Generator:
         games_label = f"{games} game{'s' if games != 1 else ''}" if games else ''
 
         # generate_header's positional slots were named for pitchers; the last three
-        # are free-form subtitle text, reused here for the team and game count
+        # are free-form subtitle text, reused here for the team and game count. Team
+        # and game count aren't a home/away pair, so join them like the running
+        # header below does rather than with '@'.
         elements.extend(self.generate_header(
             player_pfp,
             data.hitter_name,
@@ -891,7 +1085,8 @@ class PDF_Generator:
             games_label,
             '',
             '',
-            None
+            None,
+            '|',
         ))
         # Anything that overflows past this page has no header of its own --
         # switch to the reserved-band template so it gets the running header.
@@ -1005,10 +1200,10 @@ class PDF_Generator:
         ))
 
         stats = PitcherStatsTable([
-            PitchTypeStat(pitch_type='Fastball', thrown_pct=50.0, velo_low=90.0, velo_avg=93.2, velo_high=96.0, ivb=14.5, hb=8.3, spin=2345.0, vaa=-4.2, haa=0.3, rel_height=6.1, rel_side=-2.1, extension=6.8, axis='08:30', zone_pct=45.6, chase_pct=32.1, csw_pct=28.4),
-            PitchTypeStat(pitch_type='Slider', thrown_pct=22.2, velo_low=81.0, velo_avg=84.1, velo_high=87.0, ivb=2.1, hb=-5.6, spin=2567.0, vaa=-5.1, haa=-1.2, rel_height=6.0, rel_side=-2.0, extension=6.5, axis='02:45', zone_pct=38.2, chase_pct=41.5, csw_pct=35.2),
-            PitchTypeStat(pitch_type='Curveball', thrown_pct=16.7, velo_low=74.0, velo_avg=77.5, velo_high=81.0, ivb=-8.3, hb=6.1, spin=2789.0, vaa=-6.8, haa=0.8, rel_height=5.9, rel_side=-2.2, extension=6.3, axis='12:15', zone_pct=52.1, chase_pct=35.8, csw_pct=31.6),
-            PitchTypeStat(pitch_type='Changeup', thrown_pct=11.1, velo_low=82.0, velo_avg=85.0, velo_high=88.0, ivb=7.2, hb=-3.4, spin=1876.0, vaa=-4.9, haa=-0.5, rel_height=6.1, rel_side=-2.0, extension=6.7, axis='09:50', zone_pct=41.3, chase_pct=28.9, csw_pct=25.7),
+            PitchTypeStat(pitch_type='Fastball', thrown_pct=50.0, velo_low=90.0, velo_avg=93.2, velo_high=96.0, ivb=14.5, hb=8.3, spin=2345.0, vaa=-4.2, haa=0.3, rel_height=6.1, rel_side=-2.1, extension=6.8, axis='08:30', zone_pct=45.6, chase_pct=32.1, csw_pct=28.4, damage_pct=18.2),
+            PitchTypeStat(pitch_type='Slider', thrown_pct=22.2, velo_low=81.0, velo_avg=84.1, velo_high=87.0, ivb=2.1, hb=-5.6, spin=2567.0, vaa=-5.1, haa=-1.2, rel_height=6.0, rel_side=-2.0, extension=6.5, axis='02:45', zone_pct=38.2, chase_pct=41.5, csw_pct=35.2, damage_pct=9.5),
+            PitchTypeStat(pitch_type='Curveball', thrown_pct=16.7, velo_low=74.0, velo_avg=77.5, velo_high=81.0, ivb=-8.3, hb=6.1, spin=2789.0, vaa=-6.8, haa=0.8, rel_height=5.9, rel_side=-2.2, extension=6.3, axis='12:15', zone_pct=52.1, chase_pct=35.8, csw_pct=31.6, damage_pct=6.7),
+            PitchTypeStat(pitch_type='Changeup', thrown_pct=11.1, velo_low=82.0, velo_avg=85.0, velo_high=88.0, ivb=7.2, hb=-3.4, spin=1876.0, vaa=-4.9, haa=-0.5, rel_height=6.1, rel_side=-2.0, extension=6.7, axis='09:50', zone_pct=41.3, chase_pct=28.9, csw_pct=25.7, damage_pct=13.4),
         ])
         elements.extend(self.generate_pitcher_stats_table(stats))
 

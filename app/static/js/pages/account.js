@@ -44,6 +44,29 @@ async function updatePassword() {
     }
 }
 
+// ── Report Settings ──────────────────────────────────────────────────────────
+
+async function updateReportSettings() {
+    const chartStyle = document.getElementById('chart-style-toggle').checked ? 'pitch_point' : 'auto';
+    const inkMode = document.getElementById('ink-mode-toggle').checked ? 'light_ink' : 'full_color';
+
+    try {
+        const response = await fetch('/api/account/preferences', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chart_style: chartStyle, ink_mode: inkMode })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            toast('Preferences updated successfully.', 'success');
+        } else {
+            toast(data.error || 'Failed to update preferences.', 'error');
+        }
+    } catch {
+        toast('An error occurred. Please try again.', 'error');
+    }
+}
+
 // ── Delete Account ───────────────────────────────────────────────────────────
 
 function showDeleteForm() {

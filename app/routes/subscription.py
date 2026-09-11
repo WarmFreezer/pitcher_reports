@@ -40,15 +40,27 @@ ROSTER_REQUIRED_COLUMNS = {
 
 # ── Page ─────────────────────────────────────────────────────────────────────
 
+def _admin_access(active_school: db_models.School) -> tuple[bool, bool]:
+    """(has_access, is_master_acting) for subscription-page admin gates.
+
+    has_access is true for the school's admin_email holder (the original, permanent
+    mechanism -- kept as an unconditional fallback so a school can never end up
+    locked out of subscription management), anyone promoted to role == 'admin'
+    via the team-member table below, or a master currently acting as this school.
+    """
+    is_master_acting = current_user.role == 'master' and 'master_school_id' in session
+    has_access = is_master_acting or current_user.role == 'admin' or current_user.email == active_school.admin_email
+    return has_access, is_master_acting
+
+
 @subscription_bp.route('/subscription')
 @login_required
 def subscription_page() -> ResponseReturnValue:
     """Render the subscription/billing management page, admin only (or master, acting as this school)."""
     active_school = get_active_school()
-    is_master_acting = current_user.role == 'master' and 'master_school_id' in session
+    has_access, is_master_acting = _admin_access(active_school)
 
-    # Only the school's admin email may access this page, unless master is acting as it
-    if not is_master_acting and current_user.email != active_school.admin_email:
+    if not has_access:
         flash('You do not have permission to access that page.', 'danger')
         return redirect(url_for('pages.dashboard'))
 
@@ -69,9 +81,11 @@ def subscription_page() -> ResponseReturnValue:
         except Exception as e:
             current_app.logger.error(f"Error fetching invoices: {e}")
 
+    users = db_models.User.query.filter_by(school_id=active_school.id).order_by(db_models.User.first_name).all()
+
     return render_template(
         'subscription.html', branding=branding, logo_path=logo_path, invoices=invoices,
-        masquerading=is_master_acting, active_school=active_school,
+        masquerading=is_master_acting, active_school=active_school, school_users=users,
     )
 
 
@@ -82,11 +96,11 @@ def subscription_page() -> ResponseReturnValue:
 def cancel_subscription() -> ResponseReturnValue:
     """Cancel the school's subscription at the end of the current billing period."""
     active_school = get_active_school()
-    is_master_acting = current_user.role == 'master' and 'master_school_id' in session
+    has_access, _ = _admin_access(active_school)
     # Accounts without a Stripe subscription ID are permanent and cannot be cancelled here
     if not active_school.stripe_subscription_id:
         return jsonify({'message': 'This is a permanent subscription and cannot be cancelled.', 'permanent': True}), 200
-    if not is_master_acting and current_user.email != active_school.admin_email:
+    if not has_access:
         return jsonify({'error': 'Only the school administrator can cancel the subscription.'}), 403
     try:
         # cancel_at_period_end keeps access active until the billing period expires
@@ -104,8 +118,8 @@ def cancel_subscription() -> ResponseReturnValue:
 def start_subscription() -> ResponseReturnValue:
     """Reactivate a pending-cancellation subscription, or start Stripe checkout for a new one."""
     active_school = get_active_school()
-    is_master_acting = current_user.role == 'master' and 'master_school_id' in session
-    if not is_master_acting and current_user.email != active_school.admin_email:
+    has_access, _ = _admin_access(active_school)
+    if not has_access:
         return jsonify({'error': 'Only the school administrator can manage the subscription.'}), 403
     try:
         # If the subscription is still alive but pending cancellation, just undo it
@@ -140,8 +154,8 @@ def start_subscription() -> ResponseReturnValue:
 def update_subscription_settings() -> ResponseReturnValue:
     """Update the school's admin email, admin only."""
     active_school = get_active_school()
-    is_master_acting = current_user.role == 'master' and 'master_school_id' in session
-    if not is_master_acting and current_user.email != active_school.admin_email:
+    has_access, _ = _admin_access(active_school)
+    if not has_access:
         return jsonify({'error': 'Only the admin can update school settings.'}), 403
     data = request.get_json()
     new_email = data.get('admin_email', '').strip()
@@ -176,6 +190,42 @@ def rebrand_subscription() -> ResponseReturnValue:
     except Exception as e:
         current_app.logger.error(f"Error updating branding: {e}")
         return jsonify({'error': 'Failed to update branding.'}), 500
+
+
+# ── Team members ─────────────────────────────────────────────────────────────
+
+@subscription_bp.route('/api/subscription/users/<int:user_id>/role', methods=['POST'])
+@login_required
+def update_user_role(user_id: int) -> ResponseReturnValue:
+    """Promote/demote a school member between 'member' and 'admin'.
+
+    Admin-only. Scoped to the active school (never touches another tenant's users).
+    Master accounts are provisioned CLI-only and can't be granted or changed here.
+    """
+    active_school = get_active_school()
+    has_access, _ = _admin_access(active_school)
+    if not has_access:
+        return jsonify({'error': 'Only an admin can manage team members.'}), 403
+
+    data = request.get_json()
+    new_role = data.get('role')
+    if new_role not in ('member', 'admin'):
+        return jsonify({'error': 'Invalid role.'}), 400
+
+    user = db_models.User.query.filter_by(id=user_id, school_id=active_school.id).first()
+    if not user:
+        return jsonify({'error': 'User not found.'}), 404
+    if user.role == 'master':
+        return jsonify({'error': 'Master accounts are managed separately.'}), 400
+
+    try:
+        user.role = new_role
+        db.session.commit()
+        return jsonify({'message': 'Role updated successfully.'}), 200
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Error updating user role: {e}")
+        return jsonify({'error': 'Failed to update role.'}), 500
 
 
 # ── Branding PDF preview ─────────────────────────────────────────────────────
