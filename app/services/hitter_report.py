@@ -6,6 +6,7 @@ incoming frame usually spans several games. Nothing here assumes a single game; 
 only per-row requirement is the TrackMan schema below.
 '''
 
+import dataclasses
 import inspect
 import os
 from typing import Protocol, TypeVar, overload
@@ -32,9 +33,13 @@ from app.services.report_theme import (
     THEME_COLORS,
     ev_colormap,
     in_zone,
+    make_homeplate,
+    make_shadow_zone,
+    make_strike_zone,
     pitch_order,
 )
 
+import matplotlib.patheffects as patheffects
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.cm import ScalarMappable
@@ -189,6 +194,7 @@ def build_pitch_by_pitch_report(source: pd.DataFrame, batter_id: str | int, date
         table = rows.reindex(columns=_AB_KEY_COLUMNS + [
             'Pitcher', 'PitcherThrows', 'PitchofPA', 'TaggedPitchType', 'RelSpeed',
             'Balls', 'Strikes', 'PitchCall', 'PlayResult', 'KorBB',
+            'PlateLocSide', 'PlateLocHeight',
         ])
         table = table.dropna(subset=_AB_KEY_COLUMNS)
         table = table.sort_values(['Inning', 'PAofInning', 'PitchofPA'], kind='stable')
@@ -217,6 +223,8 @@ def build_pitch_by_pitch_report(source: pd.DataFrame, batter_id: str | int, date
                     balls=int(pitch['Balls']) if pd.notna(pitch['Balls']) else 0,
                     strikes=int(pitch['Strikes']) if pd.notna(pitch['Strikes']) else 0,
                     result=str(pitch['PitchCall']) if pd.notna(pitch['PitchCall']) else '',
+                    plate_loc_side=float(pitch['PlateLocSide']) if pd.notna(pitch['PlateLocSide']) else None,
+                    plate_loc_height=float(pitch['PlateLocHeight']) if pd.notna(pitch['PlateLocHeight']) else None,
                 )
                 for i, (_, pitch) in enumerate(pitches_df.iterrows(), start=1)
             ]
@@ -230,6 +238,75 @@ def build_pitch_by_pitch_report(source: pd.DataFrame, batter_id: str | int, date
     except Exception as e:
         print(f"Error building pitch-by-pitch report for batter ID {batter_id}: {e}")
         return None
+
+
+_AB_CHART_POINT_COLOR = '#4C72B0'
+
+
+def build_ab_pitch_charts(
+    at_bats: list[HitterPitchByPitchAtBat],
+    batter_id: str | int,
+    user_id: int,
+    output_dir: str,
+    theme: str = 'light',
+) -> list[HitterPitchByPitchAtBat]:
+    """
+    Render one small strike-zone panel per at-bat: every pitch as a numbered dot
+    (position + pitch number only -- pitch type and result are already in the
+    pitch-by-pitch table), styled like the app's other zone charts
+    (make_strike_zone/make_shadow_zone/make_homeplate, same point marker as
+    pitch_heat_map_by_batter_side's non-heatmap mode). Requested by Winthrop for
+    the hitter pitch-by-pitch PDF, where report_lab_generator places each chart
+    directly above its own AB's table.
+
+    Returns a new list with chart_path filled in on each AB that had at least one
+    located pitch; an AB with no location data (or that fails to render) keeps
+    chart_path=None, which report_lab_generator treats as "no chart for this AB"
+    rather than an error.
+    """
+    matplotlib.rcParams.update(THEME_COLORS.get(theme, THEME_COLORS['light']))
+
+    charted: list[HitterPitchByPitchAtBat] = []
+    for n, ab in enumerate(at_bats, start=1):
+        located = [p for p in ab.pitches if p.plate_loc_side is not None and p.plate_loc_height is not None]
+        if not located:
+            charted.append(ab)
+            continue
+
+        fig = None
+        try:
+            fig, ax = plt.subplots(1, 1, figsize=(2.6, 3.4))
+            ax.set_xlim(-2.5, 2.5)
+            ax.set_ylim(0, 5)
+            ax.set_aspect('equal', adjustable='box')
+            ax.axis('off')
+            ax.add_patch(make_strike_zone())
+            ax.add_patch(make_shadow_zone())
+            ax.add_patch(make_homeplate())
+            ax.set_title(f'AB {n}', fontsize=11, pad=6)
+
+            for pitch in located:
+                ax.scatter(
+                    pitch.plate_loc_side, pitch.plate_loc_height,
+                    color=_AB_CHART_POINT_COLOR, s=220, edgecolors='black', linewidth=0.8, zorder=5,
+                )
+                ax.annotate(
+                    str(pitch.number), (pitch.plate_loc_side, pitch.plate_loc_height),
+                    ha='center', va='center', fontsize=7, fontweight='bold', color='white', zorder=6,
+                    path_effects=[patheffects.withStroke(linewidth=1.2, foreground='black')],
+                )
+
+            path = os.path.join(output_dir, f'{user_id}_hitter_{batter_id}_ab_chart_{n}.png')
+            fig.savefig(path, dpi=300, bbox_inches='tight', transparent=True)
+            charted.append(dataclasses.replace(ab, chart_path=path))
+        except Exception as e:
+            print(f"Error generating AB chart {n} for batter ID {batter_id}: {e}")
+            charted.append(ab)
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    return charted
 
 
 def _swings(pitch_calls: pd.Series) -> pd.Series:

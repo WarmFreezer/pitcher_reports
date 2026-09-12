@@ -18,6 +18,10 @@ class HitterPitchByPitchAtBat:
     pitcher_throws: str
     result: str  # final PA outcome (PlayResult, or KorBB for a walk/strikeout)
     pitches: list[PitchByPitchPitch]
+    # Path to this AB's pitch-location chart PNG, filled in by
+    # hitter_report.build_ab_pitch_charts after this dataclass is built. None
+    # until then, or if the AB had no located pitches to plot.
+    chart_path: str | None = None
 
 
 @dataclass(frozen=True)

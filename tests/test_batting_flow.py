@@ -9,6 +9,7 @@ The fixtures give batter 500 five batted balls total: three on 2026-03-01 (a lin
 single, a ground out, and a home run, all vs RHP) and two on 2026-03-08 (a double
 and a ground out, both vs LHP). Several assertions below depend on that split.
 """
+import glob
 import io
 import json
 import os
@@ -526,7 +527,10 @@ def test_regenerating_clears_the_previous_selection(archived_games, client, app,
 
     reports_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'reports')
     remaining = {f for f in os.listdir(reports_dir) if '_hitter_' in f and 'merged' not in f}
-    assert remaining == {f'{home_user.id}_hitter_{BATTER_ID}_report.pdf'}
+    assert remaining == {
+        f'{home_user.id}_hitter_{BATTER_ID}_report.pdf',
+        f'{home_user.id}_hitter_{BATTER_ID}_pitch_by_pitch.pdf',
+    }
 
 
 # --- export ----------------------------------------------------------------
@@ -547,6 +551,87 @@ def test_export_before_generating_returns_404(archived_games, client):
 
     assert resp.status_code == 404
     assert 'Generate it first' in resp.get_json()['error']
+
+
+def test_report_eagerly_builds_the_pitch_by_pitch_pdf_and_charts(archived_games, client, app, home_school, home_user):
+    """
+    The pitch-by-pitch PDF (and its per-AB charts) must exist on disk as soon as
+    /report finishes, not only after the download link is clicked -- building it
+    lazily on click was the multi-second lag this eager build replaces.
+    """
+    _report_data(client)
+
+    output_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'reports')
+    pdf_path = os.path.join(output_dir, f'{home_user.id}_hitter_{BATTER_ID}_pitch_by_pitch.pdf')
+    assert os.path.exists(pdf_path)
+    assert os.path.getsize(pdf_path) > 0
+
+    # The fixtures carry PlateLocSide/PlateLocHeight on every row, so every one of
+    # this batter's 8 at-bats (grouped by GameID/Inning/Top-Bottom/PAofInning) gets
+    # its own chart.
+    temp_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'temp')
+    for n in range(1, 9):
+        path = os.path.join(temp_dir, f'{home_user.id}_hitter_{BATTER_ID}_ab_chart_{n}.png')
+        assert os.path.exists(path), f'missing chart {n}'
+        assert os.path.getsize(path) > 0
+
+
+def test_pitch_by_pitch_download_serves_the_prebuilt_pdf(archived_games, client):
+    _report_data(client)
+
+    resp = client.get(f'/api/batting/pitch-by-pitch?batter_id={BATTER_ID}&target=own')
+
+    assert resp.status_code == 200
+    assert resp.mimetype == 'application/pdf'
+    assert resp.data.startswith(b'%PDF')
+    assert 'attachment' in resp.headers['Content-Disposition']
+
+
+def test_pitch_by_pitch_download_before_generating_returns_404(archived_games, client):
+    resp = client.get(f'/api/batting/pitch-by-pitch?batter_id={BATTER_ID}&target=own')
+
+    assert resp.status_code == 404
+    assert 'Generate it first' in resp.get_json()['error']
+
+
+def test_pitch_by_pitch_pdf_pairs_charts_and_tables_with_an_odd_at_bat_count(app, home_school, tmp_path):
+    """
+    Charts and tables are laid out two-per-line so a chart never drifts far from
+    its own table. An odd at-bat count leaves the last pair's second cell empty --
+    this must not raise building the PDF.
+    """
+    from app.services import hitter_report
+    from app.services.branding_loader import BrandingLoader
+    from app.services.hitter_stats import HitterPitchByPitchAtBat, HitterPitchByPitchReport
+    from app.services.pitch_stats import PitchByPitchPitch
+    from app.services.report_lab_generator import PDF_Generator
+
+    at_bats = [
+        HitterPitchByPitchAtBat(
+            inning=f'Bottom {n}', pitcher_name='Doe, John', pitcher_throws='Right', result='Out',
+            pitches=[PitchByPitchPitch(
+                number=1, pitch_type='Fastball', velo=90.0, balls=0, strikes=1, result='StrikeCalled',
+                plate_loc_side=0.0, plate_loc_height=2.5,
+            )],
+        )
+        for n in range(1, 6)  # odd count -> last pair has only one AB
+    ]
+
+    chart_dir = tmp_path / 'charts'
+    chart_dir.mkdir()
+    charted_at_bats = hitter_report.build_ab_pitch_charts(at_bats, '500', 1, str(chart_dir))
+    assert all(ab.chart_path and os.path.exists(ab.chart_path) for ab in charted_at_bats)
+
+    pbp_report = HitterPitchByPitchReport(
+        hitter_name='Alpha, Adam', date_range='2026-01-01 - 2026-01-01', at_bats=charted_at_bats,
+    )
+    branding = BrandingLoader.get_branding(home_school.id)
+    gen = PDF_Generator(school_id=home_school.id, branding=branding, ink_mode='full_color')
+    output_path = str(tmp_path / 'pbp_regression.pdf')
+
+    gen.generate_hitter_pitch_by_pitch_report(pbp_report, output_path)
+
+    assert os.path.exists(output_path)
 
 
 # --- empty archive ---------------------------------------------------------
