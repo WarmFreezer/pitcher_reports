@@ -286,12 +286,16 @@ def build_ab_pitch_charts(
             ax.set_title(f'AB {n}', fontsize=11, pad=6)
 
             for pitch in located:
+                # located's filter already guarantees these aren't None; re-narrow
+                # into locals since mypy doesn't carry that through the list
+                side, height = pitch.plate_loc_side, pitch.plate_loc_height
+                assert side is not None and height is not None
                 ax.scatter(
-                    pitch.plate_loc_side, pitch.plate_loc_height,
+                    side, height,
                     color=_AB_CHART_POINT_COLOR, s=220, edgecolors='black', linewidth=0.8, zorder=5,
                 )
                 ax.annotate(
-                    str(pitch.number), (pitch.plate_loc_side, pitch.plate_loc_height),
+                    str(pitch.number), (side, height),
                     ha='center', va='center', fontsize=7, fontweight='bold', color='white', zorder=6,
                     path_effects=[patheffects.withStroke(linewidth=1.2, foreground='black')],
                 )
