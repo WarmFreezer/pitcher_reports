@@ -88,6 +88,10 @@ class PitchByPitchPitch:
     balls: int
     strikes: int
     result: str  # this pitch's own PitchCall (e.g. "StrikeSwinging", "BallCalled", "InPlay")
+    # Only populated on the hitter side (see hitter_report.build_ab_pitch_charts) --
+    # defaults keep report.py's pitcher-side constructor unchanged.
+    plate_loc_side: float | None = None
+    plate_loc_height: float | None = None
 
 
 @dataclass(frozen=True)

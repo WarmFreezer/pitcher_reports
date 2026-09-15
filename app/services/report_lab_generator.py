@@ -12,6 +12,7 @@ from reportlab.lib import colors
 from reportlab.lib.units import inch
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.platypus import (
     Paragraph, Spacer, Table, TableStyle,
     Image, Frame, PageTemplate, BaseDocTemplate, KeepInFrame,
@@ -27,7 +28,7 @@ from app.services.pitch_stats import (
     PitchUsageTable,
     PitchByPitchReport,
 )
-from app.services.hitter_stats import HitterReportRequest, HitterPitchByPitchReport
+from app.services.hitter_stats import HitterReportRequest, HitterPitchByPitchAtBat, HitterPitchByPitchReport
 from app.services.stat_table import StatTable
 from .branding_loader import BrandingLoader
 
@@ -868,9 +869,12 @@ class PDF_Generator:
         numbered in the order thrown. Mirrors generate_pitch_by_pitch_report, with
         the opponent per at-bat shown as the pitcher faced rather than a batter.
         """
+        # A small gap above FOOTER_HEIGHT so a page-ending table doesn't sit flush
+        # against the copyright footer.
+        footer_gap = 0.15 * inch
         frame = Frame(
-            self.MARGIN, self.FOOTER_HEIGHT,
-            self.PAGE_W - 2 * self.MARGIN, self.PAGE_H - self.FOOTER_HEIGHT - self.HEADER_HEIGHT,
+            self.MARGIN, self.FOOTER_HEIGHT + footer_gap,
+            self.PAGE_W - 2 * self.MARGIN, self.PAGE_H - self.FOOTER_HEIGHT - self.HEADER_HEIGHT - footer_gap,
             leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0,
         )
         self._page_header_text = '  |  '.join(part for part in (data.hitter_name, data.date_range) if part)
@@ -903,10 +907,24 @@ class PDF_Generator:
             elements.append(Paragraph("No pitches found for the selected range.", self.styles["body"]))
 
         available_width = self.PAGE_W - 2 * self.MARGIN
-        fixed_widths = [0.4 * inch, 1.4 * inch, 0.8 * inch, 0.8 * inch]
-        col_widths = fixed_widths + [available_width - sum(fixed_widths)]
+        gutter = 0.3 * inch
+        half_width = (available_width - gutter) / 2
+        fixed_widths = [0.3 * inch, 0.9 * inch, 0.55 * inch, 0.55 * inch]
+        inner_col_widths = fixed_widths + [half_width - sum(fixed_widths)]
+        chart_w = min(half_width, 2.0 * inch)
 
-        for ab in data.at_bats:
+        def truncate_to_width(text: str, font_name: str, font_size: float, max_width: float) -> str:
+            """Hard-cap a string to one line at max_width, since a wrapped second
+            line would push that cell's chart+table down and throw off alignment
+            with its neighbor in the pair row."""
+            if stringWidth(text, font_name, font_size) <= max_width:
+                return text
+            ellipsis = '…'
+            while text and stringWidth(text + ellipsis, font_name, font_size) > max_width:
+                text = text[:-1]
+            return (text + ellipsis) if text else ellipsis
+
+        def ab_cell(ab: HitterPitchByPitchAtBat) -> list[Any]:
             heading_parts = [ab.inning, ab.pitcher_name]
             throws_abbr = {'Left': 'LHP', 'Right': 'RHP'}.get(ab.pitcher_throws)
             if throws_abbr:
@@ -914,25 +932,62 @@ class PDF_Generator:
             if ab.result:
                 heading_parts.append(ab.result)
             heading = ' — '.join(part for part in heading_parts if part)
+            heading = truncate_to_width(heading, ab_heading_style.fontName, ab_heading_style.fontSize, half_width)
 
             rows = [["#", "Pitch", "Velo", "Count", "Result"]]
             for p in ab.pitches:
                 velo_str = f"{p.velo:.1f}" if p.velo is not None else ""
                 rows.append([str(p.number), p.pitch_type, velo_str, f"{p.balls}-{p.strikes}", p.result])
 
-            ab_table = Table(rows, colWidths=col_widths, repeatRows=1)
+            ab_table = Table(rows, colWidths=inner_col_widths, repeatRows=1)
             ab_table.setStyle(TableStyle([
                 *self._header_fill_commands(self.tertiary_color),
                 ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                 ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('FONTSIZE', (0, 0), (-1, -1), 7),
                 ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
                 ('ROWBACKGROUNDS', (0, 1), (-1, -1), [self.WHITE, self.light_color]),
             ]))
 
-            elements.append(KeepTogether([Paragraph(heading, ab_heading_style), ab_table]))
-            elements.append(Spacer(1, 0.05 * inch))
+            cell: list[Any] = [Paragraph(heading, ab_heading_style)]
+            if ab.chart_path and os.path.exists(ab.chart_path):
+                chart_img = PILImage.open(ab.chart_path)
+                chart_h = chart_w * chart_img.height / chart_img.width
+                chart_holder = Table([[Image(ab.chart_path, width=chart_w, height=chart_h)]], colWidths=[half_width])
+                chart_holder.setStyle(TableStyle([
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+                    ('TOPPADDING', (0, 0), (-1, -1), 0),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+                ]))
+                cell.append(chart_holder)
+            cell.append(ab_table)
+            return cell
+
+        # Two ABs per line, chart directly above its own table, so a coach reads
+        # the chart and the pitch list together instead of flipping pages between
+        # them -- a single-row Table per pair keeps both cells on the same page
+        # (ReportLab pushes the whole row to the next page rather than splitting
+        # a cell's chart away from its table).
+        for i in range(0, len(data.at_bats), 2):
+            pair = data.at_bats[i:i + 2]
+            # The gutter is its own middle column rather than cell padding on the
+            # second AB -- padding would shrink that cell's usable width relative
+            # to the first, making its heading/table wrap differently and throwing
+            # off the two cells' alignment.
+            row = [ab_cell(pair[0]), '', ab_cell(pair[1]) if len(pair) > 1 else '']
+            pair_table = Table([row], colWidths=[half_width, gutter, half_width])
+            pair_table.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+                ('TOPPADDING', (0, 0), (-1, -1), 0),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+            ]))
+            elements.append(pair_table)
+            elements.append(Spacer(1, 0.15 * inch))
 
         doc.build(elements)
         return output_path
@@ -1255,7 +1310,10 @@ def merge_pdfs(id: int, pdf_folder: str, output_path: str, prefix: str = "pitche
     Merge one user's reports of a single kind into a combined PDF.
 
     Only files named {id}_{prefix}_*.pdf are collected, so a hitter run cannot
-    sweep in the pitcher PDFs sharing the folder.
+    sweep in the pitcher PDFs sharing the folder. Also excludes the standalone
+    pitch-by-pitch companion PDF ({id}_hitter_{batter_id}_pitch_by_pitch.pdf) --
+    it shares the {id}_hitter_ prefix but is a separate optional download, not
+    part of the standard per-hitter report.
 
     Returns the output path, or None when nothing matched -- callers use that to
     decide whether to offer a combined download at all.
@@ -1270,7 +1328,9 @@ def merge_pdfs(id: int, pdf_folder: str, output_path: str, prefix: str = "pitche
             continue
 
         pdf_path = os.path.join(pdf_folder, pdf)
-        if os.path.exists(pdf_path) and pdf_path.endswith('.pdf') and pdf.startswith(f"{id}_{prefix}_"):
+        if (os.path.exists(pdf_path) and pdf_path.endswith('.pdf')
+                and pdf.startswith(f"{id}_{prefix}_")
+                and not pdf.endswith('_pitch_by_pitch.pdf')):
             merger.append(pdf_path)
             appended += 1
 

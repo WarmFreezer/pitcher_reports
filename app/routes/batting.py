@@ -1,3 +1,4 @@
+import dataclasses
 import os
 import gc
 import glob
@@ -142,6 +143,18 @@ def _build_one_hitter_report(task: dict[str, Any]) -> dict[str, Any]:
         ), os.path.abspath(os.path.join(
             school_output_folder, f'{user_id}_hitter_{batter_id}_report.pdf')))
 
+        # Built eagerly here (like the main PDF above) rather than on download
+        # click -- the download link is shown as soon as this report card
+        # renders, so building on click meant a multi-second lag between
+        # pressing it and the file actually arriving.
+        pbp_report = hitter_report.build_pitch_by_pitch_report(source, batter_id, task['date_range'])
+        if pbp_report is not None:
+            charted_at_bats = hitter_report.build_ab_pitch_charts(
+                pbp_report.at_bats, batter_id, user_id, school_temp_folder, theme='light')
+            pbp_report = dataclasses.replace(pbp_report, at_bats=charted_at_bats)
+            gen.generate_hitter_pitch_by_pitch_report(pbp_report, os.path.abspath(os.path.join(
+                school_output_folder, f'{user_id}_hitter_{batter_id}_pitch_by_pitch.pdf')))
+
         chart_base = f'/storage/schools/{school_id}/temp/{user_id}_hitter_{batter_id}_spray'
         return {
             'ok': True,
@@ -284,6 +297,7 @@ def batting_report() -> ResponseReturnValue:
     # earlier selection can never be served or swept into the merged file
     stale = glob.glob(os.path.join(school_temp_folder, f'{current_user.id}_hitter_*_spray_*.png'))
     stale += glob.glob(os.path.join(school_temp_folder, f'{current_user.id}_hitter_*_custom_*.png'))
+    stale += glob.glob(os.path.join(school_temp_folder, f'{current_user.id}_hitter_*_ab_chart_*.png'))
     stale += glob.glob(os.path.join(school_output_folder, f'{current_user.id}_hitter_*.pdf'))
     stale += glob.glob(os.path.join(school_output_folder, f'{current_user.id}_merged_hitter_*.pdf'))
     for path in stale:
@@ -415,9 +429,11 @@ def batting_export() -> ResponseReturnValue:
 @login_required
 def batting_pitch_by_pitch() -> ResponseReturnValue:
     """
-    Build and stream a simplified pitch-by-pitch PDF for one hitter: a header
-    (hitter/date range) followed by every at-bat's pitches, numbered in the order
-    thrown, with the pitcher faced shown per at-bat rather than a batter.
+    Stream a pitch-by-pitch PDF built by the preceding /report call (see
+    _build_one_hitter_report). Mirrors batting_export's "serve what's already on
+    disk" pattern -- the download link only ever appears once /report has already
+    built this file, so there's no build-time lag between clicking it and the
+    file arriving.
     """
     batter_id = request.args.get('batter_id')
     if not batter_id:
@@ -426,25 +442,23 @@ def batting_pitch_by_pitch() -> ResponseReturnValue:
     games_dir, start_date, end_date, error = _resolve_range(request.args)
     if error:
         return error
-    assert games_dir is not None and start_date is not None and end_date is not None
+    assert games_dir is not None
 
-    source = game_archive.load_range(games_dir, start_date, end_date)
-    if source.empty:
-        return jsonify({'error': 'No data in the selected date range.'}), 404
-
-    date_range = f'{_display_date(start_date)} - {_display_date(end_date)}'
-    pbp_report = hitter_report.build_pitch_by_pitch_report(source, batter_id, date_range)
-    if pbp_report is None:
-        return jsonify({'error': 'No data for that hitter in the selected range.'}), 404
-
-    branding = BrandingLoader.get_branding(current_user.school_id)
-    gen = PDF_Generator(school_id=current_user.school_id, branding=branding, ink_mode=current_user.ink_mode)
+    target = request.args.get('target', 'own')
+    hitters = game_archive.list_hitters(
+        games_dir, current_user.school.trackman_id, target,
+        start_date=start_date, end_date=end_date,
+    )
+    hitter = next((h for h in hitters if h['id'] == str(batter_id)), None)
+    if hitter is None:
+        return jsonify({'error': 'Hitter not found'}), 404
 
     _, school_output_folder = get_school_directories()
-    output_path = os.path.abspath(os.path.join(
+    path = os.path.abspath(os.path.join(
         school_output_folder, f'{current_user.id}_hitter_{batter_id}_pitch_by_pitch.pdf'))
-    gen.generate_hitter_pitch_by_pitch_report(pbp_report, output_path)
+    if not os.path.exists(path):
+        return jsonify({'error': 'Report not found. Generate it first.'}), 404
 
-    safe_name = pbp_report.hitter_name.replace(', ', '_').replace(' ', '_') or f'hitter_{batter_id}'
-    return send_file(output_path, mimetype='application/pdf',
+    safe_name = hitter['name'].replace(', ', '_').replace(' ', '_')
+    return send_file(path, mimetype='application/pdf',
                       as_attachment=True, download_name=f'{safe_name}_pitch_by_pitch.pdf')
