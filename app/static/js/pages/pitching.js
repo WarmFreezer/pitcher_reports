@@ -325,8 +325,7 @@ function chartBlock(lightSrc, darkSrc, label, theme, alt, imgClass) {
     img.alt = alt;
     img.className = `report-img ${imgClass}`;
     img.onerror = function () {
-        this.parentElement.innerHTML =
-            '<p style="color: var(--danger);">Chart not available. Update your subscription.</p>';
+        this.outerHTML = '<p class="chart-unavailable">Not available on your plan</p>';
     };
 
     wrapper.appendChild(title);

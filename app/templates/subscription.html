@@ -29,7 +29,7 @@
     <div id="navbar-placeholder"></div>
 
     {% if masquerading %}
-    <div class="bubble" style="background-color: var(--accent); color: var(--light); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; max-width: 500px; margin: 12px auto;">
+    <div class="bubble" style="background-color: var(--accent); color: var(--text-on-accent); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; max-width: 500px; margin: 12px auto;">
         <span>Master mode — acting as <strong>{{ active_school.name }}</strong></span>
         <form action="{{ url_for('master.exit_masquerade') }}" method="POST" style="margin: 0;">
             <button type="submit" class="download-btn-small">Exit</button>
@@ -41,7 +41,7 @@
 
         <div class="bubble">
             <h2>Subscription Status</h2>
-            <p>Current Plan: {{ active_school.stripe_subscription_status }}</p>
+            <p>Current Plan: Tier {{ active_school.tier }} ({{ active_school.stripe_subscription_status }})</p>
             <p>Admin Email:</p>
             <input id="admin-email" type="email" class="bubble" value="{{ active_school.admin_email }}" style="color: var(--text-primary); margin: 8px 0; background-color: var(--bg-card); border: 2px solid var(--accent); font-size: 16px; padding: 16px">
         </div>
@@ -166,6 +166,23 @@
             <p style="margin: 8px 0;">📧 <a href="mailto:thomas.eubank516@gmail.com" style="color: var(--accent);">thomas.eubank516@gmail.com</a></p>
             <p style="margin: 8px 0;">📞 <a href="tel:+16063034052" style="color: var(--accent);">606-303-4052</a></p>
         </div>
+
+        {% if active_school.tier in (1, 2) and active_school.stripe_subscription_status in ('active', 'trialing') %}
+        <div class="bubble">
+            <h2>Change Plan</h2>
+            <div class="custom-dropdown" style="margin: 8px 0; max-width: none;">
+                <input type="hidden" id="tier-select-value" class="dropdown-value" value="{{ active_school.tier }}">
+                <button type="button" class="dropdown-trigger bubble" style="color: var(--text-primary); margin: 0; background-color: var(--bg-card); border: 2px solid var(--accent); font-size: 16px; padding: 16px; width: 100%;">
+                    {{ 'Tier 1 — $249/yr — tables only' if active_school.tier == 1 else 'Tier 2 — $499/yr — tables + charts' }} ▼
+                </button>
+                <div class="dropdown-content">
+                    <button type="button" class="dropdown-option" data-value="1">Tier 1 — $249/yr — tables only</button>
+                    <button type="button" class="dropdown-option" data-value="2">Tier 2 — $499/yr — tables + charts</button>
+                </div>
+            </div>
+            <button class="download-btn" onclick="changeTier()">Change Plan</button>
+        </div>
+        {% endif %}
 
         {% if active_school.stripe_subscription_status in ('active', 'trialing') and active_school.stripe_subscription_id %}
         <div class="bubble" style="border-color: #d22d49;">

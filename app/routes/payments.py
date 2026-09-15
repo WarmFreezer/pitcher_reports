@@ -10,23 +10,6 @@ payment_bp = Blueprint('payment', __name__)
 stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
 
 
-@payment_bp.route('/subscribe', methods=['POST'])
-def subscribe() -> ResponseReturnValue:
-    """Legacy endpoint used by the embedded checkout JS — creates a session for a new school signup."""
-    try:
-        checkout_session = stripe.checkout.Session.create(
-            line_items=[{'price': os.environ.get('STRIPE_PRICE_ID', ''), 'quantity': 1}],
-            mode='subscription',
-            ui_mode='embedded',
-            return_url='http://localhost:5000/return?session_id={CHECKOUT_SESSION_ID}',
-            metadata=session['pending_school'],
-            customer_email=session['pending_school']['admin_email']
-        )
-        return jsonify({'clientSecret': checkout_session.client_secret, 'id': checkout_session.id})
-    except Exception as e:
-        return jsonify(error=str(e)), 403
-
-
 @payment_bp.route('/return', methods=['GET'])
 def return_from_checkout() -> ResponseReturnValue:
     """Land here after Stripe checkout; create or reactivate the school once payment succeeded."""
@@ -59,6 +42,7 @@ def return_from_checkout() -> ResponseReturnValue:
                             slug=metadata['slug'],
                             admin_email=metadata['admin_email'],
                             trackman_id=metadata.get('trackman_id') or None,
+                            tier=int(metadata.get('tier', 2)),
                             stripe_customer_id=str(checkout_session.customer),
                             stripe_subscription_id=str(subscription_id),
                             stripe_subscription_status=subscription.status

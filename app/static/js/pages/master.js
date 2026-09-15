@@ -1,3 +1,14 @@
+// ── Tier dropdowns (auto-submit) ─────────────────────────────────────────────
+
+// core.js's dropdownInit() sets the hidden .dropdown-value on click; this listener
+// is registered afterward (core.js loads first, see master_schools.html), so it
+// always runs after the value is set and submits the already-updated form.
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.tier-dropdown .dropdown-option').forEach(btn => {
+        btn.addEventListener('click', () => btn.closest('form').submit());
+    });
+});
+
 // ── Default branding color picker ────────────────────────────────────────────
 
 const DEFAULT_COLOR_TOKENS = ['primary', 'secondary', 'tertiary', 'accent'];

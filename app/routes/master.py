@@ -74,6 +74,27 @@ def act_as_school(school_id: int) -> ResponseReturnValue:
     return redirect(url_for('subscription.subscription_page'))
 
 
+@master_bp.route('/schools/<int:school_id>/tier', methods=['POST'])
+@login_required
+@master_required
+def update_school_tier(school_id: int) -> ResponseReturnValue:
+    """Set a school's tier directly, no Stripe call -- lets a school be comped into a
+    tier (e.g. Tier 3 custom-report access) without changing what it's billed, and
+    works for permanent schools with no stripe_subscription_id at all."""
+    school = db.session.get(School, school_id)
+    if not school:
+        flash('Organization not found.', 'danger')
+        return redirect(url_for('master.schools_list'))
+    tier = request.form.get('tier')
+    if tier not in ('1', '2', '3'):
+        flash('Invalid tier.', 'danger')
+        return redirect(url_for('master.schools_list'))
+    school.tier = int(tier)
+    db.session.commit()
+    flash(f'{school.name} moved to Tier {tier}.', 'success')
+    return redirect(url_for('master.schools_list'))
+
+
 @master_bp.route('/exit', methods=['POST'])
 @login_required
 @master_required

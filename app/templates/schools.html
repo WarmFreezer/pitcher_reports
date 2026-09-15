@@ -34,12 +34,18 @@
 
                 <h2>Create an Organization</h2>
                 <p>To access the full features of MSU Baseball Analytics, please create an organization.</p>
+                <p style="margin: 8px 0;">
+                    Plan: <strong>{{ 'Tier 1 — $249/yr — tables only' if tier == '1' else 'Tier 2 — $499/yr — tables + charts' }}</strong>
+                    &nbsp;<a href="{{ url_for('auth.schools') }}" style="color: var(--text-secondary);">Change plan</a>
+                </p>
                 <form method="POST" class="auth-form">
-                    <input class="bubble" type="name" name="name" placeholder="Organization Name" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
+                    <input type="hidden" name="tier" value="{{ tier }}">
+                    <input class="bubble" type="name" name="name" value="{{ request.args.get('name', '') }}" placeholder="Organization Name" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
                     <input class="bubble" type="slug" name="slug" placeholder="Organization Slug" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
-                    <input class="bubble" type="email" name="admin_email" placeholder="Admin Email" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
+                    <input class="bubble" type="email" name="admin_email" value="{{ request.args.get('admin_email', '') }}" placeholder="Admin Email" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
                     <input class="bubble" type="email" name="confirm_admin_email" placeholder="Confirm Admin Email" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
                     <input class="bubble" type="text" name="trackman_id" placeholder="TrackMan Team ID" required style="color: var(--tertiary); margin: 8px 0; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 16px"><br>
+
                     <button type="submit" class="upload-btn" id="create-school-button" style="max-width: 750px; width: 100%;">Create Organization</button>
                 </form>
             </div>

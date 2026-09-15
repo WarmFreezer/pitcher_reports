@@ -248,5 +248,5 @@ input:-webkit-autofill:active {
 }
 
 .dropdown-option:hover {
-    background-color: var(--light);
+    background-color: var(--bg-hover);
 }

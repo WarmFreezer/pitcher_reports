@@ -2,7 +2,7 @@
 Strikeouts - Skip for now
 Share Page?? - Skip for now
 
-Instead of spin, map trajectory on a 'break map' following each section of trajectory -- BLOCKED: waiting on Trackman trajectory column names before starting
+In addition to spin, map trajectory on a 'break map' following each section of trajectory -- BLOCKED: waiting on Trackman trajectory column names before starting
 Email Confirmations, newsletters - high priority
 DB/Accounts change - Look into different method for verifying school email - med priority (discuss with me)
 
@@ -11,7 +11,14 @@ Team Overview reworked since same stats can be found in a pitcher/hitter report 
 Pricing Changes - 3 tiers, Add form to request custom reports - med priority (discuss with me and should be its own commit)
 - Tier 1: 249/yr, access to tables, not charts
 - Tier 2: 499/yr, access to tables and chart
-- Tier 3: 899/999/year access to tables, charts, and custom pitching report (payments up to 3 after custom reports are added)
+- Tier 3: 899/yr access to tables, charts, and custom pitching report -- not self-serve, master
+  moves a school here manually once a custom report is actually built for them
+- School.tier (price/base-chart-access) and custom-report availability are deliberately
+  independent: master can enable custom reports for a Tier 1/2 school (lower rate) just by
+  uploading its custom_pitcher_report.py/custom_hitter_report.py -- that's not a bug, don't
+  couple them later without discussing it first
+- Self-serve Tier 1<->2 changes (subscription.html "Change Plan"), master tier-edit dropdown
+  (master_schools.html), and the dead /subscribe endpoint removal are all done.
 
 ------ Deferred from the /pitching + /batting restructure ------
 outings.date is String(20) holding dates -- should be db.Date

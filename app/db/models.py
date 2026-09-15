@@ -40,6 +40,7 @@ class School(BaseModel):
     stripe_subscription_id: Mapped[str | None] = mapped_column(db.String(100), unique=True)
     stripe_subscription_status: Mapped[str | None] = mapped_column(db.String(20), default='inactive')
     trackman_id: Mapped[str | None] = mapped_column(db.String(20))
+    tier: Mapped[int] = mapped_column(db.Integer, default=2)
 
     users = db.relationship('User', backref='school', lazy=True)
 
@@ -54,6 +55,16 @@ class School(BaseModel):
     def is_active(self) -> bool:
         """Whether the school's Stripe subscription currently grants access."""
         return self.stripe_subscription_status in ('active', 'trialing')
+
+
+class TierThreeRequest(BaseModel):
+    """A no-payment expression of interest in Tier 3, captured on the plan-select page."""
+    __tablename__ = 'tier_three_requests'
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    org_name: Mapped[str] = mapped_column(db.String(100))
+    contact_email: Mapped[str] = mapped_column(db.String(120))
+    created_at: Mapped[datetime | None] = mapped_column(default=datetime.now)
 
 
 class User(UserMixin, BaseModel):

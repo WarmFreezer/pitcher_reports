@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en" style="height: 100%;">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Choose a Plan</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/forms.css') }}">
+
+    <style>
+        .upload-btn:hover {
+            background-color: var(--accent);
+            text-decoration: none;
+        }
+        .plan-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            margin-top: 24px;
+        }
+        @media (max-width: 900px) {
+            .plan-grid { grid-template-columns: 1fr; }
+        }
+        .plan-card {
+            display: flex;
+            flex-direction: column;
+            margin: 0;
+            width: auto;
+        }
+        .plan-card ul {
+            margin: 16px 0;
+            padding-left: 20px;
+            flex-grow: 1;
+        }
+        .plan-card li {
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+        }
+        .plan-price {
+            font-size: 28px;
+            font-weight: bold;
+            color: var(--text-primary);
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body onload="loadNavbar(); loadFooter();">
+    <div id="navbar-placeholder"></div>
+
+    <main class="main-content" style="max-width: 1200px; margin: 0 auto; padding: 32px 20px;">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <h2>Choose a Plan</h2>
+        <p>Pick the plan that fits your program. You can change plans later from your subscription page.</p>
+
+        <div class="plan-grid">
+            <div class="bubble plan-card">
+                <h3>Tier 1</h3>
+                <div class="plan-price">$249/yr</div>
+                <ul>
+                    <li>Full pitch-by-pitch, usage, and game report tables</li>
+                    <li>Branded PDF reports</li>
+                    <li>No heat maps, break maps, or spray charts</li>
+                </ul>
+                <a href="{{ url_for('auth.schools_org', tier='1') }}" class="upload-btn" style="text-align: center; text-decoration: none;">Get Started</a>
+            </div>
+
+            <div class="bubble plan-card">
+                <h3>Tier 2</h3>
+                <div class="plan-price">$499/yr</div>
+                <ul>
+                    <li>Everything in Tier 1</li>
+                    <li>Heat maps and break maps for pitchers</li>
+                    <li>Spray charts for hitters</li>
+                </ul>
+                <a href="{{ url_for('auth.schools_org', tier='2') }}" class="upload-btn" style="text-align: center; text-decoration: none;">Get Started</a>
+            </div>
+
+            <div class="bubble plan-card">
+                <h3>Tier 3</h3>
+                <div class="plan-price">$899/yr</div>
+                <ul>
+                    <li>Everything in Tier 2</li>
+                    <li>A custom pitching/hitting report built around your program's own stats</li>
+                    <li>Not self-serve -- limited availability, join the queue below</li>
+                </ul>
+                <form method="POST" action="{{ url_for('auth.tier3_interest') }}">
+                    <input class="bubble" type="text" name="org_name" placeholder="Organization Name" required style="color: var(--tertiary); margin: 0 0 8px; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 12px;">
+                    <input class="bubble" type="email" name="contact_email" placeholder="Contact Email" required style="color: var(--tertiary); margin: 0 0 8px; background-color: white; border: 2px solid var(--accent); font-size: 16px; padding: 12px;">
+                    <button type="submit" class="upload-btn" style="width: 100%;">Join Queue</button>
+                </form>
+            </div>
+        </div>
+    </main>
+
+    <div id="footer-placeholder"></div>
+
+    <script src="{{ url_for('static', filename='js/core.js') }}"></script>
+</body>
+</html>

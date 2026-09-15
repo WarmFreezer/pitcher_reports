@@ -4,7 +4,7 @@ import glob
 import json
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Generator
 from urllib.parse import quote
 
 import pandas as pd
@@ -112,7 +112,7 @@ def _build_one_pitcher_report(task: dict[str, Any]) -> dict[str, Any]:
         arm_angle = None
         custom_stats = None
         custom_pitch_type_stats = None
-        if task['is_active']:
+        if task['is_active'] and task['include_charts']:
             for theme in ('light', 'dark'):
                 report.pitch_heat_map_by_batter_side(
                     source, user_id, school_temp_folder, pitcher_id, 0.75, theme=theme,
@@ -122,6 +122,10 @@ def _build_one_pitcher_report(task: dict[str, Any]) -> dict[str, Any]:
                 if arm_angle is None and result is not None:
                     arm_angle = result
 
+        # Independent of include_charts -- gated only on whether the school has a
+        # master-uploaded custom_pitcher_report.py, so a lower-tier school can still
+        # have custom reports (see report.custom_stats_table)
+        if task['is_active']:
             custom_stats = report.custom_stats_table(source, pitcher_id, school_id)
             custom_pitch_type_stats = report.custom_pitch_type_stats_table(source, pitcher_id, school_id)
 
@@ -300,6 +304,7 @@ def pitching_report() -> ResponseReturnValue:
     # to each worker as plain data -- _build_one_pitcher_report runs in a separate
     # process with no Flask app context, so it can't touch current_user itself.
     is_active = current_user.school.is_active
+    include_charts = current_user.school.tier >= 2
     chart_style = current_user.chart_style
     ink_mode = current_user.ink_mode
     hash_qs = '&'.join(f'content_hash={quote(g["content_hash"])}' for g in selected)
@@ -315,6 +320,7 @@ def pitching_report() -> ResponseReturnValue:
         'school_temp_folder': school_temp_folder,
         'school_output_folder': school_output_folder,
         'is_active': is_active,
+        'include_charts': include_charts,
         'chart_style': chart_style,
         'ink_mode': ink_mode,
         'branding': branding,
@@ -327,7 +333,7 @@ def pitching_report() -> ResponseReturnValue:
         'pitcher_meta': pitcher_meta_by_id[pid],
     } for pid in pitcher_ids]
 
-    def stream():
+    def stream() -> Generator[str, None, None]:
         reports_built = 0
         failed: list[str] = []
         max_workers = min(len(tasks), os.cpu_count() or 2, 4)

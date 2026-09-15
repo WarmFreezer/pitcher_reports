@@ -72,6 +72,13 @@
     cursor: pointer;
 }
 
+/* Reassert the intended color for real-href links (Home, About) once visited --
+   base.css's global a:visited otherwise wins on specificity and repaints them to
+   --text-primary, which in light mode equals the header's own background color. */
+.nav-link:visited {
+    color: rgba(255, 255, 255, 0.75);
+}
+
 .nav-link:hover {
     color: white;
     background-color: rgba(255, 255, 255, 0.08);

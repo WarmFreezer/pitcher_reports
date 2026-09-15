@@ -23,6 +23,15 @@ subscription_bp = Blueprint('subscription', __name__)
 
 stripe.api_key = os.environ.get('STRIPE_SECRET_KEY')
 
+# Duplicated from app/routes/auth.py rather than shared -- this codebase already
+# re-declares stripe.api_key per route module instead of centralizing, and a
+# 3-line dict doesn't warrant introducing a shared constants module for it.
+TIER_PRICE_IDS = {
+    1: os.environ.get('STRIPE_TIER_1_PRICE_ID', ''),
+    2: os.environ.get('STRIPE_TIER_2_PRICE_ID', ''),
+    3: os.environ.get('STRIPE_TIER_3_PRICE_ID', ''),
+}
+
 # Image upload constraints shared across logo and pfp endpoints
 LOGO_MAX_BYTES = 10 * 1024 * 1024
 LOGO_ALLOWED_EXT = {'png', 'jpg', 'jpeg'}
@@ -131,9 +140,10 @@ def start_subscription() -> ResponseReturnValue:
                 db.session.commit()
                 return jsonify({'reactivated': True, 'message': 'Subscription reactivated successfully.'}), 200
 
-        # Subscription is truly gone — open a new Stripe checkout session
+        # Subscription is truly gone — open a new Stripe checkout session at the
+        # school's existing tier (no re-selection on resubscribe)
         checkout_session = stripe.checkout.Session.create(
-            line_items=[{'price': os.environ.get('STRIPE_PRICE_ID', ''), 'quantity': 1}],
+            line_items=[{'price': TIER_PRICE_IDS[active_school.tier], 'quantity': 1}],
             mode='subscription',
             ui_mode='embedded',
             return_url=f'{request.host_url}return?session_id={{CHECKOUT_SESSION_ID}}',
@@ -145,6 +155,47 @@ def start_subscription() -> ResponseReturnValue:
     except Exception as e:
         current_app.logger.error(f"Error starting subscription: {e}")
         return jsonify({'error': 'Failed to start subscription.'}), 500
+
+
+@subscription_bp.route('/api/subscription/change-tier', methods=['POST'])
+@login_required
+def change_tier() -> ResponseReturnValue:
+    """Self-serve switch between Tier 1 and Tier 2, prorated immediately. Tier 3 is
+    master-only (granted once a custom report is built for the school) and never
+    reachable from here in either direction."""
+    active_school = get_active_school()
+    has_access, _ = _admin_access(active_school)
+    if not has_access:
+        return jsonify({'error': 'Only the school administrator can change the plan.'}), 403
+    if active_school.tier not in (1, 2):
+        return jsonify({'error': 'Contact us to change your plan.'}), 400
+    if not active_school.is_active or not active_school.stripe_subscription_id:
+        return jsonify({'error': 'No active subscription to change.'}), 400
+
+    data = request.get_json() or {}
+    new_tier = data.get('tier')
+    if new_tier not in (1, 2) or new_tier == active_school.tier:
+        return jsonify({'error': 'Invalid plan selection.'}), 400
+
+    try:
+        # A subscription created through this app's checkout always has exactly one
+        # line item (single price, quantity 1), so swapping that item's price is safe
+        sub = stripe.Subscription.retrieve(active_school.stripe_subscription_id)
+        item_id = sub['items']['data'][0]['id']
+        stripe.Subscription.modify(
+            active_school.stripe_subscription_id,
+            items=[{'id': item_id, 'price': TIER_PRICE_IDS[new_tier]}],
+            # always_invoice (not the create_prorations default) so the prorated
+            # difference is actually billed now, not left pending until the next
+            # yearly renewal
+            proration_behavior='always_invoice',
+        )
+        active_school.tier = new_tier
+        db.session.commit()
+        return jsonify({'message': f'Plan changed to Tier {new_tier}.'}), 200
+    except Exception as e:
+        current_app.logger.error(f"Error changing tier: {e}")
+        return jsonify({'error': 'Failed to change plan.'}), 500
 
 
 # ── School settings ───────────────────────────────────────────────────────────

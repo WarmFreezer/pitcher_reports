@@ -273,8 +273,7 @@ function renderHitterCard(data) {
             img.alt = `${data.hitter_name} spray chart ${label}`;
             img.className = 'report-img report-img-spray';
             img.onerror = function () {
-                this.parentElement.innerHTML =
-                    '<p style="color: var(--danger);">Spray chart not available. Update your subscription.</p>';
+                this.outerHTML = '<p class="chart-unavailable">Not available on your plan</p>';
             };
             wrapper.appendChild(title);
             wrapper.appendChild(img);

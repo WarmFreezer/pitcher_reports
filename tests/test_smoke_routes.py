@@ -12,10 +12,43 @@ from PIL import Image
 
 # ── Public / static pages ──────────────────────────────────────────────────────
 
-@pytest.mark.parametrize('path', ['/about', '/terms', '/privacy', '/sitemap.xml', '/robots.txt', '/favicon.ico'])
+@pytest.mark.parametrize('path', [
+    '/about', '/terms', '/privacy', '/sitemap.xml', '/robots.txt', '/favicon.ico',
+    '/schools', '/schools/org?tier=1', '/schools/org?tier=2',
+])
 def test_public_pages_load(client, path):
     resp = client.get(path)
     assert resp.status_code == 200
+
+
+def test_schools_org_without_tier_redirects_to_plan_select(client):
+    resp = client.get('/schools/org', follow_redirects=False)
+    assert resp.status_code == 302
+    assert resp.headers['Location'].endswith('/schools')
+
+
+def test_tier3_interest_creates_request_and_redirects_to_tier2_signup(client):
+    from app.db import models
+
+    resp = client.post('/schools/tier3-interest', data={
+        'org_name': 'Prospect Academy',
+        'contact_email': 'coach@prospect.edu',
+    }, follow_redirects=False)
+
+    assert resp.status_code == 302
+    assert '/schools/org' in resp.headers['Location']
+    assert 'tier=2' in resp.headers['Location']
+
+    reqs = models.TierThreeRequest.query.all()
+    assert len(reqs) == 1
+    assert reqs[0].org_name == 'Prospect Academy'
+    assert reqs[0].contact_email == 'coach@prospect.edu'
+
+
+def test_tier3_interest_requires_both_fields(client):
+    resp = client.post('/schools/tier3-interest', data={'org_name': 'Prospect Academy'}, follow_redirects=False)
+    assert resp.status_code == 302
+    assert resp.headers['Location'].endswith('/schools')
 
 
 def test_index_redirects_to_login_when_unauthenticated(client):
@@ -199,11 +232,6 @@ def test_checkout_page_requires_client_secret(client):
 def test_checkout_page_loads_with_client_secret(client):
     resp = client.get('/checkout?client_secret=cs_test_secret')
     assert resp.status_code == 200
-
-
-def test_subscribe_without_pending_school_fails_gracefully(client):
-    resp = client.post('/subscribe')
-    assert resp.status_code == 403
 
 
 def test_return_from_checkout_resubscribe_flow(client, make_school, mock_stripe):

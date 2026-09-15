@@ -64,6 +64,7 @@
                             <th>Admin Email</th>
                             <th>Status</th>
                             <th>Created</th>
+                            <th>Tier</th>
                             <th></th>
                             <th>Custom Pitcher Report</th>
                             <th>Custom Hitter Report</th>
@@ -76,6 +77,21 @@
                             <td>{{ school.admin_email }}</td>
                             <td>{{ school.stripe_subscription_status }}</td>
                             <td>{{ school.created_at.strftime('%b %d, %Y') if school.created_at else '' }}</td>
+                            <td>
+                                <form action="{{ url_for('master.update_school_tier', school_id=school.id) }}" method="POST" style="margin: 0;">
+                                    <div class="custom-dropdown tier-dropdown" style="margin: 0; max-width: 140px;">
+                                        <input type="hidden" name="tier" class="dropdown-value" value="{{ school.tier }}">
+                                        <button type="button" class="dropdown-trigger bubble" style="color: var(--text-primary); margin: 0; background-color: var(--bg-card); border: 2px solid var(--accent); padding: 6px 10px; font-size: 14px; width: 100%;">
+                                            Tier {{ school.tier }} ▼
+                                        </button>
+                                        <div class="dropdown-content">
+                                            <button type="button" class="dropdown-option" data-value="1">Tier 1</button>
+                                            <button type="button" class="dropdown-option" data-value="2">Tier 2</button>
+                                            <button type="button" class="dropdown-option" data-value="3">Tier 3</button>
+                                        </div>
+                                    </div>
+                                </form>
+                            </td>
                             <td>
                                 <form action="{{ url_for('master.act_as_school', school_id=school.id) }}" method="POST" style="margin: 0;">
                                     <button type="submit" class="download-btn-small">Manage</button>

@@ -220,7 +220,7 @@ class PDF_Generator:
         ]]
 
         header_table = Table(header_data, colWidths=[1.25*inch, self.PAGE_W - 2.5*inch, 1.25*inch])
-        header_style = [
+        header_style: list[tuple[Any, ...]] = [
             ('ALIGN', (0, 0), (0, 0), 'CENTER'),
             ('ALIGN', (1, 0), (1, 0), 'CENTER'),
             ('ALIGN', (2, 0), (2, 0), 'CENTER'),

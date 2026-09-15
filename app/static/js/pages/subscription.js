@@ -136,7 +136,7 @@ function renderRosterTable(roster, columns) {
     if (!container) return;
 
     if (!columns || columns.length === 0) {
-        container.innerHTML = '<p style="color: var(--dark); margin-bottom: 8px;">No roster uploaded yet.</p>';
+        container.innerHTML = '<p style="color: var(--text-secondary); margin-bottom: 8px;">No roster uploaded yet.</p>';
         return;
     }
 
@@ -337,6 +337,26 @@ async function startSubscription() {
             }
         } else {
             toast(data.error || 'Failed to start subscription.', 'error');
+        }
+    } catch {
+        toast('An error occurred. Please try again.', 'error');
+    }
+}
+
+async function changeTier() {
+    const tier = parseInt(document.getElementById('tier-select-value').value, 10);
+    try {
+        const response = await fetch('/api/subscription/change-tier', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tier })
+        });
+        const data = await response.json();
+        if (response.ok) {
+            toast(data.message, 'success');
+            setTimeout(() => window.location.reload(), 1500);
+        } else {
+            toast(data.error || 'Failed to change plan.', 'error');
         }
     } catch {
         toast('An error occurred. Please try again.', 'error');

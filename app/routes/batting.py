@@ -2,7 +2,7 @@ import os
 import gc
 import glob
 import json
-from collections.abc import Mapping
+from collections.abc import Generator, Mapping
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
 from typing import Any
@@ -93,10 +93,16 @@ def _build_one_hitter_report(task: dict[str, Any]) -> dict[str, Any]:
         custom_hit_type_stats = None
         custom_pitch_type_stats = None
         custom_chart_paths_by_theme: dict[str, list[tuple[str, str]]] = {}
-        if task['is_active']:
+        if task['is_active'] and task['include_charts']:
             for theme in ('light', 'dark'):
                 hitter_report.hitter_spray_chart_by_pitcher_side(
                     source, user_id, school_temp_folder, batter_id, theme=theme)
+
+        # Independent of include_charts -- gated only on whether the school has a
+        # master-uploaded custom_hitter_report.py, so a lower-tier school can still
+        # have custom reports/charts (see hitter_report.custom_stats_table)
+        if task['is_active']:
+            for theme in ('light', 'dark'):
                 custom_chart_paths_by_theme[theme] = hitter_report.custom_charts(
                     source, batter_id, school_id, user_id, school_temp_folder, theme=theme) or []
 
@@ -290,6 +296,7 @@ def batting_report() -> ResponseReturnValue:
     school_id = current_user.school_id
     user_id = current_user.id
     is_active = current_user.school.is_active
+    include_charts = current_user.school.tier >= 2
     ink_mode = current_user.ink_mode
 
     tasks = [{
@@ -300,6 +307,7 @@ def batting_report() -> ResponseReturnValue:
         'school_temp_folder': school_temp_folder,
         'school_output_folder': school_output_folder,
         'is_active': is_active,
+        'include_charts': include_charts,
         'branding': branding,
         'ink_mode': ink_mode,
         'date_range': date_range,
@@ -310,7 +318,7 @@ def batting_report() -> ResponseReturnValue:
                                 f'&start_date={start_date}&end_date={end_date}'),
     } for batter_id in requested]
 
-    def stream():
+    def stream() -> Generator[str, None, None]:
         reports_built = 0
         failed: list[str] = []
         max_workers = min(len(tasks), os.cpu_count() or 2, 4)
