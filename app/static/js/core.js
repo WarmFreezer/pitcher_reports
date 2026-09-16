@@ -54,7 +54,7 @@ function loadNavbar(logo = '') {
     const active = {
         home:     p === '/',
         file:     p.startsWith('/upload'),
-        view:     p.startsWith('/batting') || p.startsWith('/pitching'),
+        view:     p.startsWith('/batting') || p.startsWith('/pitching') || p.startsWith('/catching'),
         settings: p.startsWith('/account') || p.startsWith('/subscription'),
         about:    p.startsWith('/about'),
     };
@@ -82,6 +82,7 @@ function loadNavbar(logo = '') {
                         <div class="dropdown-content">
                             <a href="/pitching">Pitching Report</a>
                             <a href="/batting">Batting Report</a>
+                            <a href="/catching">Catching Report</a>
                         </div>
                     </div>
                     <div class="nav-dropdown">

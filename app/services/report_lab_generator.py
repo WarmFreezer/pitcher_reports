@@ -29,6 +29,7 @@ from app.services.pitch_stats import (
     PitchByPitchReport,
 )
 from app.services.hitter_stats import HitterReportRequest, HitterPitchByPitchAtBat, HitterPitchByPitchReport
+from app.services.catcher_stats import CatcherReportRequest
 from app.services.stat_table import StatTable
 from .branding_loader import BrandingLoader
 
@@ -1227,6 +1228,73 @@ class PDF_Generator:
             raise AttributeError(f"Module {custom_module.__name__} does not have a 'get_elements' function")
 
         return get_elements(self, data) or []
+
+    def generate_catcher_report(self, data: CatcherReportRequest, output_path: str) -> str:
+        """
+        Generate a complete catcher (framing/SLAA) report PDF covering a date range.
+
+        Mirrors generate_hitter_report's shape (header + charts + one data table,
+        no tier-3 custom-report hook -- there's no custom_catcher_report.py concept).
+        """
+        pfp_path = os.path.join(STORAGE_SCHOOLS, str(self.school_id), 'assets', 'players', str(data.catcher_id), 'pfp.png')
+        player_pfp = pfp_path if os.path.exists(pfp_path) else self.school_logo
+
+        games_label = f"{data.games} game{'s' if data.games != 1 else ''}" if data.games else ''
+        header_bits = [data.catcher_name, data.date_range, data.team, games_label]
+        self._page_header_text = '  |  '.join(bit for bit in header_bits if bit)
+
+        header_frame = Frame(
+            self.MARGIN, self.FOOTER_HEIGHT, self.PAGE_W - 2 * self.MARGIN, self.PAGE_H - self.FOOTER_HEIGHT,
+            leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0,
+        )
+        continuation_frame = Frame(
+            self.MARGIN, self.FOOTER_HEIGHT, self.PAGE_W - 2 * self.MARGIN,
+            self.PAGE_H - self.FOOTER_HEIGHT - self.HEADER_HEIGHT,
+            leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0,
+        )
+
+        pdf_file = BaseDocTemplate(
+            output_path, pagesize=letter, rightMargin=self.MARGIN, leftMargin=self.MARGIN,
+            topMargin=0, bottomMargin=0,
+        )
+        pdf_file.addPageTemplates([
+            PageTemplate(id='header', frames=[header_frame], onPage=self._draw_custom_footer),
+            PageTemplate(id='continuation', frames=[continuation_frame], onPage=self._draw_page_decorations),
+        ])
+
+        elements: list[Any] = []
+
+        print(f"[PDF] Starting catcher report generation")
+
+        elements.extend(self.generate_header(
+            player_pfp, data.catcher_name, self.school_logo,
+            data.date_range, data.team, games_label, '', '', None, '|',
+        ))
+        elements.append(NextPageTemplate('continuation'))
+
+        half_width = (self.PAGE_W - 2 * self.MARGIN - 0.2 * inch) / 2
+        if data.heat_map or data.pitch_location_chart:
+            left_els = self.add_image_section(data.heat_map, "Framing Heat Map", max_width_pts=half_width) if data.heat_map else []
+            right_els = self.add_image_section(data.pitch_location_chart, "Pitch Location", max_width_pts=half_width) if data.pitch_location_chart else []
+            elements.extend(self.generate_two_column_layout(left_els, right_els))
+
+        elements.extend(self.generate_data_table(data.framing_table, "Framing"))
+
+        try:
+            for i, el in enumerate(elements):
+                if isinstance(el, KeepTogether):
+                    continue
+                try:
+                    el.wrap(self.PAGE_W - 2 * self.MARGIN, self.PAGE_H)
+                except Exception as e:
+                    print(f"Element {i} failed: {type(el).__name__} — {e}")
+
+            pdf_file.build(elements)
+            print(f"[PDF] Catcher PDF built successfully!")
+            return output_path
+        except Exception as e:
+            print(f"Error generating catcher PDF: {str(e)}")
+            raise
 
     def generate_color_preview(self, output_path: str) -> str:
         """

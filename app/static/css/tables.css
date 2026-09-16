@@ -238,6 +238,21 @@
     max-width: 450px;
 }
 
+.catcher-heatmap,
+.catcher-pitch-location {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+    overflow: hidden;
+    flex: 1 1 320px;
+}
+
+.report-img-catcher {
+    width: 100%;
+    max-width: 420px;
+}
+
 @media (max-width: 900px) {
     .report-img-heatmap,
     .report-img-breakmap {
@@ -253,6 +268,12 @@
         flex: none;
         width: 100%;
         max-width: 100%;
+    }
+
+    .catcher-heatmap,
+    .catcher-pitch-location {
+        flex: none;
+        width: 100%;
     }
 
     .pitcher-usage-panel {

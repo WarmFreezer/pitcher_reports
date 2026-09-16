@@ -44,6 +44,7 @@ def _build_entry(source: pd.DataFrame, filename: str, content_hash: str, practic
         'content_hash': content_hash,
         'batters': _batters(source),
         'pitchers': _pitchers(source),
+        'catchers': _catchers(source),
         'practice': practice
     }
 
@@ -258,6 +259,27 @@ def remove_game(games_dir: str, content_hash: str) -> bool:
     return True
 
 
+def _catchers(source: pd.DataFrame) -> list[GameEntry]:
+    """Every distinct catcher in the file, both teams -- team filtering happens at query time."""
+    needed = {'CatcherId', 'Catcher', 'CatcherTeam'}
+    if not needed.issubset(source.columns):
+        return []
+
+    rows = source[['CatcherId', 'Catcher', 'CatcherTeam']].dropna(subset=['CatcherId'])
+    if rows.empty:
+        return []
+
+    grouped = rows.groupby('CatcherId', sort=False).first()
+    return [
+        {
+            'id': _normalize_id(catcher_id),
+            'name': str(row['Catcher']),
+            'team': str(row['CatcherTeam']),
+        }
+        for catcher_id, row in grouped.iterrows()
+    ]
+
+
 def date_bounds(games_dir: str) -> tuple[str | None, str | None]:
     """(earliest, latest) archived game date as YYYY-MM-DD, or (None, None) when empty."""
     dates = sorted(entry['date'] for entry in read_manifest(games_dir) if entry.get('date'))
@@ -326,6 +348,61 @@ def list_hitters(
         hitters = {k: v for k, v in hitters.items() if v['batted_balls'] > 0}
 
     return sorted(hitters.values(), key=lambda h: h['name'])
+
+
+def list_catchers(
+    games_dir: str,
+    trackman_id: str,
+    target: str = 'own',
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> list[GameEntry]:
+    """
+    Distinct catchers in the archive, filtered by team.
+
+    target 'own' keeps catchers whose CatcherTeam matches the school's TrackMan
+    id; 'opponent' keeps everyone else. Mirrors list_hitters, minus the
+    batted-balls concept, which doesn't apply to a catcher.
+    """
+    catchers: dict[str, GameEntry] = {}
+
+    for entry in read_manifest(games_dir):
+        date = entry.get('date')
+        if not date:
+            continue
+        if start_date and date < start_date:
+            continue
+        if end_date and date > end_date:
+            continue
+
+        for catcher in entry.get('catchers', []):
+            is_own = catcher.get('team') == trackman_id
+
+            if target == 'opponent' and is_own:
+                continue
+            if target != 'opponent' and not is_own:
+                continue
+
+            catcher_id = catcher['id']
+            existing = catchers.get(catcher_id)
+            if existing is None:
+                catchers[catcher_id] = {
+                    'id': catcher_id,
+                    'name': catcher.get('name', ''),
+                    'team': catcher.get('team', ''),
+                    'first_date': date,
+                    'last_date': date,
+                    'games': 1,
+                }
+            else:
+                existing['games'] += 1
+                if date:
+                    if not existing['first_date'] or date < existing['first_date']:
+                        existing['first_date'] = date
+                    if not existing['last_date'] or date > existing['last_date']:
+                        existing['last_date'] = date
+
+    return sorted(catchers.values(), key=lambda c: c['name'])
 
 
 def load_games(games_dir: str, content_hashes: list[str]) -> pd.DataFrame:

@@ -1,3 +1,4 @@
+import math
 from typing import NamedTuple
 
 import matplotlib
@@ -32,6 +33,33 @@ def in_zone(plate_loc_side: pd.Series, plate_loc_height: pd.Series) -> pd.Series
         & (plate_loc_height >= ZONE_BOTTOM)
         & (plate_loc_height <= ZONE_TOP)
     )
+
+STRIKE_PROB_TRANSITION_FT = 0.25  # 50%->~88%/~12% band straddling the rulebook edge
+
+
+def strike_probability(plate_loc_side: float, plate_loc_height: float) -> float:
+    """
+    Fixed geometric model of the probability a pitch at this location gets
+    called a strike, based purely on its distance from the rulebook zone edge --
+    no archived-pitch-history dependency, so it's identical for every school
+    from day one.
+
+    Exactly 50% right on the edge (the catching report's own "true toss-up
+    point"), approaching 100% toward the center of the zone, approaching 0%
+    a few inches outside it.
+    """
+    dx = max(0.0, abs(plate_loc_side) - ZONE_SIDE)
+    dy = max(0.0, ZONE_BOTTOM - plate_loc_height, plate_loc_height - ZONE_TOP)
+    if dx > 0 or dy > 0:
+        signed_distance = (dx ** 2 + dy ** 2) ** 0.5  # outside the zone: positive
+    else:
+        signed_distance = -min(
+            ZONE_SIDE - abs(plate_loc_side),
+            plate_loc_height - ZONE_BOTTOM,
+            ZONE_TOP - plate_loc_height,
+        )  # inside the zone: negative (distance to the nearest edge)
+    return 1 / (1 + math.exp(signed_distance / STRIKE_PROB_TRANSITION_FT))
+
 
 def out_of_zone(plate_loc_side: pd.Series, plate_loc_height: pd.Series) -> pd.Series:
     """
