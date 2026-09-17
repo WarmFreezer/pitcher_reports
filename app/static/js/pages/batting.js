@@ -4,17 +4,6 @@
 const MIN_SPINNER_MS = 600;
 const SLOW_SELECTION = 10;   // past this many hitters, warn before the wait
 
-// Inline SVG rather than an <img> so the spinner picks up theme CSS variables
-const SPINNER_SVG = `<svg viewBox="0 0 90 90" xmlns="http://www.w3.org/2000/svg" style="width: 48px; margin: 32px auto; display: block;" aria-label="Loading...">
-  <rect x="20" y="20" width="50" height="50" fill="var(--bg-bubble)" transform="rotate(45 45 45)"/>
-  <line x1="26" y1="47" x2="64" y2="47" stroke="#8B1A1A" stroke-width="1.8" stroke-linecap="round"/>
-  <line x1="30" y1="53" x2="60" y2="53" stroke="#8B1A1A" stroke-width="1" stroke-linecap="round" opacity="0.5"/>
-  <path d="M 45,90 L 90,45 L 45,0.5 L 0.5,45 L 45,90" fill="none" stroke="var(--text-primary)" stroke-width="2.2" stroke-linecap="butt" stroke-dasharray="0 253.44" stroke-dashoffset="253.44">
-    <animate attributeName="stroke-dasharray" values="0 253.44; 126.72 126.72; 0 253.44" keyTimes="0;0.5;1" dur="5s" calcMode="spline" keySplines="0.5 0 0.5 1;0.5 0 0.5 1" repeatCount="indefinite"/>
-    <animate attributeName="stroke-dashoffset" values="253.44;253.44;0" keyTimes="0;0.5;1" dur="5s" calcMode="spline" keySplines="0.5 0 0.5 1;0.5 0 0.5 1" repeatCount="indefinite"/>
-  </path>
-</svg>`;
-
 let archiveBounds = { first: null, last: null };
 let reloadTimer = null;
 
@@ -241,12 +230,12 @@ function renderHitterCard(data) {
     if (downloadContainer && data.pdf_url) {
         downloadContainer.innerHTML = `
             <a href="${data.pdf_url}" download class="download-btn-small">
-                📄 Download PDF
+                ${_fileIcon()} Download PDF
             </a>`;
         if (data.pitch_by_pitch_url) {
             downloadContainer.innerHTML += `
                 <a href="${data.pitch_by_pitch_url}" download class="download-btn-small">
-                    🧾 Pitch-by-Pitch
+                    ${_listIcon()} Pitch-by-Pitch
                 </a>`;
         }
     }
@@ -261,23 +250,9 @@ function renderHitterCard(data) {
             [data.spray_left_url, data.spray_left_dark_url, 'vs LHP'],
             [data.spray_right_url, data.spray_right_dark_url, 'vs RHP'],
         ]) {
-            const wrapper = document.createElement('div');
-            wrapper.className = 'graph-block';
-            const title = document.createElement('p');
-            title.className = 'graph-title';
-            title.textContent = label;
-            const img = document.createElement('img');
-            img.dataset.lightSrc = lightSrc;
-            img.dataset.darkSrc = darkSrc;
-            img.src = currentTheme === 'dark' ? darkSrc : lightSrc;
-            img.alt = `${data.hitter_name} spray chart ${label}`;
-            img.className = 'report-img report-img-spray';
-            img.onerror = function () {
-                this.outerHTML = '<p class="chart-unavailable">Not available on your plan</p>';
-            };
-            wrapper.appendChild(title);
-            wrapper.appendChild(img);
-            sprayContainer.appendChild(wrapper);
+            sprayContainer.appendChild(chartBlock(
+                lightSrc, darkSrc, label, currentTheme,
+                `${data.hitter_name} spray chart ${label}`, 'report-img-spray'));
         }
     }
 
@@ -300,19 +275,9 @@ function renderHitterCard(data) {
         const chartsContainer = clone.querySelector('.custom-charts');
         if (chartsContainer && data.custom_chart_urls) {
             for (const { title, url, dark_url } of data.custom_chart_urls) {
-                const wrapper = document.createElement('div');
-                wrapper.className = 'graph-block';
-                wrapper.innerHTML = `<p class="graph-title">${title}</p>`;
-                const img = document.createElement('img');
-                // data-light-src / data-dark-src let core.js _swapChartImages()
-                // react to the theme toggle, same as every other chart here.
-                img.dataset.lightSrc = url;
-                img.dataset.darkSrc = dark_url;
-                img.src = currentTheme === 'dark' && dark_url ? dark_url : url;
-                img.alt = `${data.hitter_name} ${title}`;
-                img.className = 'report-img report-img-custom-chart';
-                wrapper.appendChild(img);
-                chartsContainer.appendChild(wrapper);
+                chartsContainer.appendChild(chartBlock(
+                    url, dark_url, title, currentTheme,
+                    `${data.hitter_name} ${title}`, 'report-img-custom-chart', 'Chart unavailable'));
             }
         }
 

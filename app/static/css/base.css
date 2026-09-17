@@ -13,6 +13,10 @@
   --secondary: #E8B84B;
   --tertiary: #2B486E;
   --accent: #8B1A1A;
+  /* Accent used as text/icon color needs its own token: --accent is also used as a
+     background (with --text-on-accent on top of it), so darkening or lightening it
+     for one use case would break contrast for the other. */
+  --text-accent: #8B1A1A;
 
   /* Light Mode */
   --bg-page: #f5f3ed;
@@ -39,6 +43,7 @@
     --text-primary: #f5f3ed;
     --text-secondary: #aaa;
     --text-muted: #777;
+    --text-accent: #EA5D50;
 
     --text-on-accent: #ececec;
   }

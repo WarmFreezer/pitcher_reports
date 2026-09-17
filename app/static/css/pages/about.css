@@ -198,6 +198,72 @@
     gap: 8px;
 }
 
+/* Marketing slice of README.md, rendered to HTML server-side and dropped in as-is */
+.readme-content h2 {
+    font-family: 'Graduate', Arial, sans-serif;
+    color: var(--text-primary);
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 8px;
+    margin: 28px 0 14px;
+}
+
+.readme-content h2:first-child {
+    margin-top: 0;
+}
+
+.readme-content h3 {
+    font-family: 'Graduate', Arial, sans-serif;
+    color: var(--text-secondary);
+    margin: 20px 0 8px;
+}
+
+.readme-content p {
+    line-height: 1.6;
+    margin-bottom: 12px;
+}
+
+.readme-content ul {
+    margin: 0 0 16px 20px;
+    line-height: 1.6;
+}
+
+.readme-content li {
+    margin-bottom: 6px;
+}
+
+.readme-content code {
+    background-color: var(--bg-card);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 0.9em;
+}
+
+.readme-content table {
+    display: block;
+    overflow-x: auto;
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 20px;
+    font-size: 0.95rem;
+}
+
+.readme-content th,
+.readme-content td {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    text-align: left;
+    vertical-align: top;
+}
+
+.readme-content th {
+    background-color: var(--tertiary);
+    color: white;
+}
+
+.readme-content tr:nth-child(even) td {
+    background-color: var(--bg-hover);
+}
+
 /* ============================================================================
    RESPONSIVE
    ============================================================================ */

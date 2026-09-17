@@ -32,6 +32,23 @@ function _watchToastPosition(container) {
 const _SUN_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
 const _MOON_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
 
+// Shared download-button icons, reused by batting.js/pitching.js/catching.js.
+// Functions (not constants) so they always reflect the theme at call time; the
+// data-light-src/data-dark-src pair also lets _swapChartImages() re-color them
+// if the user toggles theme after the button is already on the page.
+function _fileIcon() {
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const light = '/static/resources/icons/file-text.svg';
+    const darkSrc = '/static/resources/icons/file-text-dark.svg';
+    return `<img src="${dark ? darkSrc : light}" data-light-src="${light}" data-dark-src="${darkSrc}" alt="" width="16" height="16">`;
+}
+function _listIcon() {
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const light = '/static/resources/icons/list.svg';
+    const darkSrc = '/static/resources/icons/list-dark.svg';
+    return `<img src="${dark ? darkSrc : light}" data-light-src="${light}" data-dark-src="${darkSrc}" alt="" width="16" height="16">`;
+}
+
 // Load combined header + navbar
 // The nav's Upload item opens the file picker when you are already on /upload,
 // and otherwise navigates there. uploadFile() only exists on that page, so
@@ -250,6 +267,56 @@ function renderStatTiles(container, stats) {
             </div>`).join('');
 }
 
+// Inline SVG rather than an <img> so the spinner picks up theme CSS variables.
+// Shared by every page that shows a loading state while a report streams in.
+const SPINNER_SVG = `<svg viewBox="0 0 90 90" xmlns="http://www.w3.org/2000/svg" style="width: 48px; margin: 32px auto; display: block;" aria-label="Loading...">
+  <rect x="20" y="20" width="50" height="50" fill="var(--bg-bubble)" transform="rotate(45 45 45)"/>
+  <line x1="26" y1="47" x2="64" y2="47" stroke="#8B1A1A" stroke-width="1.8" stroke-linecap="round"/>
+  <line x1="30" y1="53" x2="60" y2="53" stroke="#8B1A1A" stroke-width="1" stroke-linecap="round" opacity="0.5"/>
+  <path d="M 45,90 L 90,45 L 45,0.5 L 0.5,45 L 45,90" fill="none" stroke="var(--text-primary)" stroke-width="2.2" stroke-linecap="butt" stroke-dasharray="0 253.44" stroke-dashoffset="253.44">
+    <animate attributeName="stroke-dasharray" values="0 253.44; 126.72 126.72; 0 253.44" keyTimes="0;0.5;1" dur="5s" calcMode="spline" keySplines="0.5 0 0.5 1;0.5 0 0.5 1" repeatCount="indefinite"/>
+    <animate attributeName="stroke-dashoffset" values="253.44;253.44;0" keyTimes="0;0.5;1" dur="5s" calcMode="spline" keySplines="0.5 0 0.5 1;0.5 0 0.5 1" repeatCount="indefinite"/>
+  </path>
+</svg>`;
+
+// Builds one chart <img> (theme-aware via data-light-src/data-dark-src, see
+// _swapChartImages), wrapped with its title and a small spinner that covers the
+// gap between the image landing in the DOM and it actually finishing its
+// download -- these are large 300 DPI PNGs, so that gap is often still open
+// when a report card's collapsed body is first opened. errorText customizes
+// the message shown if the image 404s (charts gated behind a subscription
+// tier vs. an optional custom chart that simply doesn't exist read differently).
+function chartBlock(lightSrc, darkSrc, label, theme, alt, imgClass, errorText = 'Not available on your plan') {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'graph-block';
+
+    const title = document.createElement('p');
+    title.className = 'graph-title';
+    title.textContent = label;
+    wrapper.appendChild(title);
+
+    const spinner = document.createElement('div');
+    spinner.className = 'chart-spinner';
+    spinner.innerHTML = SPINNER_SVG;
+    wrapper.appendChild(spinner);
+
+    const img = document.createElement('img');
+    img.hidden = true;
+    img.dataset.lightSrc = lightSrc;
+    img.dataset.darkSrc = darkSrc;
+    img.src = (theme === 'dark' && darkSrc) ? darkSrc : lightSrc;
+    img.alt = alt;
+    img.className = `report-img ${imgClass}`;
+    img.onload = () => { spinner.remove(); img.hidden = false; };
+    img.onerror = function () {
+        spinner.remove();
+        this.outerHTML = `<p class="chart-unavailable">${errorText}</p>`;
+    };
+    wrapper.appendChild(img);
+
+    return wrapper;
+}
+
 // Generic custom dropdown: a trigger button + menu of option buttons, used in
 // place of a native <select> (e.g. organization picker, chart style picker).
 // Expects: .custom-dropdown > .dropdown-trigger, .dropdown-value (hidden input), .dropdown-option[data-value]
@@ -287,6 +354,10 @@ function _swapChartImages(theme) {
 // On page load, restore saved preference (default: light)
 const saved = localStorage.getItem('theme') ?? 'light';
 document.documentElement.setAttribute('data-theme', saved);
+// Fix up any icons already in the server-rendered HTML (e.g. about/subscription
+// contact icons) to match; images built later by page scripts pick their own
+// src at creation time instead.
+_swapChartImages(saved);
 
 document.addEventListener('DOMContentLoaded', async () => {
     dropdownInit();

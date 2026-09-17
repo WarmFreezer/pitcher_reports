@@ -1,5 +1,7 @@
 # Stat_Line — Baseball Analytics for College Programs
 
+**Live at [stat-line.app](https://stat-line.app)**
+
 Turn a raw TrackMan export into branded, coach-ready reports in about the time it takes to walk from the field to the office.
 
 Stat_Line is a hosted, school-scoped web application. Your staff uploads a game file; the app returns pitch heat maps, movement profiles, hitter spray charts, plate-discipline tables, and print-ready PDFs carrying your school's colors and logo. Data from one program is never visible to another.
@@ -263,3 +265,5 @@ University logos, seals, and trademarks are the property of their respective ins
 Thomas Eubank — [thomas.eubank516@gmail.com](mailto:thomas.eubank516@gmail.com)
 
 Project Link: [https://github.com/WarmFreezer/pitcher_reports](https://github.com/WarmFreezer/pitcher_reports)
+
+Live Site: [https://stat-line.app](https://stat-line.app)

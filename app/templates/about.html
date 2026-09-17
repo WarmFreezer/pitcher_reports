@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stat_Line - About</title>
+    <meta name="description" content="Stat_Line turns verbose TrackMan data into professional, coach-ready pitching and batting reports in minutes, with custom branding for your program.">
     <link rel="icon" href="{{ url_for('static', filename='resources/favicon.ico') }}" type="image/x-icon">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
@@ -65,11 +66,15 @@
                 });
             </script>
         </div>
+        <div class="bubble about-bubble readme-content" style="margin-top: 0;">
+            {{ readme_html | safe }}
+        </div>
         <div class="bubble about-bubble" style="margin-top: 0;">
             <h2 style="margin-bottom: 12px;">Contact & Support</h2>
             <p class="about-lead" style="margin-bottom: 16px;">Questions about the product, your subscription, or TrackMan integration? Get in touch directly.</p>
-            <p style="margin: 6px 0;">📧 <a href="mailto:thomas.eubank516@gmail.com" style="color: var(--accent);">thomas.eubank516@gmail.com</a></p>
-            <p style="margin: 6px 0;">📞 <a href="tel:+16063034052" style="color: var(--accent);">606-303-4052</a></p>
+            <p style="margin: 6px 0; display: flex; align-items: center; gap: 8px;"><img src="{{ url_for('static', filename='resources/icons/mail.svg') }}" data-light-src="{{ url_for('static', filename='resources/icons/mail.svg') }}" data-dark-src="{{ url_for('static', filename='resources/icons/mail-dark.svg') }}" alt="" width="16" height="16"> <a href="mailto:thomas.eubank516@gmail.com" style="color: var(--text-accent);">thomas.eubank516@gmail.com</a></p>
+            <p style="margin: 6px 0; display: flex; align-items: center; gap: 8px;"><img src="{{ url_for('static', filename='resources/icons/phone.svg') }}" data-light-src="{{ url_for('static', filename='resources/icons/phone.svg') }}" data-dark-src="{{ url_for('static', filename='resources/icons/phone-dark.svg') }}" alt="" width="16" height="16"> <a href="tel:+16063034052" style="color: var(--text-accent);">606-303-4052</a></p>
+            <p style="margin: 6px 0; display: flex; align-items: center; gap: 8px;"><img src="{{ url_for('static', filename='resources/icons/globe.svg') }}" data-light-src="{{ url_for('static', filename='resources/icons/globe.svg') }}" data-dark-src="{{ url_for('static', filename='resources/icons/globe-dark.svg') }}" alt="" width="16" height="16"> <a href="https://stat-line.app" style="color: var(--text-accent);">stat-line.app</a></p>
         </div>
     </main>
 

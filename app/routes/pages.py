@@ -1,15 +1,50 @@
 import io
+import re
 from datetime import date
+from pathlib import Path
 from flask import Blueprint, render_template, redirect, url_for, jsonify, session, request, make_response
 from flask.typing import ResponseReturnValue
 from flask_login import login_required, current_user
 from openpyxl import Workbook
 from sqlalchemy import func
+import markdown as markdown_lib
 
 from app.db.models import db
 from app.db import models
 
 pages_bp = Blueprint('pages', __name__)
+
+_README_PATH = Path(__file__).resolve().parent.parent.parent / 'README.md'
+
+# Only these README.md sections are product/marketing-facing; everything else
+# (Local Development, CLI Commands, File Structure, School Branding, etc.) is
+# for engineers and must not be rendered on the public About page.
+_README_MARKETING_SECTIONS = {
+    'What it does for your program',
+    'How a season runs',
+    'Access and subscriptions',
+}
+
+
+def _marketing_readme_html() -> str:
+    """Render the marketing-facing slice of README.md as HTML for the About page."""
+    text = _README_PATH.read_text(encoding='utf-8')
+    parts = re.split(r'^## ', text, flags=re.MULTILINE)
+
+    intro = parts[0]
+    intro = re.sub(r'^# .*\n', '', intro)                       # drop the H1 title
+    intro = re.sub(r'^\*\*Live at.*\n', '', intro, flags=re.MULTILINE)  # already shown on this page
+    intro = intro.replace('---', '').strip()
+
+    sections = []
+    for part in parts[1:]:
+        heading, _, body = part.partition('\n')
+        if heading.strip() in _README_MARKETING_SECTIONS:
+            body = re.sub(r'\n+---\s*$', '', body).strip()      # trailing section divider
+            sections.append(f'## {heading}\n{body}')
+
+    marketing_md = intro + '\n\n' + '\n\n'.join(sections)
+    return markdown_lib.markdown(marketing_md, extensions=['tables'])
 
 
 @pages_bp.route('/')
@@ -251,7 +286,7 @@ def upload_page() -> ResponseReturnValue:
 
 @pages_bp.route('/about')
 def about() -> ResponseReturnValue:
-    return render_template('about.html')
+    return render_template('about.html', readme_html=_marketing_readme_html())
 
 
 @pages_bp.route('/terms')
@@ -267,16 +302,17 @@ def privacy() -> ResponseReturnValue:
 @pages_bp.route('/sitemap.xml')
 def sitemap() -> ResponseReturnValue:
     """Generate sitemap.xml for search engines."""
-    base = request.host_url.rstrip('/')
+    base = 'https://stat-line.app'
     today = date.today().isoformat()
 
     pages = [
         {'loc': f'{base}/',         'priority': '1.0', 'changefreq': 'weekly'},
-        {'loc': f'{base}/about',    'priority': '0.8', 'changefreq': 'monthly'},
+        {'loc': f'{base}/about',    'priority': '0.8', 'changefreq': 'weekly'},
         {'loc': f'{base}/schools',  'priority': '0.8', 'changefreq': 'monthly'},
         {'loc': f'{base}/register', 'priority': '0.7', 'changefreq': 'monthly'},
         {'loc': f'{base}/login',    'priority': '0.6', 'changefreq': 'monthly'},
         {'loc': f'{base}/terms',    'priority': '0.5', 'changefreq': 'monthly'},
+        {'loc': f'{base}/privacy',  'priority': '0.5', 'changefreq': 'monthly'},
     ]
 
     xml_lines = ['<?xml version="1.0" encoding="UTF-8"?>',

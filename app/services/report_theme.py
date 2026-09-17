@@ -158,15 +158,18 @@ class _PitchType(NamedTuple):
     color: str
 
 _PITCH_TYPES: dict[str, _PitchType] = {
-    'Fastball':    _PitchType('FB', '#d22d49'),
-    'Curveball':   _PitchType('CB', '#00d1ed'),
-    'Slider':      _PitchType('SL', '#004400'),
-    'ChangeUp':    _PitchType('CH', '#1dbe3a'),
-    'Splitter':    _PitchType('SP', '#4f0010'),
+    'Fastball':    _PitchType('FB', '#Ff0000'),
+    'Curveball':   _PitchType('CB', '#1000FC'),
+    'Slider':      _PitchType('SL', '#00FCC5'),
+    'ChangeUp':    _PitchType('CH', '#008B13'),
+    'Splitter':    _PitchType('SP', '#FC00CA'),
     'Knuckleball': _PitchType('KB', '#472cee'),
-    'Cutter':      _PitchType('CT', '#933f2c'),
-    'Sinker':      _PitchType('SK', '#fe9d00'),
-    'Four-Seam':   _PitchType('FF', '#FF0088'),
+    'Cutter':      _PitchType('CT', '#FCBB00'),
+    'Sinker':      _PitchType('SK', '#BDFC00'),
+    'Four-Seam':   _PitchType('4S', '#fc1c00'),
+    'FourSeamFastBall':   _PitchType('4S', '#fc1c00'),
+    'Two-Seam':    _PitchType('2S', '#FC9C00'),
+    'Sweeper':     _PitchType('SW', '#0090FC'),
     'Undefined':   _PitchType('UN', '#888888'),
 }
 

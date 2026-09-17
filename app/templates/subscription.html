@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Subscription - {{ active_school.slug|upper }}</title>
+    <meta name="description" content="Manage your Stat_Line subscription, branding, and roster.">
     <link rel="icon" href="{{ url_for('static', filename='resources/favicon.ico') }}" type="image/x-icon">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
@@ -163,8 +164,8 @@
         <div class="bubble">
             <h2>Support</h2>
             <p style="margin: 8px 0;">For billing issues, account questions, or general help, reach out directly:</p>
-            <p style="margin: 8px 0;">📧 <a href="mailto:thomas.eubank516@gmail.com" style="color: var(--accent);">thomas.eubank516@gmail.com</a></p>
-            <p style="margin: 8px 0;">📞 <a href="tel:+16063034052" style="color: var(--accent);">606-303-4052</a></p>
+            <p style="margin: 8px 0; display: flex; align-items: center; gap: 8px;"><img src="{{ url_for('static', filename='resources/icons/mail.svg') }}" data-light-src="{{ url_for('static', filename='resources/icons/mail.svg') }}" data-dark-src="{{ url_for('static', filename='resources/icons/mail-dark.svg') }}" alt="" width="16" height="16"> <a href="mailto:thomas.eubank516@gmail.com" style="color: var(--text-accent);">thomas.eubank516@gmail.com</a></p>
+            <p style="margin: 8px 0; display: flex; align-items: center; gap: 8px;"><img src="{{ url_for('static', filename='resources/icons/phone.svg') }}" data-light-src="{{ url_for('static', filename='resources/icons/phone.svg') }}" data-dark-src="{{ url_for('static', filename='resources/icons/phone-dark.svg') }}" alt="" width="16" height="16"> <a href="tel:+16063034052" style="color: var(--text-accent);">606-303-4052</a></p>
         </div>
 
         {% if active_school.tier in (1, 2) and active_school.stripe_subscription_status in ('active', 'trialing') %}
