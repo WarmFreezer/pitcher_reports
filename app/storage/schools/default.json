@@ -5,30 +5,26 @@
         "mascot": "Fred",
         "slug": "default"
     },
-
     "colors": {
         "primary": "#0B1F3A",
         "secondary": "#E8B84B",
         "tertiary": "#2B486E",
         "accent": "#8B1A1A"
     },
-
     "logos": {
         "primary": "assets/logo.png"
     },
-
     "typography": {
         "font_family": "Graduate, sans-serif",
         "font_weights": {
             "light": 300,
             "regular": 400,
             "bold": 700
-        }        
+        }
     },
-
     "report_settings": {
         "header_height_px": 120,
         "show_logo": true,
-        "footer_text": "© {school_name}. All rights reserved."
+        "footer_text": "\u00a9 {school_name}. All rights reserved."
     }
 }

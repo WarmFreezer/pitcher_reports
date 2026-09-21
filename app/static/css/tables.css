@@ -23,9 +23,31 @@
 }
 
 .table-section {
+    border: 1px solid var(--border);
     border-radius: 10px;
     overflow: hidden;
     margin: 0;
+}
+
+/* The container above draws the outer rounded edge, so the table's own cell
+   borders along that same perimeter are dropped -- otherwise their straight
+   corners poke past the container's curve and the rounding disappears. */
+.table-section thead tr:first-child th {
+    border-top: none;
+}
+
+.table-section tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.table-section th:first-child,
+.table-section td:first-child {
+    border-left: none;
+}
+
+.table-section th:last-child,
+.table-section td:last-child {
+    border-right: none;
 }
 
 .pitcher-usage-panel {
@@ -228,14 +250,24 @@
     width: 100%;
 }
 
+/* Fixed rather than content-sized: chartBlock() first renders a graph-block
+   with only a title + spinner (narrow), then swaps in the actual chart image
+   (up to 400px). Sizing this to content let that swap change the column's
+   width mid-load, which shoved .pitcher-usage-panel -- its flex row sibling --
+   sideways over the break map's title. A fixed width keeps every section's
+   position the same whether the chart is still loading or already in. */
+.pitcher-heatmap .graph-block {
+    flex: 0 0 400px;
+    width: 400px;
+}
+
 .pitcher-breakmap {
     display: flex;
     justify-content: center;
     align-items: center;
     overflow: hidden;
-    flex: 0 0 auto;
-    min-width: 200px;
-    max-width: 450px;
+    flex: 0 0 400px;
+    width: 400px;
 }
 
 .catcher-heatmap,
@@ -262,6 +294,11 @@
     .report-lower-row {
         flex-direction: column;
         align-items: stretch;
+    }
+
+    .pitcher-heatmap .graph-block {
+        flex: 1 1 0;
+        width: auto;
     }
 
     .pitcher-breakmap {

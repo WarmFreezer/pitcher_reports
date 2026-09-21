@@ -8,18 +8,6 @@ DB/Accounts change - Look into different method for verifying school email - med
 
 Team Overview reworked since same stats can be found in a pitcher/hitter report (later)
 
-Pricing Changes - 3 tiers, Add form to request custom reports - med priority (discuss with me and should be its own commit)
-- Tier 1: 249/yr, access to tables, not charts
-- Tier 2: 499/yr, access to tables and chart
-- Tier 3: 899/yr access to tables, charts, and custom pitching report -- not self-serve, master
-  moves a school here manually once a custom report is actually built for them
-- School.tier (price/base-chart-access) and custom-report availability are deliberately
-  independent: master can enable custom reports for a Tier 1/2 school (lower rate) just by
-  uploading its custom_pitcher_report.py/custom_hitter_report.py -- that's not a bug, don't
-  couple them later without discussing it first
-- Self-serve Tier 1<->2 changes (subscription.html "Change Plan"), master tier-edit dropdown
-  (master_schools.html), and the dead /subscribe endpoint removal are all done.
-
 ------ Deferred from the /pitching + /batting restructure ------
 outings.date is String(20) holding dates -- should be db.Date
   Works today only because ISO strings sort chronologically. Needs a migration

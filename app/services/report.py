@@ -30,7 +30,8 @@ from app.services.report_theme import (
     make_homeplate,
     cmap,
     pitch_order,
-    pitch_point_colors
+    pitch_point_colors,
+    in_zone as zone_mask,
 )
 
 from matplotlib import pyplot as plt
@@ -175,6 +176,8 @@ def build_table(source: pd.DataFrame, pitcher_id: int) -> PitcherGameReport | No
                 ).sum()
                 damage_percent = (damage_count / in_play_count * 100.00) if in_play_count > 0 else 0.0
 
+                in_zone = zone_mask(pitch_type_data['PlateLocSide'], pitch_type_data['PlateLocHeight'])
+
                 stats.append(PitchTypeStat(
                     pitch_type=pitch_order.get(pitch_type, pitch_type),
                     thrown_pct=len(pitch_type_data) / len(pitcher_data) * 100,
@@ -190,7 +193,7 @@ def build_table(source: pd.DataFrame, pitcher_id: int) -> PitcherGameReport | No
                     rel_side=pitch_type_data['RelSide'].mean(),
                     extension=pitch_type_data['Extension'].mean(),
                     axis=axis_time,
-                    zone_pct=pitch_type_data['ZoneTime'].mean() * 100,
+                    zone_pct=in_zone.sum() / len(pitch_type_data) * 100,
                     chase_pct=chase_count / len(pitch_type_data) * 100.00,
                     csw_pct=csw_percent,
                     damage_pct=damage_percent,
@@ -467,6 +470,7 @@ def usage_table(source: pd.DataFrame, pitcher_id: int) -> PitchUsageSides | None
 
             for pitch_type in side_data['TaggedPitchType'].unique():
                 pitch_type_data = side_data[side_data['TaggedPitchType'] == pitch_type]
+                swing_data = pitch_type_data[pitch_type_data['PitchCall'].isin(['StrikeSwinging', 'FoulBallNotFieldable', 'InPlay'])]
 
                 strike_count = pitch_type_data['PitchCall'].isin(STRIKES).sum()
                 first_pitch_count = pitch_type_data[pitch_type_data['PitchofPA'] == 1].shape[0]
@@ -483,7 +487,7 @@ def usage_table(source: pd.DataFrame, pitcher_id: int) -> PitchUsageSides | None
                     hitter_favorable_pct=hitter_favorable_count / total_hitter_favorable_count * 100 if total_hitter_favorable_count else 0,
                     pitcher_favorable_pct=pitcher_favorable_count / total_pitcher_favorable_count * 100 if total_pitcher_favorable_count else 0,
                     two_strike_pct=two_strike_count / total_two_strike_count * 100 if total_two_strike_count else 0,
-                    whiff_pct=whiff_count / len(pitch_type_data) * 100,
+                    whiff_pct=(whiff_count / len(swing_data) if len(swing_data) > 0 else 0) * 100,
                 ))
 
             # Top 6 most-thrown pitches, then sorted into the canonical pitch_order

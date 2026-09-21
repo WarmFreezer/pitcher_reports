@@ -279,9 +279,8 @@ function renderPitcherCard(data) {
         if (pitchTypeContainer && data.custom_pitch_type_stats_tables) {
             for (const { title, html } of data.custom_pitch_type_stats_tables) {
                 const section = document.createElement('div');
-                section.className = 'table-section';
                 section.style.cssText = 'max-width:1200px; margin: 8px auto;';
-                section.innerHTML = `<p class="graph-title">${title}</p><div class="table-scroll">${html}</div>`;
+                section.innerHTML = `<p class="graph-title">${title}</p><div class="table-section"><div class="table-scroll">${html}</div></div>`;
                 pitchTypeContainer.appendChild(section);
             }
         }
