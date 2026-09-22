@@ -337,8 +337,13 @@ def pitch_break_map(
     pitcher_id: int,
     threshold: float = 0.1,
     theme: str = 'light',
+    chart_style: str = 'auto',
 ) -> float | None:
-    """Save a pitch-movement (break) plot to output_path; returns the pitcher's overall arm angle."""
+    """Save a pitch-movement (break) plot to output_path; returns the pitcher's overall arm angle.
+
+    chart_style is the viewing user's preference (User.chart_style) -- see _show_heatmap,
+    the same switch pitch_heat_map_by_batter_side uses for the location charts.
+    """
     fig = None
     arm_angle = None
     try:
@@ -378,8 +383,7 @@ def pitch_break_map(
             cmap = pitch_colors.get(pitch_type, 'viridis')
             point_color = pitch_point_colors.get(pitch_type, '#000000')
             
-            # Use KDE for pitch types with 5 or more pitches
-            if len(pitch_data) >= 5:
+            if _show_heatmap(len(pitch_data), chart_style):
                 # Adjust bandwidth for better smoothing with sparse data
                 bw_adjust = 1.5 if len(pitch_data) < 20 else 1.0
                 

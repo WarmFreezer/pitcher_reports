@@ -1,0 +1,132 @@
+/* ============================================================================
+   STATS GUIDE (/stats-guide)
+   Reference documentation for how the default (non-custom) report stats are
+   calculated. Long-form content page -- same shape as the readme-content
+   slice on /about, reused here instead of duplicated.
+   ============================================================================ */
+
+.stats-guide-intro {
+    color: var(--text-secondary);
+    line-height: 1.6;
+    max-width: 800px;
+}
+
+.stats-guide-toc {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    margin: 18px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.stats-guide-toc a {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--bubble-border);
+    background-color: var(--bg-card);
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: bold;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.stats-guide-toc a:hover {
+    background-color: var(--bg-hover);
+    border-color: var(--accent);
+}
+
+.stat-section {
+    scroll-margin-top: 84px; /* clears the sticky site-header on an anchor jump */
+}
+
+.stat-section + .stat-section {
+    margin-top: 36px;
+}
+
+.stat-section > h2 {
+    font-family: 'Graduate', Arial, sans-serif;
+    color: var(--text-primary);
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 8px;
+    margin-bottom: 10px;
+}
+
+.stat-section-intro {
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: 18px;
+    max-width: 800px;
+}
+
+.stat-group {
+    scroll-margin-top: 84px;
+    margin-bottom: 26px;
+}
+
+.stat-group h3 {
+    font-family: 'Graduate', Arial, sans-serif;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.stat-group-intro {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin-bottom: 12px;
+    max-width: 800px;
+}
+
+.stat-def-grid {
+    display: grid;
+    grid-template-columns: minmax(120px, 180px) 1fr;
+    row-gap: 14px;
+    column-gap: 20px;
+}
+
+.stat-def-grid dt {
+    font-weight: bold;
+    color: var(--text-primary);
+    padding-top: 2px;
+}
+
+.stat-def-grid dd {
+    margin: 0;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.stat-formula {
+    display: block;
+    white-space: pre-line;
+    font-family: 'Courier New', monospace;
+    font-size: 0.82rem;
+    color: var(--text-accent);
+    margin-top: 3px;
+}
+
+.stat-note {
+    background-color: var(--bg-card);
+    border-left: 4px solid var(--accent);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 4px 0 22px;
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+    line-height: 1.5;
+    max-width: 800px;
+}
+
+@media (max-width: 640px) {
+    .stat-def-grid {
+        grid-template-columns: 1fr;
+        row-gap: 4px;
+    }
+
+    .stat-def-grid dd {
+        margin-bottom: 10px;
+    }
+}

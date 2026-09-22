@@ -118,7 +118,8 @@ def _build_one_pitcher_report(task: dict[str, Any]) -> dict[str, Any]:
                     source, user_id, school_temp_folder, pitcher_id, 0.75, theme=theme,
                     chart_style=task['chart_style'])
                 result = report.pitch_break_map(
-                    source, user_id, school_temp_folder, pitcher_id, 0.75, theme=theme)
+                    source, user_id, school_temp_folder, pitcher_id, 0.75, theme=theme,
+                    chart_style=task['chart_style'])
                 if arm_angle is None and result is not None:
                     arm_angle = result
 

@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en" style="height: 100%;">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stat_Line - Stats Guide</title>
+    <meta name="description" content="How Stat_Line calculates every default stat shown on pitching, batting, catching and dashboard reports.">
+    <link rel="icon" href="{{ url_for('static', filename='resources/favicon.ico') }}" type="image/x-icon">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/stats-guide.css') }}">
+</head>
+<body onload="loadNavbar(); loadFooter();">
+    <div id="navbar-placeholder"></div>
+
+    <main class="main-content">
+        <div class="bubble">
+            <h2 style="margin-bottom: 10px;">Stats Guide</h2>
+            <p class="stats-guide-intro">
+                Reference for every <strong>default</strong> stat shown on Stat_Line's pitching, batting, catching
+                and dashboard pages — not the school-specific custom stats some programs add on top, which are
+                defined by that school's own uploaded report script and can use different formulas than what's
+                documented here.
+            </p>
+            <ul class="stats-guide-toc">
+                <li><a href="#pitching">Pitching Report</a></li>
+                <li><a href="#batting">Batting Report</a></li>
+                <li><a href="#catching">Catching Report</a></li>
+                <li><a href="#dashboard">Dashboard</a></li>
+            </ul>
+        </div>
+
+        <div class="bubble" style="margin-top: 0;">
+            <!-- ============================== PITCHING ============================== -->
+            <section id="pitching" class="stat-section">
+                <h2>Pitching Report</h2>
+                <p class="stat-section-intro">
+                    Both tables below are built fresh from the raw pitch-by-pitch data for whatever games and
+                    pitcher you select — nothing here is pre-aggregated. The strike zone used throughout is a
+                    fixed rulebook box: <strong>±0.83 ft</strong> from the middle of the plate, and
+                    <strong>1.5–3.5 ft</strong> off the ground.
+                </p>
+
+                <div class="stat-group" id="pitching-pitch-type">
+                    <h3>Pitch-Type Table</h3>
+                    <p class="stat-group-intro">One row per pitch type the pitcher threw, aggregated across every selected game.</p>
+                    <dl class="stat-def-grid">
+                        <dt>Thrown</dt>
+                        <dd>Share of this pitcher's total pitches that were this type.
+                            <span class="stat-formula">pitches of this type / all pitches thrown</span>
+                        </dd>
+
+                        <dt>Low / Vel. / High</dt>
+                        <dd>Minimum, average and maximum release speed for this pitch type.</dd>
+
+                        <dt>IVB / HB</dt>
+                        <dd>Average induced vertical break and horizontal break.</dd>
+
+                        <dt>Spin</dt>
+                        <dd>Average spin rate.</dd>
+
+                        <dt>VAA / HAA</dt>
+                        <dd>Average vertical and horizontal approach angle at the plate.</dd>
+
+                        <dt>RelH / RelS</dt>
+                        <dd>Average release height and release side.</dd>
+
+                        <dt>Ext.</dt>
+                        <dd>Average extension.</dd>
+
+                        <dt>Axis</dt>
+                        <dd>Average spin-axis direction, shown as a clock face (e.g. "12:30").</dd>
+
+                        <dt>Zone</dt>
+                        <dd>Share of this pitch type that landed inside the strike zone box.
+                            <span class="stat-formula">pitches in the zone / pitches of this type</span>
+                            A pitch with no tracked location counts toward the total but not the in-zone count,
+                            so a game with missing PlateLoc data will read slightly lower than actual.
+                        </dd>
+
+                        <dt>Chase</dt>
+                        <dd>How often this pitch type got a swing, expressed as a share of every pitch of that
+                            type — not just the ones outside the zone.
+                            <span class="stat-formula">(swung at, fouled off, put in play, or HBP) AND outside the zone, / pitches of this type</span>
+                        </dd>
+
+                        <dt>CSW</dt>
+                        <dd>Called Strikes + Swinging Strikes, the standard whiff-plus-called-strike effectiveness rate.
+                            <span class="stat-formula">(called strikes + swinging strikes) / pitches of this type</span>
+                        </dd>
+
+                        <dt>Damage</dt>
+                        <dd>Of this pitch type's balls in play, the share hit hard on a line.
+                            <span class="stat-formula">(exit velo ≥ 90 mph AND launch angle 10°–35°) / balls in play of this type</span>
+                        </dd>
+                    </dl>
+                </div>
+
+                <div class="stat-group" id="pitching-usage">
+                    <h3>Pitch Usage (LHH / RHH)</h3>
+                    <p class="stat-group-intro">
+                        Same pitch types, broken out by count situation, one table for left-handed batters and one
+                        for right-handed.
+                    </p>
+                    <dl class="stat-def-grid">
+                        <dt>Count</dt>
+                        <dd>Number of pitches of this type thrown to this batter side.</dd>
+
+                        <dt>Strike</dt>
+                        <dd>Share of this pitch type that was a called strike, swinging strike, or foul.
+                            <span class="stat-formula">strikes of this type / count</span>
+                        </dd>
+
+                        <dt>0-0</dt>
+                        <dd>Of every pitch thrown as the first pitch of a plate appearance, the share that was this type.
+                            <span class="stat-formula">this type's first-pitch count / all first-pitch count</span>
+                        </dd>
+
+                        <dt>Hitter's</dt>
+                        <dd>Of every pitch thrown in a hitter-favorable count (more balls than strikes), the share that was this type.</dd>
+
+                        <dt>Pitcher's</dt>
+                        <dd>Same, for pitcher-favorable counts (more strikes than balls).</dd>
+
+                        <dt>2k</dt>
+                        <dd>Of every pitch thrown with two strikes, the share that was this type.</dd>
+
+                        <dt>Whiff</dt>
+                        <dd>Swing-and-miss rate on swings at this pitch type — the standard whiff definition,
+                            over swings rather than over every pitch (compare to the Pitching Report's Chase, which
+                            is intentionally over every pitch of that type).
+                            <span class="stat-formula">swinging strikes of this type / swings at this type</span>
+                        </dd>
+                    </dl>
+                </div>
+            </section>
+
+            <!-- ============================== BATTING ============================== -->
+            <section id="batting" class="stat-section">
+                <h2>Batting Report</h2>
+                <p class="stat-section-intro">
+                    A plate appearance is counted when it ends in a walk, strikeout, hit-by-pitch, or ball in play —
+                    not one per pitch seen.
+                </p>
+
+                <div class="stat-group" id="batting-summary">
+                    <h3>Summary / Slash Line</h3>
+                    <dl class="stat-def-grid">
+                        <dt>PA / AB</dt>
+                        <dd>Plate appearances, and at-bats (PA minus walks, hit-by-pitches and sacrifices).</dd>
+
+                        <dt>AVG</dt>
+                        <dd><span class="stat-formula">hits / AB</span></dd>
+
+                        <dt>OBP</dt>
+                        <dd><span class="stat-formula">(hits + walks + HBP) / (AB + walks + HBP + sacrifices)</span></dd>
+
+                        <dt>SLG</dt>
+                        <dd><span class="stat-formula">total bases / AB</span>, where a single/double/triple/home run counts 1/2/3/4 bases.</dd>
+
+                        <dt>OPS</dt>
+                        <dd><span class="stat-formula">OBP + SLG</span></dd>
+
+                        <dt>BB% / K%</dt>
+                        <dd>Walks or strikeouts as a share of plate appearances.</dd>
+
+                        <dt>Avg EV / Max EV</dt>
+                        <dd>Average and maximum exit velocity on balls in play.</dd>
+
+                        <dt>Hard-Hit%</dt>
+                        <dd>Share of balls in play (with a tracked exit velocity) hit 95+ mph.</dd>
+
+                        <dt>Avg LA</dt>
+                        <dd>Average launch angle on balls in play.</dd>
+                    </dl>
+                </div>
+
+                <div class="stat-group" id="batting-discipline">
+                    <h3>Plate Discipline</h3>
+                    <p class="stat-group-intro">One row per pitch type the hitter saw.</p>
+                    <dl class="stat-def-grid">
+                        <dt>Seen / Usage</dt>
+                        <dd>Pitches of this type seen, and that count's share of every pitch seen.</dd>
+
+                        <dt>Zone</dt>
+                        <dd>Share of this pitch type (with a tracked location) that was in the strike zone.
+                            <span class="stat-formula">in-zone / located pitches of this type</span>
+                            Unlike the Pitching Report's Zone stat, an untracked pitch is excluded from both the
+                            top and bottom of this fraction rather than just the top.
+                        </dd>
+
+                        <dt>Swing</dt>
+                        <dd>Share of this pitch type the hitter swung at (whiff, foul, or ball in play).</dd>
+
+                        <dt>Whiff</dt>
+                        <dd>Swing-and-miss rate on swings at this pitch type.
+                            <span class="stat-formula">whiffs / swings</span>
+                        </dd>
+
+                        <dt>Chase</dt>
+                        <dd>Of this pitch type's located pitches outside the zone, the share swung at.
+                            <span class="stat-formula">swings outside the zone / located pitches outside the zone</span>
+                        </dd>
+
+                        <dt>Contact</dt>
+                        <dd>Of the swings taken at this pitch type, the share that weren't a whiff.</dd>
+                    </dl>
+                </div>
+
+                <div class="stat-group" id="batting-batted-ball">
+                    <h3>Batted Ball Profile</h3>
+                    <p class="stat-group-intro">
+                        Every ball in play, bucketed by launch angle: <strong>Ground</strong> ≤ 10°,
+                        <strong>Line</strong> 10°–25°, <strong>Fly</strong> 25°–50°, <strong>Pop</strong> above 50°.
+                    </p>
+                    <dl class="stat-def-grid">
+                        <dt>Count / Rate</dt>
+                        <dd>Balls in play in this bucket, and that count's share of all balls in play.</dd>
+
+                        <dt>Avg EV / Max EV</dt>
+                        <dd>Average and maximum exit velocity within the bucket.</dd>
+
+                        <dt>Avg LA</dt>
+                        <dd>Average launch angle within the bucket.</dd>
+
+                        <dt>Avg Dist</dt>
+                        <dd>Average batted-ball distance within the bucket.</dd>
+                    </dl>
+                </div>
+            </section>
+
+            <!-- ============================== CATCHING ============================== -->
+            <section id="catching" class="stat-section">
+                <h2>Catching Report</h2>
+                <p class="stat-section-intro">
+                    Framing is graded only on <strong>taken pitches</strong> (called a ball or a strike — swings
+                    aren't framed), against a model of how likely each pitch's exact location was to be called a
+                    strike in the first place.
+                </p>
+
+                <div class="stat-group" id="catching-framing">
+                    <h3>Framing (SLAA / SL+)</h3>
+                    <dl class="stat-def-grid">
+                        <dt>Strike probability</dt>
+                        <dd>A pitch's modeled chance of being called a strike, based purely on its distance from
+                            the rulebook zone edge: 50% exactly on the edge, rising toward 100% at the center of
+                            the zone, falling toward 0% further outside it. The same model every school starts
+                            with — it isn't learned from that school's own pitch history.
+                        </dd>
+
+                        <dt>Framing Value</dt>
+                        <dd>Per taken pitch: credit for stealing an unlikely strike, a debit for losing a likely
+                            one, zero when the call matched a coin-flip-or-better expectation.
+                            <span class="stat-formula">called strike, prob &lt; 50%: +(50% − prob)&#10;called ball, prob &gt; 50%: −(prob − 50%)&#10;otherwise: 0</span>
+                        </dd>
+
+                        <dt>Framing Value (per game)</dt>
+                        <dd>Sum of every taken pitch's framing value that game — the catching equivalent of SLAA
+                            (Strikes-Looking-Above-Average).</dd>
+
+                        <dt>Framing Rate</dt>
+                        <dd>Stolen strikes minus lost strikes, scaled to a rate per 100 taken pitches (SL+).
+                            <span class="stat-formula">(stolen − lost) / taken pitches × 100</span>
+                        </dd>
+
+                        <dt>Correct / Stolen / Lost</dt>
+                        <dd>Taken-pitch counts where the actual call matched the model's expectation, beat it
+                            (stole a strike), or missed it (lost a strike).</dd>
+                    </dl>
+                </div>
+            </section>
+
+            <!-- ============================== DASHBOARD ============================== -->
+            <section id="dashboard" class="stat-section">
+                <h2>Dashboard — Team Overview</h2>
+                <p class="stat-section-intro">
+                    Situational splits for lead-off batters (the first batter of an inning) and two-out at-bats,
+                    computed per outing at upload time and summed across every outing on file for the season.
+                </p>
+                <div class="stat-note">
+                    These numbers update as new games are uploaded, unlike the Pitching/Batting/Catching reports
+                    above, which recompute live from whatever date range and games you pick each time.
+                </div>
+
+                <div class="stat-group" id="dashboard-team-overview">
+                    <dl class="stat-def-grid">
+                        <dt>LO OBP</dt>
+                        <dd>How often the lead-off batter reached base (walk, HBP, hit, or error), per lead-off inning.
+                            <span class="stat-formula">lead-off reaches / lead-off innings</span>
+                        </dd>
+
+                        <dt>LO BB%</dt>
+                        <dd>Lead-off walks, per lead-off inning.</dd>
+
+                        <dt>2-Out Eff%</dt>
+                        <dd>How often a two-out at-bat ended without the batter reaching base — the pitcher's
+                            "finish the inning" rate.
+                            <span class="stat-formula">(2-out at-bats − 2-out reaches) / 2-out at-bats</span>
+                        </dd>
+
+                        <dt>2-Out BB%</dt>
+                        <dd>Walks issued with two outs, per two-out at-bat.</dd>
+                    </dl>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <div id="footer-placeholder"></div>
+
+    <script src="{{ url_for('static', filename='js/core.js') }}"></script>
+</body>
+</html>

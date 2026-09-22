@@ -71,7 +71,7 @@ function loadNavbar(logo = '') {
     const active = {
         home:     p === '/',
         file:     p.startsWith('/upload'),
-        view:     p.startsWith('/batting') || p.startsWith('/pitching') || p.startsWith('/catching'),
+        view:     p.startsWith('/batting') || p.startsWith('/pitching') || p.startsWith('/catching') || p.startsWith('/stats-guide'),
         settings: p.startsWith('/account') || p.startsWith('/subscription'),
         about:    p.startsWith('/about'),
     };
@@ -100,6 +100,7 @@ function loadNavbar(logo = '') {
                             <a href="/pitching">Pitching Report</a>
                             <a href="/batting">Batting Report</a>
                             <a href="/catching">Catching Report</a>
+                            <a href="/stats-guide">Stats Guide</a>
                         </div>
                     </div>
                     <div class="nav-dropdown">
@@ -222,6 +223,7 @@ function loadFooter() {
             <a href="https://warmfreezer.github.io/about_me/" style="color: white; font-family: 'Cambria', serif;">&copy; 2026 Thomas Eubank</a>
             <br>
             <a href=/about style="color: white; font-family: 'Cambria', serif;">About</a>
+            <a href=/stats-guide style="color: white; margin-left: 16px; font-family: 'Cambria', serif;">Stats Guide</a>
             <a href=/terms style="color: white; margin-left: 16px; font-family: 'Cambria', serif;">Terms</a>
             <a href=/privacy style="color: white; margin-left: 16px; font-family: 'Cambria', serif;">Privacy Policy</a>
         </footer>

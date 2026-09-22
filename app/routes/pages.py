@@ -289,6 +289,12 @@ def about() -> ResponseReturnValue:
     return render_template('about.html', readme_html=_marketing_readme_html())
 
 
+@pages_bp.route('/stats-guide')
+def stats_guide() -> ResponseReturnValue:
+    """Reference page for how the default (non-custom) report stats are calculated."""
+    return render_template('stats_guide.html')
+
+
 @pages_bp.route('/terms')
 def terms() -> ResponseReturnValue:
     return render_template('terms.html')
@@ -307,7 +313,8 @@ def sitemap() -> ResponseReturnValue:
 
     pages = [
         {'loc': f'{base}/',         'priority': '1.0', 'changefreq': 'weekly'},
-        {'loc': f'{base}/about',    'priority': '0.8', 'changefreq': 'weekly'},
+        {'loc': f'{base}/about',        'priority': '0.8', 'changefreq': 'weekly'},
+        {'loc': f'{base}/stats-guide',  'priority': '0.6', 'changefreq': 'monthly'},
         {'loc': f'{base}/schools',  'priority': '0.8', 'changefreq': 'monthly'},
         {'loc': f'{base}/register', 'priority': '0.7', 'changefreq': 'monthly'},
         {'loc': f'{base}/login',    'priority': '0.6', 'changefreq': 'monthly'},
