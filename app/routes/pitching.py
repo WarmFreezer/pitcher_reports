@@ -112,6 +112,7 @@ def _build_one_pitcher_report(task: dict[str, Any]) -> dict[str, Any]:
         arm_angle = None
         custom_stats = None
         custom_pitch_type_stats = None
+        breakmap_legend: list = []
         if task['is_active'] and task['include_charts']:
             for theme in ('light', 'dark'):
                 report.pitch_heat_map_by_batter_side(
@@ -119,9 +120,11 @@ def _build_one_pitcher_report(task: dict[str, Any]) -> dict[str, Any]:
                     chart_style=task['chart_style'])
                 result = report.pitch_break_map(
                     source, user_id, school_temp_folder, pitcher_id, 0.75, theme=theme,
-                    chart_style=task['chart_style'])
+                    chart_style=task['chart_style'], show_arrows=task['show_break_arrows'])
                 if arm_angle is None and result is not None:
                     arm_angle = result
+            # Theme-independent -- computed once rather than once per theme.
+            breakmap_legend = report.pitch_break_map_legend(source, pitcher_id)
 
         # Independent of include_charts -- gated only on whether the school has a
         # master-uploaded custom_pitcher_report.py, so a lower-tier school can still
@@ -157,6 +160,7 @@ def _build_one_pitcher_report(task: dict[str, Any]) -> dict[str, Any]:
             pitch_heat_map_left=os.path.join(school_temp_folder, f'{user_id}_pitcher_{pitcher_id}_heat_map_left_light.png'),
             pitch_heat_map_right=os.path.join(school_temp_folder, f'{user_id}_pitcher_{pitcher_id}_heat_map_right_light.png'),
             pitch_break_map=os.path.join(school_temp_folder, f'{user_id}_pitcher_{pitcher_id}_break_map_light.png'),
+            pitch_break_map_legend=breakmap_legend,
             custom_stats=custom_stats,
             custom_pitch_type_stats=custom_pitch_type_stats,
         ), os.path.abspath(os.path.join(
@@ -186,6 +190,10 @@ def _build_one_pitcher_report(task: dict[str, Any]) -> dict[str, Any]:
             'heatmap_right_dark_url': f'{chart_base}_heat_map_right_dark.png',
             'breakmap_url': f'{chart_base}_break_map_light.png',
             'breakmap_dark_url': f'{chart_base}_break_map_dark.png',
+            'breakmap_legend': [
+                {'abbreviation': e.abbreviation, 'color': e.color, 'count': e.count}
+                for e in breakmap_legend
+            ],
             'arm_angle': f'{arm_angle:.1f}°' if arm_angle is not None else '',
             'pdf_url': f'/api/pitching/export?pitcher_id={pitcher_id}',
             'pitch_by_pitch_url': f'/api/pitching/pitch-by-pitch?pitcher_id={pitcher_id}&target={task["target"]}&{task["hash_qs"]}',
@@ -308,6 +316,7 @@ def pitching_report() -> ResponseReturnValue:
     include_charts = current_user.school.tier >= 2
     chart_style = current_user.chart_style
     ink_mode = current_user.ink_mode
+    show_break_arrows = current_user.show_break_arrows
     hash_qs = '&'.join(f'content_hash={quote(g["content_hash"])}' for g in selected)
 
     pitcher_ids = list(matching['PitcherId'].unique())
@@ -324,6 +333,7 @@ def pitching_report() -> ResponseReturnValue:
         'include_charts': include_charts,
         'chart_style': chart_style,
         'ink_mode': ink_mode,
+        'show_break_arrows': show_break_arrows,
         'branding': branding,
         'date_range': date_range,
         'home_team': trackman_id,

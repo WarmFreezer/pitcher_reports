@@ -13,6 +13,7 @@ from reportlab.lib.units import inch
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.pdfbase.pdfmetrics import stringWidth
+from reportlab.graphics.shapes import Drawing, Rect
 from reportlab.platypus import (
     Paragraph, Spacer, Table, TableStyle,
     Image, Frame, PageTemplate, BaseDocTemplate, KeepInFrame,
@@ -27,6 +28,7 @@ from app.services.pitch_stats import (
     PitchUsageStat,
     PitchUsageTable,
     PitchByPitchReport,
+    BreakMapLegendEntry,
 )
 from app.services.hitter_stats import HitterReportRequest, HitterPitchByPitchAtBat, HitterPitchByPitchReport
 from app.services.catcher_stats import CatcherReportRequest
@@ -440,6 +442,26 @@ class PDF_Generator:
             Spacer(1, 0.05 * inch),
         ]
 
+    def _image_display_size(self, image_path: str, max_width_pts: float) -> tuple[float, float]:
+        """
+        The (width, height) an image actually renders at once capped first by
+        max_width_pts and then by height (a third of the page) -- exposed
+        separately from add_image_section so a sibling element (the break map's
+        legend) can match the image's real rendered width instead of the full
+        column it was allotted, which can be wider once the height cap kicks in.
+        """
+        img = PILImage.open(image_path)
+        aspect_ratio = img.height / img.width
+        img_w = max_width_pts
+        img_h = img_w * aspect_ratio
+
+        max_height_pts = (self.PAGE_H - 2 * self.MARGIN) / 3.5
+        if img_h > max_height_pts:
+            img_h = max_height_pts
+            img_w = img_h / aspect_ratio
+
+        return img_w, img_h
+
     def add_image_section(self, image_path: str, title: str, max_width_pts: float | None = None) -> list[Any]:
         """
         Add an image section to the report (for heat maps, break maps, etc).
@@ -453,14 +475,14 @@ class PDF_Generator:
             List of document elements containing the image section
         """
         elements: list[Any] = []
-        
+
         if max_width_pts is None:
             max_width_pts = self.PAGE_W - 2 * self.MARGIN
 
         if not os.path.exists(image_path):
             elements.append(Paragraph(f"<i>Image not found: {title}</i>", self.styles["body"]))
             return elements
-        
+
         try:
             # No KeepTogether here (unlike generate_data_table etc.) -- this is
             # sometimes handed to generate_two_column_layout, whose KeepInFrame
@@ -470,17 +492,7 @@ class PDF_Generator:
             # KeepInFrame can't honor and crashes on with "no attribute 'draw'").
             elements.append(Paragraph(title, self.styles["section_header"]))
 
-            # Calculate height to maintain aspect ratio
-            from PIL import Image as PILImage
-            img = PILImage.open(image_path)
-            aspect_ratio = img.height / img.width
-            img_w = max_width_pts
-            img_h = img_w * aspect_ratio
-
-            max_height_pts = (self.PAGE_H - 2 * self.MARGIN) / 3.5
-            if img_h > max_height_pts:
-                img_h = max_height_pts
-                img_w = img_h / aspect_ratio
+            img_w, img_h = self._image_display_size(image_path, max_width_pts)
 
             # Add image
             img_element = Image(image_path, width=img_w, height=img_h)
@@ -491,6 +503,66 @@ class PDF_Generator:
             elements.append(Paragraph(f"<i>Error loading image: {str(e)}</i>", self.styles["body"]))
         
         return elements
+
+    def _rounded_swatch(self, color: str, size: float = 8.0, radius: float = 2.5) -> Drawing:
+        """A small rounded-corner square in the given color, for the break map
+        legend -- a real vector shape rather than a table cell's flat
+        BACKGROUND fill, so it actually renders with rounded corners, matching
+        the web preview's CSS-rounded swatch."""
+        d = Drawing(size, size)
+        d.add(Rect(0, 0, size, size, rx=radius, ry=radius, fillColor=colors.HexColor(color), strokeColor=None))
+        return d
+
+    def generate_break_map_legend(self, entries: list[BreakMapLegendEntry], max_width_pts: float | None = None) -> list[Any]:
+        """
+        Small colored-swatch key for the pitch break map, as its own table below
+        the chart image rather than a legend matplotlib draws inside the chart
+        itself -- see report.py's pitch_break_map_legend(), which is also what
+        the web preview's HTML legend is built from.
+
+        max_width_pts should be the chart image's own *rendered* width (see
+        _image_display_size), not the full column it was allotted -- the two
+        can differ once the image's height cap kicks in, and sizing the legend
+        to the wider column then left it stretching out past the narrower
+        image instead of sitting under it.
+        """
+        if not entries:
+            return []
+
+        if max_width_pts is None:
+            max_width_pts = self.PAGE_W - 2 * self.MARGIN
+
+        swatch_w = 10.0
+        label_w = 50.0
+        per_row = max(1, int(max_width_pts // (swatch_w + label_w)))
+        # Shrink the columns to exactly fill max_width_pts (rather than leaving
+        # a ragged gap when per_row divides it unevenly) so the table's actual
+        # width matches the image above it and both sit centered together.
+        label_w = max_width_pts / per_row - swatch_w
+
+        rows_data: list[list[Any]] = []
+        style_commands: list[tuple] = [
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTSIZE', (0, 0), (-1, -1), 8),
+            ('LEFTPADDING', (0, 0), (-1, -1), 2),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+        ]
+        for i in range(0, len(entries), per_row):
+            chunk = entries[i:i + per_row]
+            row: list[Any] = []
+            for entry in chunk:
+                row.append(self._rounded_swatch(entry.color))
+                row.append(f'{entry.abbreviation}: {entry.count}')
+            while len(row) < per_row * 2:
+                row.append('')
+            rows_data.append(row)
+
+        legend_table = Table(rows_data, colWidths=[swatch_w, label_w] * per_row, hAlign='CENTER')
+        legend_table.setStyle(TableStyle(style_commands))
+        return [legend_table]
 
     def generate_pitch_type_summary(self, stats_df: pd.DataFrame) -> list[Any]:
         """
@@ -584,14 +656,17 @@ class PDF_Generator:
         
         return elements
 
-    def generate_two_column_layout(self, left_elements: list[Any], right_elements: list[Any]) -> list[Any]:
+    def generate_two_column_layout(self, left_elements: list[Any], right_elements: list[Any], col_padding: float = 5) -> list[Any]:
         """
         Generate a two-column layout for side-by-side content.
-        
+
         Args:
             left_elements: List of flowable elements for left column
             right_elements: List of flowable elements for right column
-            
+            col_padding: Left/right cell padding in points; the gap between
+                columns is roughly double this (left cell's right padding +
+                right cell's left padding). Defaults to the original 5pt.
+
         Returns:
             List containing a table with two columns
         """
@@ -607,19 +682,19 @@ class PDF_Generator:
         # Wrap elements in KeepInFrame to constrain width for table cells
         left_frame = KeepInFrame(col_width, max_height, left_elements, hAlign='LEFT')
         right_frame = KeepInFrame(col_width, max_height, right_elements, hAlign='LEFT')
-        
+
         layout_table = Table(
             [[left_frame, right_frame]],
             colWidths=[col_width, col_width],
             rowHeights=[None]
         )
-        
+
         layout_table.setStyle(TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-            ('LEFTPADDING', (0, 0), (-1, -1), 5),
-            ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+            ('LEFTPADDING', (0, 0), (-1, -1), col_padding),
+            ('RIGHTPADDING', (0, 0), (-1, -1), col_padding),
         ]))
-        
+
         return [layout_table]
 
     def generate_pitcher_report(self, data: PitcherReportRequest, output_path: str) -> str:
@@ -710,13 +785,20 @@ class PDF_Generator:
         if data.pitch_break_map and os.path.exists(data.pitch_break_map):
             half_width = (self.PAGE_W - 2 * self.MARGIN - 0.2 * inch) / 2
             left_elements = self.add_image_section(data.pitch_break_map, "Pitch Break Map", max_width_pts=half_width)
+            if data.pitch_break_map_legend:
+                # Match the legend's width to the image's own rendered width
+                # (which can be narrower than half_width once the height cap
+                # kicks in), not the full column, so the two stay aligned
+                # instead of the legend stretching past a narrower image.
+                image_w, _ = self._image_display_size(data.pitch_break_map, half_width)
+                left_elements.extend(self.generate_break_map_legend(data.pitch_break_map_legend, max_width_pts=image_w))
             right_elements: list[Any] = []
             if data.pitch_usage_left is not None:
                 right_elements.extend(self.generate_usage_table(data.pitch_usage_left, batter_side="Left"))
             if data.pitch_usage_right is not None:
                 right_elements.extend(self.generate_usage_table(data.pitch_usage_right, batter_side="Right"))
 
-            elements.extend(self.generate_two_column_layout(left_elements, right_elements))
+            elements.extend(self.generate_two_column_layout(left_elements, right_elements, col_padding=20))
         else:
             # If no break map, add usage tables in single column
             if data.pitch_usage_left is not None:

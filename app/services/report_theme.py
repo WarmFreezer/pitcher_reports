@@ -169,6 +169,7 @@ _PITCH_TYPES: dict[str, _PitchType] = {
     'Four-Seam':   _PitchType('4S', '#fc1c00'),
     'FourSeamFastBall':   _PitchType('4S', '#fc1c00'),
     'Two-Seam':    _PitchType('2S', '#FC9C00'),
+    'TwoSeamFastBall':    _PitchType('2S', '#FC9C00'),
     'Sweeper':     _PitchType('SW', '#0090FC'),
     'Undefined':   _PitchType('UN', '#888888'),
 }

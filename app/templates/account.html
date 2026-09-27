@@ -63,6 +63,17 @@
                         <span class="hint-tooltip">Colored headers use more ink/toner when printed. Light ink drops those fills in favor of a plain rule.</span>
                     </span>
                 </div>
+                <div class="switch-row">
+                    <label class="switch-field switch-field-subtle" style="margin: 0;">
+                        <span class="switch-text switch-label-fixed">Show Arrows</span>
+                        <input type="checkbox" id="break-arrows-toggle" class="switch-input" {% if not current_user.show_break_arrows %}checked{% endif %}>
+                        <span class="switch-slider switch-slider-subtle"></span>
+                        <span class="switch-text">Hide Arrows</span>
+                    </label>
+                    <span class="hint-icon" tabindex="0">?
+                        <span class="hint-tooltip">Controls whether the pitch break map draws the average movement arrow for each pitch type and overall.</span>
+                    </span>
+                </div>
             </div>
 
             <button class="download-btn btn-warn" onclick="updateReportSettings()">Save Preferences</button>

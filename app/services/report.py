@@ -21,6 +21,7 @@ from app.services.pitch_stats import (
     PitchByPitchPitch,
     PitchByPitchAtBat,
     PitchByPitchReport,
+    BreakMapLegendEntry,
 )
 from app.services.report_theme import (
     BASEBALL_WIDTH,
@@ -338,11 +339,16 @@ def pitch_break_map(
     threshold: float = 0.1,
     theme: str = 'light',
     chart_style: str = 'auto',
+    show_arrows: bool = True,
 ) -> float | None:
     """Save a pitch-movement (break) plot to output_path; returns the pitcher's overall arm angle.
 
     chart_style is the viewing user's preference (User.chart_style) -- see _show_heatmap,
     the same switch pitch_heat_map_by_batter_side uses for the location charts.
+
+    show_arrows is the viewing user's preference (User.show_break_arrows) -- when False,
+    the per-pitch-type and overall average movement vectors (ax.quiver below) are skipped
+    and only the KDE/scatter cloud is drawn.
     """
     fig = None
     arm_angle = None
@@ -403,13 +409,12 @@ def pitch_break_map(
                 avg_side = pitch_data['HorzBreak'].mean()
                 avg_height = pitch_data['InducedVertBreak'].mean()
                 ax.scatter(
-                    avg_side, 
+                    avg_side,
                     avg_height,
                     color=point_color,
                     marker='.',
                     s=100,
                     zorder=5,
-                    label=f'{pitch_order.get(pitch_type, pitch_type)}: {len(pitch_data)} pitches'
                 )
             else:
                 # Plot individual points
@@ -422,15 +427,17 @@ def pitch_break_map(
                     zorder=5,
                     edgecolors='black',
                     linewidth=0.5,
-                    label=f'{pitch_order.get(pitch_type, pitch_type)}: {len(pitch_data)} pitches'
                 )
 
             # Plot pitch type average movement vector for the pitcher
-            ax.quiver(0, 0, pitch_data['HorzBreak'].mean(), pitch_data['InducedVertBreak'].mean(), angles='xy', scale_units='xy', scale=1, color=pitch_point_colors.get(pitch_type, 'gray'), width=0.005)
+            if show_arrows:
+                ax.quiver(0, 0, pitch_data['HorzBreak'].mean(), pitch_data['InducedVertBreak'].mean(), angles='xy', scale_units='xy', scale=1, color=pitch_point_colors.get(pitch_type, 'gray'), width=0.005)
 
-        # Plot overall average movement vector for the pitcher
+        # Overall arm angle is always computed (used outside this chart), even
+        # when show_arrows skips drawing the vector itself.
         arm_angle = np.degrees(np.arctan2(pitcher_data['InducedVertBreak'].mean(), pitcher_data['HorzBreak'].mean()))
-        ax.quiver(0, 0, pitcher_data['HorzBreak'].mean(), pitcher_data['InducedVertBreak'].mean(), angles='xy', scale_units='xy', scale=1, color='gray', width=0.01)
+        if show_arrows:
+            ax.quiver(0, 0, pitcher_data['HorzBreak'].mean(), pitcher_data['InducedVertBreak'].mean(), angles='xy', scale_units='xy', scale=1, color='gray', width=0.01)
 
         # Set plot properties
         ax.set_xlabel('Horizontal Break (in)', fontsize=18, labelpad=8)
@@ -440,10 +447,10 @@ def pitch_break_map(
         ax.grid(True, linestyle='--', alpha=0.5)
         ax.set_aspect('equal', adjustable='box')
 
-        handles, labels = ax.get_legend_handles_labels()
-        by_label = dict(zip(labels, handles))
-        ax.legend(by_label.values(), by_label.keys(), loc='lower right', fontsize=18)
-        
+        # No legend drawn on the chart itself -- pitch_break_map_legend() below
+        # builds the same pitch-type/color/count data as its own element
+        # (HTML on the web preview, a small ReportLab table in the PDF) so it
+        # can be positioned separately from the image instead of overlapping it.
         fig.subplots_adjust(left=0.06, right=0.96, top=0.88, bottom=0.1, wspace=0.2)
         fig.savefig(os.path.join(output_path, f'{id}_pitcher_{pitcher_id}_break_map_{theme}.png'), pad_inches=0.3, dpi=300, bbox_inches='tight', transparent=True)
 
@@ -453,6 +460,25 @@ def pitch_break_map(
         if fig is not None:
             plt.close(fig)
     return arm_angle
+
+def pitch_break_map_legend(source: pd.DataFrame, pitcher_id: int) -> list[BreakMapLegendEntry]:
+    """
+    Legend entries (abbreviation, color, pitch count) for pitch_break_map's
+    chart -- one per pitch type actually plotted there. Kept separate from
+    pitch_break_map itself (which no longer draws a legend on the chart) so
+    callers can render it as their own element instead, and so it's computed
+    once rather than once per light/dark theme render.
+    """
+    pitcher_data = source[source['PitcherId'] == pitcher_id]
+    pitch_types = [pt for pt in pitcher_data['TaggedPitchType'].unique() if pt != 'n/a']
+    return [
+        BreakMapLegendEntry(
+            abbreviation=pitch_order.get(pt, pt),
+            color=pitch_point_colors.get(pt, '#888888'),
+            count=int((pitcher_data['TaggedPitchType'] == pt).sum()),
+        )
+        for pt in pitch_types
+    ]
 
 def usage_table(source: pd.DataFrame, pitcher_id: int) -> PitchUsageSides | None:
     """Pitch-usage-by-count-situation tables for one pitcher, one per batter side (left, right)."""

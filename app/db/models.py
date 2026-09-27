@@ -88,6 +88,9 @@ class User(UserMixin, BaseModel):
     # PDF print style: 'full_color' (today's branded headers/fills) or 'light_ink',
     # which drops those fills in favor of a plain rule to cut toner use when printed.
     ink_mode: Mapped[str] = mapped_column(db.String(20), default='full_color')
+    # Whether the pitch break map draws the per-pitch-type/overall average movement
+    # vectors (report.pitch_break_map's ax.quiver calls) or just the KDE/scatter cloud.
+    show_break_arrows: Mapped[bool] = mapped_column(default=True)
     created_at: Mapped[datetime | None] = mapped_column(default=db.func.current_timestamp())
 
 

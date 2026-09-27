@@ -263,11 +263,45 @@
 
 .pitcher-breakmap {
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
     overflow: hidden;
     flex: 0 0 400px;
     width: 400px;
+}
+
+/* The break map's pitch-type key -- its own element below the chart rather
+   than a legend drawn inside the chart image, so it never sits on top of the
+   break-point cloud it's labeling. */
+.breakmap-legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 12px;
+    margin-top: 8px;
+    width: 100%;
+}
+
+.breakmap-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--bg-card);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.breakmap-legend-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
 }
 
 .catcher-heatmap,

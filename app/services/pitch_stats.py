@@ -151,6 +151,17 @@ class PitchUsageSides:
 
 
 @dataclass(frozen=True)
+class BreakMapLegendEntry:
+    """One pitch type's entry in the break map's legend -- rendered as its own
+    element (HTML on the web preview, a small ReportLab table in the PDF)
+    rather than baked into the chart image, so it can be positioned separately
+    from the chart itself."""
+    abbreviation: str
+    color: str
+    count: int
+
+
+@dataclass(frozen=True)
 class CustomStat:
     """One school-defined stat computed in report.py's custom_stats_table()."""
     name: str
@@ -234,5 +245,6 @@ class PitcherReportRequest:
     pitch_heat_map_left: str | None = None
     pitch_heat_map_right: str | None = None
     pitch_break_map: str | None = None
+    pitch_break_map_legend: list[BreakMapLegendEntry] | None = None
     custom_stats: CustomStatsTable | None = None
     custom_pitch_type_stats: list[CustomPitchTypeStatsTable] | None = None

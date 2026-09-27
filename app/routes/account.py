@@ -91,6 +91,11 @@ def update_preferences() -> ResponseReturnValue:
             return jsonify({'error': 'Invalid ink mode.'}), 400
         current_user.ink_mode = data['ink_mode']
 
+    if 'show_break_arrows' in data:
+        if not isinstance(data['show_break_arrows'], bool):
+            return jsonify({'error': 'Invalid show break arrows setting.'}), 400
+        current_user.show_break_arrows = data['show_break_arrows']
+
     try:
         db.session.commit()
         return jsonify({'message': 'Preferences updated successfully.'}), 200

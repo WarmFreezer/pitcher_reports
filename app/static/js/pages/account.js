@@ -49,12 +49,13 @@ async function updatePassword() {
 async function updateReportSettings() {
     const chartStyle = document.getElementById('chart-style-toggle').checked ? 'pitch_point' : 'auto';
     const inkMode = document.getElementById('ink-mode-toggle').checked ? 'light_ink' : 'full_color';
+    const showBreakArrows = !document.getElementById('break-arrows-toggle').checked;
 
     try {
         const response = await fetch('/api/account/preferences', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chart_style: chartStyle, ink_mode: inkMode })
+            body: JSON.stringify({ chart_style: chartStyle, ink_mode: inkMode, show_break_arrows: showBreakArrows })
         });
         const data = await response.json();
         if (response.ok) {

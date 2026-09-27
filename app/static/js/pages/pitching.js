@@ -215,6 +215,25 @@ function renderRunSummary(result) {
         </div>`;
 }
 
+// Break map pitch-type key as its own element (colored swatch + abbreviation +
+// pitch count per type) instead of a legend drawn inside the chart image, so
+// it never sits on top of the break-point cloud it's labeling.
+function breakMapLegend(entries) {
+    const legend = document.createElement('div');
+    legend.className = 'breakmap-legend';
+    for (const { abbreviation, color, count } of entries) {
+        const item = document.createElement('span');
+        item.className = 'breakmap-legend-item';
+        const swatch = document.createElement('span');
+        swatch.className = 'breakmap-legend-swatch';
+        swatch.style.backgroundColor = color;
+        item.appendChild(swatch);
+        item.appendChild(document.createTextNode(`${abbreviation}: ${count}`));
+        legend.appendChild(item);
+    }
+    return legend;
+}
+
 // Stamps one pitcher's data into the hidden <template> and appends the clone
 function renderPitcherCard(data) {
     const template = document.querySelector('#pitcher-report-template');
@@ -261,6 +280,9 @@ function renderPitcherCard(data) {
         breakmapContainer.appendChild(
             chartBlock(data.breakmap_url, data.breakmap_dark_url, title, currentTheme,
                        `${data.pitcher_name} Break Map`, 'report-img-breakmap'));
+        if (data.breakmap_legend && data.breakmap_legend.length) {
+            breakmapContainer.appendChild(breakMapLegend(data.breakmap_legend));
+        }
     }
 
     clone.querySelector('.pitcher-table').innerHTML = data.pitcher_table || '';
