@@ -396,9 +396,9 @@ def _order_by_pitch_type(stats: list[_HD]) -> list[_HD]:
     """
     Sort into the shared pitch_order so tables read the same as the pitcher reports.
 
-    Anything TrackMan tags outside that order -- Sweeper and TwoSeamFastBall turn up
-    in real exports -- is appended as its own category, in first-seen order, rather
-    than dropped.
+    Anything TrackMan tags outside that order -- a rare pitch like Screwball, or a
+    school's own custom tag -- is appended as its own category, in first-seen order,
+    rather than dropped.
     """
     order = list(pitch_order.values())
     order += [s.pitch_type for s in stats if s.pitch_type not in order]

@@ -334,15 +334,15 @@ def test_discipline_table_keeps_pitch_types_outside_the_shared_order():
     sort order would lose which pitch a row's numbers describe.
     """
     table = _discipline(
-        TaggedPitchType=['Fastball', 'Sweeper'],
+        TaggedPitchType=['Fastball', 'Screwball'],
         PitchCall=['StrikeCalled', 'StrikeCalled'],
         PlateLocSide=[0.0, 0.0],
         PlateLocHeight=[2.5, 2.5],
     )
 
-    assert [row.pitch_type for row in table.rows] == ['FB', 'Sweeper'], 'unknown tags sort after known ones'
-    sweeper = next(row for row in table.rows if row.pitch_type == 'Sweeper')
-    assert sweeper.seen == 1
+    assert [row.pitch_type for row in table.rows] == ['FB', 'Screwball'], 'unknown tags sort after known ones'
+    screwball = next(row for row in table.rows if row.pitch_type == 'Screwball')
+    assert screwball.seen == 1
 
 
 def test_zone_and_chase_ignore_pitches_with_no_tracked_location():
