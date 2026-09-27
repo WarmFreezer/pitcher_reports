@@ -26,6 +26,23 @@ function syncDefaultColorText(token, value) {
     }
 }
 
+// ── Branding JSON modal ──────────────────────────────────────────────────────
+
+function openBrandingModal(schoolId, schoolName) {
+    document.getElementById('branding-modal-title').textContent = `Edit branding.json — ${schoolName}`;
+    document.getElementById('branding-modal-textarea').value = BRANDING_RAW_BY_SCHOOL[schoolId];
+    document.getElementById('branding-modal-form').action = BRANDING_RAW_URL_TEMPLATE.replace('/schools/0/', `/schools/${schoolId}/`);
+    document.getElementById('branding-modal-overlay').classList.add('open');
+}
+
+function closeBrandingModal() {
+    document.getElementById('branding-modal-overlay').classList.remove('open');
+}
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeBrandingModal();
+});
+
 async function saveDefaultBranding() {
     const colors = {};
     for (const token of DEFAULT_COLOR_TOKENS) {

@@ -40,7 +40,15 @@ def schools_list() -> ResponseReturnValue:
     """List every school — pick one to act as, or upload its custom report scripts."""
     all_schools = School.query.order_by(School.name).all()
     default_branding = BrandingLoader.get_default_branding()
-    return render_template('master_schools.html', schools=all_schools, default_branding=default_branding)
+    default_branding_raw = BrandingLoader.get_raw_default_branding()
+    branding_raw_by_school = {school.id: BrandingLoader.get_raw_branding_json(school.id) for school in all_schools}
+    return render_template(
+        'master_schools.html',
+        schools=all_schools,
+        default_branding=default_branding,
+        default_branding_raw=default_branding_raw,
+        branding_raw_by_school=branding_raw_by_school,
+    )
 
 
 @master_bp.route('/default-branding', methods=['POST'])
@@ -60,6 +68,56 @@ def update_default_branding() -> ResponseReturnValue:
         return jsonify({'message': 'Default branding updated successfully.'}), 200
     except Exception:
         return jsonify({'error': 'Failed to update default branding.'}), 500
+
+
+@master_bp.route('/default-branding/raw', methods=['POST'])
+@login_required
+@master_required
+def update_default_branding_raw() -> ResponseReturnValue:
+    """Overwrite default.json's full contents from the master panel's raw JSON editor."""
+    error = BrandingLoader.save_raw_default_branding(request.form.get('raw_json', ''))
+    flash(error, 'danger') if error else flash('default.json updated.', 'success')
+    return redirect(url_for('master.schools_list'))
+
+
+@master_bp.route('/schools/<int:school_id>/branding/raw', methods=['POST'])
+@login_required
+@master_required
+def update_school_branding_raw(school_id: int) -> ResponseReturnValue:
+    """Overwrite a school's branding.json from the master panel's raw JSON editor."""
+    school = db.session.get(School, school_id)
+    if not school:
+        flash('Organization not found.', 'danger')
+        return redirect(url_for('master.schools_list'))
+    error = BrandingLoader.save_raw_branding_json(school_id, request.form.get('raw_json', ''))
+    flash(error, 'danger') if error else flash(f'branding.json updated for {school.name}.', 'success')
+    return redirect(url_for('master.schools_list'))
+
+
+@master_bp.route('/schools/<int:school_id>/admin-email', methods=['POST'])
+@login_required
+@master_required
+def update_school_admin_email(school_id: int) -> ResponseReturnValue:
+    """Update a school's admin_email directly."""
+    school = db.session.get(School, school_id)
+    if not school:
+        flash('Organization not found.', 'danger')
+        return redirect(url_for('master.schools_list'))
+
+    email = (request.form.get('admin_email') or '').strip()
+    if not email or '@' not in email:
+        flash('Enter a valid email address.', 'danger')
+        return redirect(url_for('master.schools_list'))
+
+    existing = School.query.filter(School.admin_email == email, School.id != school_id).first()
+    if existing:
+        flash('That email is already in use by another organization.', 'danger')
+        return redirect(url_for('master.schools_list'))
+
+    school.admin_email = email
+    db.session.commit()
+    flash(f'Admin email updated for {school.name}.', 'success')
+    return redirect(url_for('master.schools_list'))
 
 
 @master_bp.route('/schools/<int:school_id>/act', methods=['POST'])

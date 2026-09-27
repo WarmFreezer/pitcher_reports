@@ -85,6 +85,54 @@ class BrandingLoader:
             return json.load(f)
 
     @staticmethod
+    def get_raw_branding_json(school_id: int) -> str:
+        """
+        Raw branding.json text for the master panel's JSON editor -- the school's own
+        file if it has one, else default.json as a starting point. Deliberately not
+        get_branding()'s dict: that overrides school.name with the live DB value, and
+        saving that back would bake one school's name into the {school_name} placeholder.
+        """
+        branding_path = os.path.join(BrandingLoader.SCHOOLS, str(school_id), 'assets', 'branding.json')
+        path = branding_path if os.path.exists(branding_path) else os.path.join(BrandingLoader.SCHOOLS, 'default.json')
+        with open(path, 'r', encoding='utf-8') as f:
+            return f.read()
+
+    @staticmethod
+    def save_raw_branding_json(school_id: int, raw_text: str) -> str | None:
+        """Validate and persist a school's branding.json from master-panel-edited raw text. Returns an error message, or None on success."""
+        try:
+            parsed = json.loads(raw_text)
+        except json.JSONDecodeError as e:
+            return f'Invalid JSON: {e}'
+        if not isinstance(parsed, dict):
+            return 'branding.json must be a JSON object.'
+        branding_path = os.path.join(BrandingLoader.SCHOOLS, str(school_id), 'assets', 'branding.json')
+        os.makedirs(os.path.dirname(branding_path), exist_ok=True)
+        with open(branding_path, 'w', encoding='utf-8') as f:
+            json.dump(parsed, f, indent=4)
+        return None
+
+    @staticmethod
+    def get_raw_default_branding() -> str:
+        """Raw default.json text for the master panel's JSON editor."""
+        with open(os.path.join(BrandingLoader.SCHOOLS, 'default.json'), 'r', encoding='utf-8') as f:
+            return f.read()
+
+    @staticmethod
+    def save_raw_default_branding(raw_text: str) -> str | None:
+        """Validate and persist default.json from master-panel-edited raw text. Returns an error message, or None on success."""
+        try:
+            parsed = json.loads(raw_text)
+        except json.JSONDecodeError as e:
+            return f'Invalid JSON: {e}'
+        if not isinstance(parsed, dict):
+            return 'default.json must be a JSON object.'
+        default_path = os.path.join(BrandingLoader.SCHOOLS, 'default.json')
+        with open(default_path, 'w', encoding='utf-8') as f:
+            json.dump(parsed, f, indent=4)
+        return None
+
+    @staticmethod
     def update_default_colors(colors: dict[str, str]) -> None:
         """Merge new color tokens into default.json's colors block."""
         default_path = os.path.join(BrandingLoader.SCHOOLS, 'default.json')

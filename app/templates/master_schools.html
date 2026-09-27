@@ -25,6 +25,36 @@
         }
     </style>
     {% endif %}
+
+    <style>
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-overlay.open {
+            display: flex;
+        }
+        .modal-box {
+            background-color: var(--bg-card);
+            border: 2px solid var(--accent);
+            border-radius: 8px;
+            padding: 20px;
+            width: min(700px, 90vw);
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .modal-box textarea {
+            flex: 1;
+            min-height: 320px;
+            resize: vertical;
+        }
+    </style>
 </head>
 <body onload="loadFooter(); loadNavbar('{{ logo_path }}');">
     <div id="navbar-placeholder"></div>
@@ -51,38 +81,52 @@
                 </div>
                 {% endfor %}
             </div>
+
+            <details style="margin-top: 20px;">
+                <summary style="cursor: pointer; color: var(--text-secondary); font-size: 14px;">Edit default.json (raw)</summary>
+                <form action="{{ url_for('master.update_default_branding_raw') }}" method="POST" style="margin-top: 10px;">
+                    <textarea name="raw_json" rows="16" class="bubble" style="width: 100%; color: var(--text-primary); background-color: var(--bg-card); border: 2px solid var(--accent); font-family: monospace; font-size: 13px; padding: 12px;">{{ default_branding_raw }}</textarea>
+                    <button type="submit" class="download-btn-small" style="margin-top: 8px;">Save default.json</button>
+                </form>
+            </details>
         </div>
 
         <div class="bubble">
             <h2>Master Panel — Organizations</h2>
             <p>Act as an organization to manage its subscription page, or upload its custom report scripts directly.</p>
 
+            {% set upload_icon %}<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M5 21h14"/></svg>{% endset %}
+            {% set save_icon %}<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>{% endset %}
             <div style="overflow-x: auto;">
-                <table class="roster-table" style="margin-top: 12px;">
+                <table class="roster-table" style="margin-top: 12px; table-layout: auto;">
                     <thead>
                         <tr>
-                            <th>Organization</th>
-                            <th>Admin Email</th>
-                            <th>Status</th>
-                            <th>Created</th>
-                            <th>Tier</th>
-                            <th></th>
-                            <th>Custom Pitcher Report</th>
-                            <th>Custom Hitter Report</th>
+                            <th style="white-space: nowrap;">Organization</th>
+                            <th style="white-space: nowrap;">Admin Email</th>
+                            <th style="white-space: nowrap;">Status</th>
+                            <th style="white-space: nowrap;">Tier</th>
+                            <th style="white-space: nowrap;"></th>
+                            <th style="white-space: nowrap;">Pitch Rep</th>
+                            <th style="white-space: nowrap;">Hit Rep</th>
+                            <th style="white-space: nowrap;">Branding</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for school in schools %}
                         <tr>
-                            <td>{{ school.name }}</td>
-                            <td>{{ school.admin_email }}</td>
-                            <td>{{ school.stripe_subscription_status }}</td>
-                            <td>{{ school.created_at.strftime('%b %d, %Y') if school.created_at else '' }}</td>
-                            <td>
+                            <td style="white-space: nowrap;">{{ school.name }}</td>
+                            <td style="white-space: nowrap;">
+                                <form action="{{ url_for('master.update_school_admin_email', school_id=school.id) }}" method="POST" style="display: flex; gap: 4px; margin: 0;">
+                                    <input type="email" name="admin_email" value="{{ school.admin_email }}" required class="bubble" style="width: 180px; color: var(--text-primary); background-color: var(--bg-card); border: 2px solid var(--accent); font-size: 13px; padding: 6px 8px; margin: 0;">
+                                    <button type="submit" class="download-btn-small" style="margin: 0; padding: 8px 10px;" title="Save admin email" aria-label="Save admin email">{{ save_icon }}</button>
+                                </form>
+                            </td>
+                            <td style="white-space: nowrap;">{{ school.stripe_subscription_status }}</td>
+                            <td style="white-space: nowrap;">
                                 <form action="{{ url_for('master.update_school_tier', school_id=school.id) }}" method="POST" style="margin: 0;">
-                                    <div class="custom-dropdown tier-dropdown" style="margin: 0; max-width: 140px;">
+                                    <div class="custom-dropdown tier-dropdown" style="margin: 0; width: 110px;">
                                         <input type="hidden" name="tier" class="dropdown-value" value="{{ school.tier }}">
-                                        <button type="button" class="dropdown-trigger bubble" style="color: var(--text-primary); margin: 0; background-color: var(--bg-card); border: 2px solid var(--accent); padding: 6px 10px; font-size: 14px; width: 100%;">
+                                        <button type="button" class="dropdown-trigger bubble" style="color: var(--text-primary); margin: 0; background-color: var(--bg-card); border: 2px solid var(--accent); padding: 6px 10px; font-size: 14px; width: 100%; white-space: nowrap;">
                                             Tier {{ school.tier }} ▼
                                         </button>
                                         <div class="dropdown-content">
@@ -93,28 +137,31 @@
                                     </div>
                                 </form>
                             </td>
-                            <td>
+                            <td style="white-space: nowrap;">
                                 <form action="{{ url_for('master.act_as_school', school_id=school.id) }}" method="POST" style="margin: 0;">
                                     <button type="submit" class="download-btn-small">Manage</button>
                                 </form>
                             </td>
-                            <td>
+                            <td style="white-space: nowrap;">
                                 <form action="{{ url_for('master.upload_custom_report', school_id=school.id) }}" method="POST" enctype="multipart/form-data" style="margin: 0;">
                                     <input type="hidden" name="report_type" value="pitcher">
-                                    <label class="download-btn-small" style="margin: 0;">
-                                        Upload
+                                    <label class="download-btn-small" style="margin: 0; padding: 8px 10px;" title="Upload custom pitcher report" aria-label="Upload custom pitcher report">
+                                        {{ upload_icon }}
                                         <input type="file" name="file" accept=".py" required style="display:none" onchange="this.form.submit()">
                                     </label>
                                 </form>
                             </td>
-                            <td>
+                            <td style="white-space: nowrap;">
                                 <form action="{{ url_for('master.upload_custom_report', school_id=school.id) }}" method="POST" enctype="multipart/form-data" style="margin: 0;">
                                     <input type="hidden" name="report_type" value="hitter">
-                                    <label class="download-btn-small" style="margin: 0;">
-                                        Upload
+                                    <label class="download-btn-small" style="margin: 0; padding: 8px 10px;" title="Upload custom hitter report" aria-label="Upload custom hitter report">
+                                        {{ upload_icon }}
                                         <input type="file" name="file" accept=".py" required style="display:none" onchange="this.form.submit()">
                                     </label>
                                 </form>
+                            </td>
+                            <td style="white-space: nowrap;">
+                                <button type="button" class="download-btn-small" onclick="openBrandingModal('{{ school.id }}', {{ school.name | tojson }})">Edit</button>
                             </td>
                         </tr>
                         {% endfor %}
@@ -126,8 +173,25 @@
 
     <button class="save-fab" onclick="saveDefaultBranding()">Save</button>
 
+    <div id="branding-modal-overlay" class="modal-overlay" onclick="if (event.target === this) closeBrandingModal()">
+        <div class="modal-box">
+            <h3 id="branding-modal-title">Edit branding.json</h3>
+            <form id="branding-modal-form" method="POST" style="display: flex; flex-direction: column; flex: 1; margin: 0;">
+                <textarea id="branding-modal-textarea" name="raw_json" class="bubble" style="width: 100%; color: var(--text-primary); background-color: var(--bg-card); border: 2px solid var(--accent); font-family: monospace; font-size: 13px; padding: 12px; margin: 8px 0;"></textarea>
+                <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                    <button type="button" class="download-btn-small" onclick="closeBrandingModal()">Cancel</button>
+                    <button type="submit" class="download-btn-small">Save branding.json</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div id="footer-placeholder"></div>
 
+    <script>
+        const BRANDING_RAW_BY_SCHOOL = {{ branding_raw_by_school | tojson }};
+        const BRANDING_RAW_URL_TEMPLATE = {{ url_for('master.update_school_branding_raw', school_id=0) | tojson }};
+    </script>
     <script src="{{ url_for('static', filename='js/core.js') }}"></script>
     <script src="{{ url_for('static', filename='js/pages/master.js') }}"></script>
 

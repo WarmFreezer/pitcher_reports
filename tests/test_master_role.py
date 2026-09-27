@@ -11,6 +11,10 @@ from app.services.branding_loader import BrandingLoader
 from app.services.custom_report_loader import custom_report_path
 
 
+def _branding_path(school_id):
+    return Path(BrandingLoader.SCHOOLS) / str(school_id) / 'assets' / 'branding.json'
+
+
 def _read_default_colors():
     return json.loads((Path(BrandingLoader.SCHOOLS) / 'default.json').read_text())['colors']
 
@@ -204,6 +208,122 @@ def test_master_update_default_branding_rejects_invalid_hex(client, login_as, ma
 
     assert resp.status_code == 400
     assert _read_default_colors() == original
+
+
+def test_master_can_edit_default_branding_raw(client, login_as, make_school, make_user):
+    home_school = make_school()
+    master = make_user(home_school, role='master')
+    login_as(client, master)
+
+    resp = client.post(
+        '/master/default-branding/raw',
+        data={'raw_json': json.dumps({'school': {'name': 'X'}, 'colors': {}, 'report_settings': {}})},
+        follow_redirects=True,
+    )
+
+    assert resp.status_code == 200
+    saved = json.loads((Path(BrandingLoader.SCHOOLS) / 'default.json').read_text())
+    assert saved['school']['name'] == 'X'
+
+
+def test_master_default_branding_raw_rejects_invalid_json(client, login_as, make_school, make_user):
+    home_school = make_school()
+    master = make_user(home_school, role='master')
+    login_as(client, master)
+    original = (Path(BrandingLoader.SCHOOLS) / 'default.json').read_text()
+
+    client.post('/master/default-branding/raw', data={'raw_json': 'not json'}, follow_redirects=True)
+
+    assert (Path(BrandingLoader.SCHOOLS) / 'default.json').read_text() == original
+
+
+def test_non_master_cannot_edit_school_branding_raw(client, login_as, make_school, make_user):
+    school = make_school()
+    user = make_user(school, role='member')
+    login_as(client, user)
+
+    client.post(
+        f'/master/schools/{school.id}/branding/raw',
+        data={'raw_json': json.dumps({'school': {'name': 'Hacked'}})},
+        follow_redirects=True,
+    )
+
+    assert not _branding_path(school.id).exists()
+
+
+def test_master_can_edit_school_branding_raw(client, login_as, make_school, make_user):
+    home_school = make_school()
+    target_school = make_school()
+    master = make_user(home_school, role='master')
+    login_as(client, master)
+
+    resp = client.post(
+        f'/master/schools/{target_school.id}/branding/raw',
+        data={'raw_json': json.dumps({'school': {'name': '{school_name}'}, 'colors': {}, 'report_settings': {'footer_text': '© {school_name}.'}})},
+        follow_redirects=True,
+    )
+
+    assert resp.status_code == 200
+    saved = json.loads(_branding_path(target_school.id).read_text())
+    assert saved['report_settings']['footer_text'] == '© {school_name}.'
+
+
+def test_master_school_branding_raw_rejects_invalid_json(client, login_as, make_school, make_user):
+    home_school = make_school()
+    target_school = make_school()
+    master = make_user(home_school, role='master')
+    login_as(client, master)
+
+    client.post(f'/master/schools/{target_school.id}/branding/raw', data={'raw_json': '{bad'}, follow_redirects=True)
+
+    assert not _branding_path(target_school.id).exists()
+
+
+def test_master_can_update_school_admin_email(client, login_as, make_school, make_user):
+    home_school = make_school()
+    target_school = make_school()
+    master = make_user(home_school, role='master')
+    login_as(client, master)
+
+    resp = client.post(
+        f'/master/schools/{target_school.id}/admin-email',
+        data={'admin_email': 'newadmin@example.com'},
+        follow_redirects=True,
+    )
+
+    assert resp.status_code == 200
+    assert target_school.admin_email == 'newadmin@example.com'
+
+
+def test_master_update_admin_email_rejects_duplicate(client, login_as, make_school, make_user):
+    home_school = make_school()
+    other_school = make_school()
+    target_school = make_school()
+    master = make_user(home_school, role='master')
+    login_as(client, master)
+
+    client.post(
+        f'/master/schools/{target_school.id}/admin-email',
+        data={'admin_email': other_school.admin_email},
+        follow_redirects=True,
+    )
+
+    assert target_school.admin_email != other_school.admin_email
+
+
+def test_non_master_cannot_update_school_admin_email(client, login_as, make_school, make_user):
+    school = make_school()
+    user = make_user(school, role='member')
+    login_as(client, user)
+    original = school.admin_email
+
+    client.post(
+        f'/master/schools/{school.id}/admin-email',
+        data={'admin_email': 'hacked@example.com'},
+        follow_redirects=True,
+    )
+
+    assert school.admin_email == original
 
 
 def test_custom_report_upload_rejects_syntax_error(client, login_as, make_school, make_user):
