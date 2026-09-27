@@ -172,10 +172,13 @@ def login() -> ResponseReturnValue:
         user = Auth.get_user_by_email(email)
 
         if user and Auth.verify_password(user, password):
-            login_user(user, remember=request.form.get('remember'))
-            # Honour the ?next= redirect param set by @login_required
-            next_page = request.args.get('next')
-            return redirect(next_page or url_for('pages.dashboard'))
+            if not user.is_active:
+                flash('This account has been deactivated. Contact your school admin.', 'danger')
+            else:
+                login_user(user, remember=request.form.get('remember'))
+                # Honour the ?next= redirect param set by @login_required
+                next_page = request.args.get('next')
+                return redirect(next_page or url_for('pages.dashboard'))
         else:
             flash('Invalid email or password', 'danger')
 

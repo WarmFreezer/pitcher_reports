@@ -71,7 +71,10 @@ def create_app(config_overrides: dict | None = None) -> Flask:
 
     @login_manager.user_loader
     def load_user(user_id: str) -> User | None:
-        return db.session.get(User, int(user_id))
+        user = db.session.get(User, int(user_id))
+        if user and not user.is_active:
+            return None
+        return user
 
     # Context processor
     @app.context_processor
