@@ -28,6 +28,7 @@ from app.services.pitch_stats import (
     PitchUsageStat,
     PitchUsageTable,
     PitchByPitchReport,
+    PitchByPitchAtBat,
     BreakMapLegendEntry,
 )
 from app.services.hitter_stats import HitterReportRequest, HitterPitchByPitchAtBat, HitterPitchByPitchReport
@@ -679,9 +680,16 @@ class PDF_Generator:
         # size no frame could actually satisfy and crash the whole build.
         max_height = self.PAGE_H - self.HEADER_HEIGHT - self.FOOTER_HEIGHT
 
+        # KeepInFrame's own maxWidth has to be the cell's *content* width (after
+        # the LEFTPADDING/RIGHTPADDING set below eat into col_width), not the raw
+        # cell width -- otherwise content sized to fill col_width bleeds into the
+        # padding zone, and the two columns visually crowd the gutter between them
+        # regardless of how large col_padding is set.
+        content_width = col_width - 2 * col_padding
+
         # Wrap elements in KeepInFrame to constrain width for table cells
-        left_frame = KeepInFrame(col_width, max_height, left_elements, hAlign='LEFT')
-        right_frame = KeepInFrame(col_width, max_height, right_elements, hAlign='LEFT')
+        left_frame = KeepInFrame(content_width, max_height, left_elements, hAlign='LEFT')
+        right_frame = KeepInFrame(content_width, max_height, right_elements, hAlign='LEFT')
 
         layout_table = Table(
             [[left_frame, right_frame]],
@@ -693,6 +701,14 @@ class PDF_Generator:
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('LEFTPADDING', (0, 0), (-1, -1), col_padding),
             ('RIGHTPADDING', (0, 0), (-1, -1), col_padding),
+            # Table defaults TOP/BOTTOMPADDING to 3pt each -- left in, that pushes
+            # this row 6pt past the KeepInFrame's own maxHeight (bounded to
+            # max_height above) and raises a LayoutError once a column's content
+            # is tall enough to actually reach that ceiling (e.g. two full-height
+            # tables paired side by side, rather than these cells' original
+            # shorter image content).
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
         ]))
 
         return [layout_table]
@@ -911,10 +927,24 @@ class PDF_Generator:
             elements.append(Paragraph("No pitches found for the selected games.", self.styles["body"]))
 
         available_width = self.PAGE_W - 2 * self.MARGIN
-        fixed_widths = [0.4 * inch, 1.4 * inch, 0.8 * inch, 0.8 * inch]
-        col_widths = fixed_widths + [available_width - sum(fixed_widths)]
+        gutter = 0.3 * inch
+        half_width = (available_width - gutter) / 2
+        fixed_widths = [0.3 * inch, 0.9 * inch, 0.55 * inch, 0.55 * inch]
+        inner_col_widths = fixed_widths + [half_width - sum(fixed_widths)]
+        chart_w = min(half_width, 2.6 * inch)
 
-        for ab in data.at_bats:
+        def truncate_to_width(text: str, font_name: str, font_size: float, max_width: float) -> str:
+            """Hard-cap a string to one line at max_width, since a wrapped second
+            line would push that cell's chart+table down and throw off alignment
+            with its neighbor in the pair row."""
+            if stringWidth(text, font_name, font_size) <= max_width:
+                return text
+            ellipsis = '…'
+            while text and stringWidth(text + ellipsis, font_name, font_size) > max_width:
+                text = text[:-1]
+            return (text + ellipsis) if text else ellipsis
+
+        def ab_cell(ab: PitchByPitchAtBat) -> list[Any]:
             heading_parts = [ab.inning, ab.batter_name]
             side_abbr = {'Left': 'LHH', 'Right': 'RHH'}.get(ab.batter_side)
             if side_abbr:
@@ -922,25 +952,57 @@ class PDF_Generator:
             if ab.result:
                 heading_parts.append(ab.result)
             heading = ' — '.join(part for part in heading_parts if part)
+            heading = truncate_to_width(heading, ab_heading_style.fontName, ab_heading_style.fontSize, half_width)
 
             rows = [["#", "Pitch", "Velo", "Count", "Result"]]
             for p in ab.pitches:
                 velo_str = f"{p.velo:.1f}" if p.velo is not None else ""
                 rows.append([str(p.number), p.pitch_type, velo_str, f"{p.balls}-{p.strikes}", p.result])
 
-            ab_table = Table(rows, colWidths=col_widths, repeatRows=1)
+            ab_table = Table(rows, colWidths=inner_col_widths, repeatRows=1)
             ab_table.setStyle(TableStyle([
                 *self._header_fill_commands(self.tertiary_color),
                 ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                 ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, -1), 8),
+                ('FONTSIZE', (0, 0), (-1, -1), 7),
                 ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
                 ('ROWBACKGROUNDS', (0, 1), (-1, -1), [self.WHITE, self.light_color]),
             ]))
 
-            elements.append(KeepTogether([Paragraph(heading, ab_heading_style), ab_table]))
-            elements.append(Spacer(1, 0.05 * inch))
+            cell: list[Any] = [Paragraph(heading, ab_heading_style)]
+            if ab.chart_path and os.path.exists(ab.chart_path):
+                chart_img = PILImage.open(ab.chart_path)
+                chart_h = chart_w * chart_img.height / chart_img.width
+                chart_holder = Table([[Image(ab.chart_path, width=chart_w, height=chart_h)]], colWidths=[half_width])
+                chart_holder.setStyle(TableStyle([
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+                    ('TOPPADDING', (0, 0), (-1, -1), 0),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+                ]))
+                cell.append(chart_holder)
+            cell.append(ab_table)
+            return cell
+
+        # Two ABs per line, chart directly above its own table -- mirrors
+        # generate_hitter_pitch_by_pitch_report's layout (see there for why a
+        # single-row Table per pair, rather than two independent flowables, is
+        # what keeps a pair's chart+table together on one page).
+        for i in range(0, len(data.at_bats), 2):
+            pair = data.at_bats[i:i + 2]
+            row = [ab_cell(pair[0]), '', ab_cell(pair[1]) if len(pair) > 1 else '']
+            pair_table = Table([row], colWidths=[half_width, gutter, half_width])
+            pair_table.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+                ('TOPPADDING', (0, 0), (-1, -1), 0),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+            ]))
+            elements.append(pair_table)
+            elements.append(Spacer(1, 0.15 * inch))
 
         doc.build(elements)
         return output_path
@@ -994,7 +1056,7 @@ class PDF_Generator:
         half_width = (available_width - gutter) / 2
         fixed_widths = [0.3 * inch, 0.9 * inch, 0.55 * inch, 0.55 * inch]
         inner_col_widths = fixed_widths + [half_width - sum(fixed_widths)]
-        chart_w = min(half_width, 2.0 * inch)
+        chart_w = min(half_width, 2.6 * inch)
 
         def truncate_to_width(text: str, font_name: str, font_size: float, max_width: float) -> str:
             """Hard-cap a string to one line at max_width, since a wrapped second
@@ -1075,7 +1137,7 @@ class PDF_Generator:
         doc.build(elements)
         return output_path
 
-    def generate_data_table(self, table: StatTable[Any] | None, title: str, available_width: float | None = None, col_widths: list[float] | None = None) -> list[Any]:
+    def generate_data_table(self, table: StatTable[Any] | None, title: str, available_width: float | None = None, col_widths: list[float] | None = None, keep_together: bool = True) -> list[Any]:
         """
         Render a StatTable as a titled table.
 
@@ -1088,6 +1150,11 @@ class PDF_Generator:
                 even split of available_width. Falls back to table.col_widths (set by
                 the table's producer, e.g. a school's custom_pitcher_report.py) when
                 not given here.
+            keep_together: False when the result is headed into
+                generate_two_column_layout -- its KeepInFrame draws content
+                directly rather than through a real Frame's split-aware layout,
+                and KeepTogether relies on exactly that (see add_image_section's
+                docstring for the same constraint).
 
         Returns:
             List of document elements containing the table
@@ -1126,10 +1193,10 @@ class PDF_Generator:
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [self.WHITE, self.light_color]),
         ]))
 
-        return [
-            KeepTogether([Paragraph(title, self.styles["section_header"]), data_table]),
-            Spacer(1, 0.05 * inch),
-        ]
+        section: list[Any] = [Paragraph(title, self.styles["section_header"]), data_table]
+        if keep_together:
+            return [KeepTogether(section), Spacer(1, 0.05 * inch)]
+        return [*section, Spacer(1, 0.05 * inch)]
 
     def generate_hitter_report(self, data: HitterReportRequest, output_path: str) -> str:
         """
@@ -1274,15 +1341,40 @@ class PDF_Generator:
             for title, path in data.custom_chart_paths:
                 elements.extend(self.add_image_section(path, title))
 
-        # Add custom hit-type stats tables (school-defined, tier 3)
-        if data.custom_hit_type_stats:
-            for custom_hit_table in data.custom_hit_type_stats:
-                elements.extend(self.generate_data_table(custom_hit_table, custom_hit_table.title or "Custom Hit Type Stats"))
+        # Add custom hit-type/pitch-type stats tables (school-defined, tier 3).
+        # "Tagged vs TrackMan Hit Type" and "Plate Discipline - Overall" are each
+        # a single small table, so they're paired side by side (matching the
+        # spray-chart row above) instead of each eating its own full-width line;
+        # everything else in either list still stacks full-width, in order.
+        hit_type_tables = list(data.custom_hit_type_stats or [])
+        pitch_type_tables = list(data.custom_pitch_type_stats or [])
 
-        # Add custom pitch-type stats tables (school-defined, tier 3)
-        if data.custom_pitch_type_stats:
-            for custom_pitch_table in data.custom_pitch_type_stats:
-                elements.extend(self.generate_data_table(custom_pitch_table, custom_pitch_table.title or "Custom Pitch Type Stats"))
+        tag_vs_auto = next((t for t in hit_type_tables if t.title == 'Tagged vs TrackMan Hit Type'), None)
+        discipline_overall = next((t for t in pitch_type_tables if t.title == 'Plate Discipline - Overall'), None)
+
+        if tag_vs_auto is not None and discipline_overall is not None:
+            hit_type_tables.remove(tag_vs_auto)
+            pitch_type_tables.remove(discipline_overall)
+            # Match generate_two_column_layout's own column content width (its
+            # cell width minus this same col_padding) so each table's columns are
+            # sized for exactly the space they'll render in -- left to the
+            # default full-page width, KeepInFrame would shrink the whole
+            # (too-wide) table down to fit, distorting row heights unevenly
+            # instead of just rendering at the width it'll actually occupy. A
+            # wider-than-default col_padding gives the pair a clearer gap than
+            # two dense stat tables otherwise read as (they were clashing at the
+            # default 5pt/side).
+            pair_col_padding = 10
+            pair_col_width = (self.PAGE_W - 2 * self.MARGIN - 0.2 * inch) / 2 - 2 * pair_col_padding
+            left_els = self.generate_data_table(tag_vs_auto, tag_vs_auto.title, available_width=pair_col_width, keep_together=False)
+            right_els = self.generate_data_table(discipline_overall, discipline_overall.title, available_width=pair_col_width, keep_together=False)
+            elements.extend(self.generate_two_column_layout(left_els, right_els, col_padding=pair_col_padding))
+
+        for custom_hit_table in hit_type_tables:
+            elements.extend(self.generate_data_table(custom_hit_table, custom_hit_table.title or "Custom Hit Type Stats"))
+
+        for custom_pitch_table in pitch_type_tables:
+            elements.extend(self.generate_data_table(custom_pitch_table, custom_pitch_table.title or "Custom Pitch Type Stats"))
 
         try:
             for i, el in enumerate(elements):

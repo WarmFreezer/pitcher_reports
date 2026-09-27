@@ -229,7 +229,26 @@ function loadFooter() {
         </footer>
     `;
     document.getElementById('footer-placeholder').innerHTML = footerHTML;
+    positionFabAboveFooter();
 }
+
+// .save-fab (master panel, subscription page) is `position: fixed` at a flat
+// `bottom: 32px` in CSS -- fine once the footer has scrolled out of that
+// margin zone, but on a short page (or before scrolling) the footer sits
+// right at the viewport bottom and the flat offset lands the button inside
+// the footer's own height, overlapping its links. Push the button up by
+// exactly the overlap once the footer's top edge enters the margin zone.
+function positionFabAboveFooter() {
+    const fab = document.querySelector('.save-fab');
+    const footer = document.getElementById('footer-placeholder');
+    if (!fab || !footer) return;
+
+    const footerTop = footer.getBoundingClientRect().top;
+    const margin = 32;
+    fab.style.bottom = Math.max(margin, window.innerHeight - footerTop + margin) + 'px';
+}
+window.addEventListener('scroll', positionFabAboveFooter, { passive: true });
+window.addEventListener('resize', positionFabAboveFooter);
 
 // Reads a fetch Response body as newline-delimited JSON, yielding each parsed
 // line as it arrives. Shared by pitching.js/batting.js's streaming report routes,

@@ -2,6 +2,7 @@ import os
 import gc
 import glob
 import json
+import dataclasses
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import date, datetime
 from typing import Any, Generator
@@ -454,7 +455,11 @@ def pitching_pitch_by_pitch() -> ResponseReturnValue:
     branding = BrandingLoader.get_branding(current_user.school_id)
     gen = PDF_Generator(school_id=current_user.school_id, branding=branding, ink_mode=current_user.ink_mode)
 
-    _, school_output_folder = get_school_directories()
+    school_temp_folder, school_output_folder = get_school_directories()
+    charted_at_bats = report.build_ab_pitch_charts(
+        pbp_report.at_bats, pitcher_id, current_user.id, school_temp_folder, theme='light')
+    pbp_report = dataclasses.replace(pbp_report, at_bats=charted_at_bats)
+
     output_path = os.path.abspath(os.path.join(
         school_output_folder, f'{current_user.id}_pitcher_{pitcher_id}_pitch_by_pitch.pdf'))
     gen.generate_pitch_by_pitch_report(pbp_report, output_path)

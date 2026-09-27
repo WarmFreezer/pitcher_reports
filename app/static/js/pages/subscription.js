@@ -408,20 +408,6 @@ async function cancelSubscription() {
     }
 })();
 
-// FAB — stop following scroll once footer is visible
-(function () {
-    const fab = document.querySelector('.save-fab');
-    if (!fab) return;
-
-    function updateFab() {
-        const footer = document.getElementById('footer-placeholder');
-        if (!footer) return;
-        const footerTop = footer.getBoundingClientRect().top;
-        const margin = 32;
-        // When the footer scrolls into the bottom margin zone, push the FAB up by the overlap amount
-        fab.style.bottom = Math.max(margin, window.innerHeight - footerTop + margin) + 'px';
-    }
-
-    window.addEventListener('scroll', updateFab, { passive: true });
-    updateFab();
-})();
+// FAB-vs-footer positioning (core.js's loadFooter() calls positionFabAboveFooter()
+// and wires up its own scroll/resize listeners) -- shared with the master panel,
+// which has the identical .save-fab + #footer-placeholder pairing.

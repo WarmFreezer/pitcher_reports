@@ -1,4 +1,5 @@
 import math
+import re
 from typing import NamedTuple
 
 import matplotlib
@@ -114,6 +115,29 @@ def ev_colormap(theme: str = 'light') -> Colormap:
     return cmap
 
 
+# Pitch (release) velocity range for the pitch-by-pitch AB location chart's
+# color ramp -- distinct from EV_MIN_MPH/EV_MAX_MPH above, which cover batted-ball
+# exit velocity, a different measurement on a different scale.
+VELO_MIN_MPH = 50.0
+VELO_MAX_MPH = 110.0
+
+_VELO_BASE_CMAP = 'plasma'
+_VELO_RANGE = (0.05, 0.92)  # trimmed so neither end washes out on a light or dark page
+
+
+def velo_colormap(theme: str = 'light') -> Colormap:
+    """
+    Sequential colormap for pitch velocity: deep purple at VELO_MIN_MPH through to
+    bright yellow at VELO_MAX_MPH, identically in every theme.
+
+    theme is accepted and ignored, matching ev_colormap's signature.
+    """
+    base = matplotlib.colormaps[_VELO_BASE_CMAP]
+    cmap = LinearSegmentedColormap.from_list('pitch_velocity', base(np.linspace(*_VELO_RANGE, 256)))
+    cmap.set_bad('#888888')
+    return cmap
+
+
 THEME_COLORS = {
     'light': {
         'figure.facecolor': 'none',
@@ -177,6 +201,18 @@ _PITCH_TYPES: dict[str, _PitchType] = {
 # Order to display pitch types in tables and plots
 pitch_order = {name: pt.abbreviation for name, pt in _PITCH_TYPES.items()}
 pitch_point_colors = {name: pt.color for name, pt in _PITCH_TYPES.items()}
+
+
+def format_result(value: str) -> str:
+    """Turn a raw TrackMan enum value (PitchCall/PlayResult/KorBB) like
+    'StrikeCalled' or 'InPlay' into a readable 'Strike Called' / 'In Play' for
+    display on the pitch-by-pitch report -- splits before every interior
+    capital letter, so multi-word values expand the same way without a lookup
+    table of every enum value TrackMan exports."""
+    if not value:
+        return value
+    return re.sub(r'(?<!^)(?=[A-Z])', ' ', value)
+
 
 def make_strike_zone() -> Rectangle:
     """Dashed outline of the rulebook strike zone, in plate-location feet."""

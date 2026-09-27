@@ -1,3 +1,4 @@
+import dataclasses
 import os
 from typing import Any, Protocol, TypeVar
 
@@ -5,6 +6,8 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib
+from matplotlib.colors import Normalize
+from matplotlib.patches import Rectangle
 
 from app.services.custom_report_loader import load_custom_module
 from app.services.pitch_stats import (
@@ -32,6 +35,10 @@ from app.services.report_theme import (
     cmap,
     pitch_order,
     pitch_point_colors,
+    format_result,
+    velo_colormap,
+    VELO_MIN_MPH,
+    VELO_MAX_MPH,
     in_zone as zone_mask,
 )
 
@@ -566,6 +573,7 @@ def build_pitch_by_pitch_report(source: pd.DataFrame, pitcher_id: int) -> PitchB
         table = pitcher_data.reindex(columns=_AB_KEY_COLUMNS + [
             'Batter', 'BatterSide', 'PitchofPA', 'TaggedPitchType', 'RelSpeed',
             'Balls', 'Strikes', 'PitchCall', 'PlayResult', 'KorBB',
+            'PlateLocSide', 'PlateLocHeight',
         ])
         table = table.dropna(subset=_AB_KEY_COLUMNS)
         table = table.sort_values(['Inning', 'PAofInning', 'PitchofPA'], kind='stable')
@@ -583,17 +591,19 @@ def build_pitch_by_pitch_report(source: pd.DataFrame, pitcher_id: int) -> PitchB
             # The final-outcome result only lands on the pitch that ended the AB --
             # everything before it is 'Undefined', so read it off the last pitch.
             result = last_row['PlayResult'] if pd.notna(last_row['PlayResult']) and last_row['PlayResult'] != 'Undefined' else last_row['KorBB']
-            result = str(result) if pd.notna(result) else ''
+            result = format_result(str(result)) if pd.notna(result) else ''
             inning_label = f"{first_row['Top/Bottom']} {int(first_row['Inning'])}" if pd.notna(first_row['Inning']) else ''
 
             pitches: list[PitchByPitchPitch] = [
                 PitchByPitchPitch(
                     number=i,
-                    pitch_type=str(pitch['TaggedPitchType']) if pd.notna(pitch['TaggedPitchType']) else '',
+                    pitch_type=pitch_order.get(pitch['TaggedPitchType'], str(pitch['TaggedPitchType'])) if pd.notna(pitch['TaggedPitchType']) else '',
                     velo=float(pitch['RelSpeed']) if pd.notna(pitch['RelSpeed']) else None,
                     balls=int(pitch['Balls']) if pd.notna(pitch['Balls']) else 0,
                     strikes=int(pitch['Strikes']) if pd.notna(pitch['Strikes']) else 0,
-                    result=str(pitch['PitchCall']) if pd.notna(pitch['PitchCall']) else '',
+                    result=format_result(str(pitch['PitchCall'])) if pd.notna(pitch['PitchCall']) else '',
+                    plate_loc_side=float(pitch['PlateLocSide']) if pd.notna(pitch['PlateLocSide']) else None,
+                    plate_loc_height=float(pitch['PlateLocHeight']) if pd.notna(pitch['PlateLocHeight']) else None,
                 )
                 for i, (_, pitch) in enumerate(pitches_df.iterrows(), start=1)
             ]
@@ -609,6 +619,126 @@ def build_pitch_by_pitch_report(source: pd.DataFrame, pitcher_id: int) -> PitchB
     except Exception as e:
         print(f"Error building pitch-by-pitch report for pitcher ID {pitcher_id}: {e}")
         return None
+
+
+# AB pitch-location chart bounds, in plate-location feet -- shared by the plot's
+# own axis limits, its solid outer frame, and _clamp_to_plot_bounds below.
+_AB_CHART_XLIM = (-2.5, 2.5)
+_AB_CHART_YLIM = (0.0, 5.0)
+# Half the marker's rendered diameter (in the same feet units), so a point
+# clamped to sit just inside the frame still draws as a full circle rather
+# than one edge of it poking back out past the frame.
+_AB_CHART_MARKER_MARGIN = 0.22
+
+
+def _clamp_to_plot_bounds(
+    x: float, y: float, xlim: tuple[float, float], ylim: tuple[float, float],
+) -> tuple[float, float]:
+    """Pin a point just inside [xlim, ylim] (padded by _AB_CHART_MARKER_MARGIN)
+    rather than at its true coordinate -- a pitch tracked well outside the
+    chart's own bounds would otherwise plot off-canvas and get clipped by the
+    axes into an unreadable half-circle with no visible number."""
+    x = min(max(x, xlim[0] + _AB_CHART_MARKER_MARGIN), xlim[1] - _AB_CHART_MARKER_MARGIN)
+    y = min(max(y, ylim[0] + _AB_CHART_MARKER_MARGIN), ylim[1] - _AB_CHART_MARKER_MARGIN)
+    return x, y
+
+
+def build_ab_pitch_charts(
+    at_bats: list[PitchByPitchAtBat],
+    pitcher_id: int,
+    user_id: int,
+    output_dir: str,
+    theme: str = 'light',
+) -> list[PitchByPitchAtBat]:
+    """
+    Render one small strike-zone panel per at-bat: every pitch as a numbered dot,
+    colored by release velocity (a fastball reads hot, an offspeed pitch reads
+    cool) -- pitch type and result are already in the pitch-by-pitch table, so
+    location plus velo is the information a chart adds. Mirrors
+    hitter_report.build_ab_pitch_charts, with a velocity color ramp in place of
+    that chart's single flat point color -- there's no hitter-side equivalent
+    (exit velocity belongs to the batted ball, not to locating a pitch).
+
+    Returns a new list with chart_path filled in on each AB that had at least
+    one located pitch; an AB with no location data (or that fails to render)
+    keeps chart_path=None, which report_lab_generator treats as "no chart for
+    this AB" rather than an error.
+    """
+    matplotlib.rcParams.update(THEME_COLORS.get(theme, THEME_COLORS['light']))
+
+    charted: list[PitchByPitchAtBat] = []
+    for n, ab in enumerate(at_bats, start=1):
+        located = [p for p in ab.pitches if p.plate_loc_side is not None and p.plate_loc_height is not None]
+        if not located:
+            charted.append(ab)
+            continue
+
+        fig = None
+        try:
+            fig, ax = plt.subplots(1, 1, figsize=(3.2, 4.0))
+            ax.set_xlim(*_AB_CHART_XLIM)
+            ax.set_ylim(*_AB_CHART_YLIM)
+            ax.set_aspect('equal', adjustable='box')
+            ax.axis('off')
+
+            edge = matplotlib.rcParams['axes.edgecolor']
+            # Solid frame at the plot's own data bounds -- separate from the
+            # strike/shadow zone dashes -- so a pitch plotted right at the edge
+            # reads as "at the edge of what this chart tracks" rather than
+            # looking like it could be centered just outside an unmarked canvas.
+            ax.add_patch(Rectangle(
+                (_AB_CHART_XLIM[0], _AB_CHART_YLIM[0]),
+                _AB_CHART_XLIM[1] - _AB_CHART_XLIM[0], _AB_CHART_YLIM[1] - _AB_CHART_YLIM[0],
+                linewidth=1.2, edgecolor=edge, facecolor='none', zorder=1,
+            ))
+            ax.add_patch(make_strike_zone())
+            ax.add_patch(make_shadow_zone())
+            ax.add_patch(make_homeplate())
+
+            # A pitch with a located spot but no tracked velo still gets plotted
+            # -- masked rather than dropped -- so it doesn't silently vanish from
+            # the panel; set_bad on velo_colormap renders it neutral gray.
+            velos = np.ma.masked_invalid(np.array(
+                [p.velo if p.velo is not None else np.nan for p in located], dtype=float))
+            # A pitch tracked well outside the plot's own bounds (a badly missed
+            # target, or a bad location read) plots at its true coordinate,
+            # clipped by the axes -- half a marker with no visible number,
+            # rather than a legible dot. Pin it just inside the frame instead:
+            # still off in the right direction, but fully drawn and readable.
+            plot_points = [
+                _clamp_to_plot_bounds(p.plate_loc_side, p.plate_loc_height, _AB_CHART_XLIM, _AB_CHART_YLIM)
+                for p in located
+            ]
+            plot_sides = [x for x, _ in plot_points]
+            plot_heights = [y for _, y in plot_points]
+
+            scatter = ax.scatter(
+                plot_sides, plot_heights,
+                c=velos, cmap=velo_colormap(theme), norm=Normalize(vmin=VELO_MIN_MPH, vmax=VELO_MAX_MPH),
+                s=150, edgecolors=edge, linewidth=0.8, zorder=5,
+            )
+            for pitch, (x, y) in zip(located, plot_points):
+                ax.annotate(
+                    str(pitch.number), (x, y),
+                    ha='center', va='center', fontsize=9, fontweight='bold', color='black', zorder=6,
+                )
+
+            bar = fig.colorbar(scatter, ax=ax, fraction=0.045, pad=0.03, shrink=0.6)
+            bar.set_label('Velo (mph)', fontsize=12, fontweight='bold')
+            bar.ax.tick_params(labelsize=10)
+            bar.outline.set_edgecolor(edge)  # type: ignore[operator]  # matplotlib stub mistypes Colorbar.outline as callable
+
+            path = os.path.join(output_dir, f'{user_id}_pitcher_{pitcher_id}_ab_chart_{n}.png')
+            fig.savefig(path, dpi=300, bbox_inches='tight', transparent=True)
+            charted.append(dataclasses.replace(ab, chart_path=path))
+        except Exception as e:
+            print(f"Error generating AB chart {n} for pitcher ID {pitcher_id}: {e}")
+            charted.append(ab)
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    return charted
 
 '''
 def strikeout_map(source, id, output_path, pitcher_id):

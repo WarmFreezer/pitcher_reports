@@ -28,6 +28,18 @@ function syncDefaultColorText(token, value) {
 
 // ── Branding JSON modal ──────────────────────────────────────────────────────
 
+// data-* attributes (read via .dataset below) rather than passing schoolName
+// through an inline onclick="...(...)" attribute -- Jinja's |tojson escapes for
+// safe embedding in a <script> block, not inside a double-quoted HTML
+// attribute, so a school name containing a `"` (or one Jinja autoescape leaves
+// unescaped for tojson's Markup-safe output) would terminate the onclick
+// attribute early and silently break the button.
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.branding-edit-btn').forEach(btn => {
+        btn.addEventListener('click', () => openBrandingModal(btn.dataset.schoolId, btn.dataset.schoolName));
+    });
+});
+
 function openBrandingModal(schoolId, schoolName) {
     document.getElementById('branding-modal-title').textContent = `Edit branding.json — ${schoolName}`;
     document.getElementById('branding-modal-textarea').value = BRANDING_RAW_BY_SCHOOL[schoolId];
