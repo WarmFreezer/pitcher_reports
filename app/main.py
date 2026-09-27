@@ -49,7 +49,9 @@ def create_app(config_overrides: dict | None = None) -> Flask:
     # Database
     database_url = os.environ.get('DATABASE_URL', 'sqlite:///pitcher_reports.db')
     if database_url.startswith('postgres://'):
-        database_url = database_url.replace('postgres://', 'postgresql://', 1)
+        database_url = database_url.replace('postgres://', 'postgresql+psycopg2://', 1)
+    elif database_url.startswith('postgresql://'):
+        database_url = database_url.replace('postgresql://', 'postgresql+psycopg2://', 1)
 
     app.config['SECRET_KEY'] = app.secret_key
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
