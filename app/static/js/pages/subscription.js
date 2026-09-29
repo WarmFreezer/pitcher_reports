@@ -3,10 +3,23 @@
 const COLOR_TOKENS = ['primary', 'secondary', 'tertiary', 'accent'];
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
+// Recomputes both the live page preview's --text-on-<token> (table headers,
+// buttons, etc. that render elsewhere on the page against this color) and the
+// swatch's own label/hex text, which sits directly on the color itself --
+// otherwise either one can go right back to unreadable the moment a pick
+// lands on a color the hardcoded default text doesn't contrast with.
+function _updateColorText(token, value) {
+    const textColor = readableTextColor(value);
+    document.documentElement.style.setProperty('--text-on-' + token, textColor);
+    document.getElementById('color-label-' + token).style.color = textColor;
+    document.getElementById('color-' + token + '-text').style.color = textColor;
+}
+
 function syncColor(token, value) {
     document.getElementById('color-' + token + '-text').value = value;
     document.documentElement.style.setProperty('--' + token, value);
     document.getElementById('color-card-' + token).style.backgroundColor = value;
+    _updateColorText(token, value);
 }
 
 function syncColorText(token, value) {
@@ -14,6 +27,7 @@ function syncColorText(token, value) {
         document.getElementById('color-' + token).value = value;
         document.documentElement.style.setProperty('--' + token, value);
         document.getElementById('color-card-' + token).style.backgroundColor = value;
+        _updateColorText(token, value);
     }
 }
 

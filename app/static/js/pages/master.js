@@ -14,15 +14,27 @@ document.addEventListener('DOMContentLoaded', () => {
 const DEFAULT_COLOR_TOKENS = ['primary', 'secondary', 'tertiary', 'accent'];
 const DEFAULT_HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
+// The swatch label/hex text sits directly on top of the color being edited --
+// recompute its contrast on every change, or a light pick (including white
+// itself) leaves that text as unreadable as the bug this token set was added
+// to fix elsewhere in the app.
+function _updateDefaultSwatchText(token, value) {
+    const textColor = readableTextColor(value);
+    document.getElementById('default-color-label-' + token).style.color = textColor;
+    document.getElementById('default-color-' + token + '-text').style.color = textColor;
+}
+
 function syncDefaultColor(token, value) {
     document.getElementById('default-color-' + token + '-text').value = value;
     document.getElementById('default-color-card-' + token).style.backgroundColor = value;
+    _updateDefaultSwatchText(token, value);
 }
 
 function syncDefaultColorText(token, value) {
     if (DEFAULT_HEX_RE.test(value)) {
         document.getElementById('default-color-' + token).value = value;
         document.getElementById('default-color-card-' + token).style.backgroundColor = value;
+        _updateDefaultSwatchText(token, value);
     }
 }
 

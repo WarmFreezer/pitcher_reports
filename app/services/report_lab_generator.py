@@ -97,9 +97,20 @@ class PDF_Generator:
 
         # The masthead title/subtitle are normally white/secondary-on-tertiary-fill;
         # in light-ink mode that fill is dropped, so they need a color that's
-        # actually visible against the bare page instead.
-        title_color = self.dark_color if self.ink_mode == 'light_ink' else self.WHITE
-        subtitle_color = self.dark_color if self.ink_mode == 'light_ink' else self.secondary_color
+        # actually visible against the bare page instead. Both branding colors in
+        # that pairing are school-chosen, so a contrast check backs up whichever
+        # doesn't actually read against tertiary (e.g. a light tertiary would
+        # otherwise leave white title text nearly invisible).
+        title_color = self.dark_color if self.ink_mode == 'light_ink' else self._readable_text_color(self.tertiary_color)
+        subtitle_color = self.dark_color if self.ink_mode == 'light_ink' else self._ensure_contrast(self.secondary_color, self.tertiary_color)
+
+        # generate_stats_grid fills its tiles with light_color in full-color mode
+        # and leaves them unfilled (bare page) in light-ink mode -- checked here
+        # since stat_value/stat_label below are brand-colored text fixed at
+        # construction time, not chosen per-render against a known background.
+        stats_grid_bg = self.WHITE if self.ink_mode == 'light_ink' else self.light_color
+        stat_value_color = self._ensure_contrast(self.tertiary_color, stats_grid_bg)
+        stat_label_color = self._ensure_contrast(self.dark_color, stats_grid_bg)
 
         self.styles = {
             "title": ParagraphStyle(
@@ -131,13 +142,13 @@ class PDF_Generator:
             # less than the value's own font size and overlaps the label beneath it
             "stat_label": ParagraphStyle(
                 "StatLabel",
-                fontSize=8, textColor=self.dark_color,
+                fontSize=8, textColor=stat_label_color,
                 fontName="Helvetica",
                 alignment=TA_CENTER, leading=10,
             ),
             "stat_value": ParagraphStyle(
                 "StatValue",
-                fontSize=18, textColor=self.tertiary_color,
+                fontSize=18, textColor=stat_value_color,
                 fontName="Helvetica-Bold",
                 alignment=TA_CENTER, leading=21, spaceAfter=2,
             ),
@@ -161,9 +172,64 @@ class PDF_Generator:
             ),
         }
 
+    def _relative_luminance(self, color: Any) -> float:
+        """WCAG relative luminance (0 = black, 1 = white) of a ReportLab Color."""
+        def linearize(channel: float) -> float:
+            return channel / 12.92 if channel <= 0.03928 else ((channel + 0.055) / 1.055) ** 2.4
+        return (
+            0.2126 * linearize(color.red) +
+            0.7152 * linearize(color.green) +
+            0.0722 * linearize(color.blue)
+        )
+
+    def _contrast_ratio(self, color_a: Any, color_b: Any) -> float:
+        """WCAG contrast ratio between two colors: 1 = identical, 21 = black on white."""
+        lum_a, lum_b = self._relative_luminance(color_a), self._relative_luminance(color_b)
+        lighter, darker = max(lum_a, lum_b), min(lum_a, lum_b)
+        return (lighter + 0.05) / (darker + 0.05)
+
+    def _readable_text_color(self, bg_color: Any) -> Any:
+        """
+        WHITE or dark_color, whichever contrasts better against bg_color -- a
+        school's branding color (tertiary/accent/light/etc.) can be set to
+        anything, including something too light for the white text a fill is
+        otherwise assumed to need (e.g. a light tertiary would make hardcoded
+        white text on it nearly invisible).
+        """
+        white_contrast = self._contrast_ratio(bg_color, self.WHITE)
+        dark_contrast = self._contrast_ratio(bg_color, self.dark_color)
+        return self.WHITE if white_contrast >= dark_contrast else self.dark_color
+
+    def _ensure_contrast(self, text_color: Any, bg_color: Any, min_ratio: float = 3.0) -> Any:
+        """
+        text_color as-is if it already reads on bg_color, otherwise whichever
+        of WHITE/dark_color reads best -- for spots where the text itself is a
+        brand color (e.g. the stats grid's tertiary-colored numbers) rather
+        than a fixed white/dark choice, so two branding colors picked without
+        each other in mind don't silently cancel out.
+        """
+        if self._contrast_ratio(text_color, bg_color) >= min_ratio:
+            return text_color
+        return self._readable_text_color(bg_color)
+
+    def _zebra_row_commands(self, num_rows: int, stripe_color: Any, header_rows: int = 1) -> list[tuple[Any, ...]]:
+        """
+        Per-row BACKGROUND + TEXTCOLOR commands alternating white/stripe_color
+        from header_rows onward. Replaces a plain ROWBACKGROUNDS command, which
+        left body text at its implicit black default -- invisible if a school's
+        branding color used for the stripe (tertiary/light) turns out dark.
+        """
+        commands: list[tuple[Any, ...]] = []
+        fills = [self.WHITE, stripe_color]
+        for offset, row in enumerate(range(header_rows, num_rows)):
+            fill = fills[offset % 2]
+            commands.append(('BACKGROUND', (0, row), (-1, row), fill))
+            commands.append(('TEXTCOLOR', (0, row), (-1, row), self._readable_text_color(fill)))
+        return commands
+
     def _header_fill_commands(self, fill_color: Any, row_start: tuple[int, int] = (0, 0), row_end: tuple[int, int] = (-1, 0)) -> list[tuple[Any, ...]]:
         """TableStyle commands for a header/section-bar row: a colored fill with
-        white text in full-color mode, or -- to save ink -- no fill at all, dark
+        readable text in full-color mode, or -- to save ink -- no fill at all, dark
         text, and a plain thin rule underneath as the section separator instead."""
         if self.ink_mode == 'light_ink':
             return [
@@ -172,7 +238,7 @@ class PDF_Generator:
             ]
         return [
             ('BACKGROUND', row_start, row_end, fill_color),
-            ('TEXTCOLOR', row_start, row_end, self.WHITE),
+            ('TEXTCOLOR', row_start, row_end, self._readable_text_color(fill_color)),
         ]
 
     def generate_header(self, player_pfp: str, pitcher_name: str, school_logo: str, game_date: str, home_team: str, away_team: str, pitcher_height: str = '', pitcher_weight: str = '', age: int | None = None, matchup_separator: str = '@') -> list[Any]:
@@ -243,7 +309,7 @@ class PDF_Generator:
             header_style.append(('LINEBELOW', (0, 0), (-1, 0), 1, self.dark_color))
         else:
             header_style.append(('BACKGROUND', (0, 0), (-1, -1), self.tertiary_color))
-            header_style.append(('TEXTCOLOR', (0, 0), (-1, -1), self.WHITE))
+            header_style.append(('TEXTCOLOR', (0, 0), (-1, -1), self._readable_text_color(self.tertiary_color)))
             header_style.append(('LINEBELOW', (0, 0), (-1, 0), 4, self.secondary_color))
         header_table.setStyle(TableStyle(header_style))
         header_table.spaceAfter = 0
@@ -336,7 +402,7 @@ class PDF_Generator:
             ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
             ('TOPPADDING', (0, 0), (-1, 0), 8),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [self.WHITE, self.light_color]),
+            *self._zebra_row_commands(len(table_data), self.light_color),
         ]
 
         stats_table.setStyle(TableStyle(table_style))
@@ -369,7 +435,7 @@ class PDF_Generator:
             ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
             ('TOPPADDING', (0, 0), (-1, 0), 8),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [self.WHITE, self.light_color]),
+            *self._zebra_row_commands(len(table_data), self.light_color),
         ]
 
         usage_table.setStyle(TableStyle(table_style))
@@ -609,7 +675,7 @@ class PDF_Generator:
         # Full-saturation zebra stripe -- heavier than the pale light_color stripe
         # used elsewhere, so it's the one other zebra this mode also drops.
         if self.ink_mode != 'light_ink':
-            summary_style.append(('ROWBACKGROUNDS', (0, 1), (-1, -1), [self.WHITE, self.tertiary_color]))
+            summary_style.extend(self._zebra_row_commands(len(summary_data), self.tertiary_color))
         summary_table.setStyle(TableStyle(summary_style))
         
         elements.append(summary_table)
@@ -967,7 +1033,7 @@ class PDF_Generator:
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, -1), 7),
                 ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [self.WHITE, self.light_color]),
+                *self._zebra_row_commands(len(rows), self.light_color),
             ]))
 
             cell: list[Any] = [Paragraph(heading, ab_heading_style)]
@@ -1092,7 +1158,7 @@ class PDF_Generator:
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
                 ('FONTSIZE', (0, 0), (-1, -1), 7),
                 ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [self.WHITE, self.light_color]),
+                *self._zebra_row_commands(len(rows), self.light_color),
             ]))
 
             cell: list[Any] = [Paragraph(heading, ab_heading_style)]
@@ -1190,7 +1256,7 @@ class PDF_Generator:
             ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
             ('TOPPADDING', (0, 0), (-1, 0), 8),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [self.WHITE, self.light_color]),
+            *self._zebra_row_commands(len(table_data), self.light_color),
         ]))
 
         section: list[Any] = [Paragraph(title, self.styles["section_header"]), data_table]

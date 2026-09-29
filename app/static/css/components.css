@@ -103,6 +103,7 @@
 .download-btn:hover,
 .upload-btn:hover {
     background-color: var(--secondary);
+    color: var(--text-on-secondary);
     text-decoration: none;
 }
 
@@ -141,6 +142,7 @@
 
 .download-btn-small:hover {
     background-color: var(--secondary);
+    color: var(--text-on-secondary);
     text-decoration: none;
 }
 
@@ -171,7 +173,7 @@
     padding: 14px 32px;
     border-radius: 32px;
     background-color: var(--tertiary);
-    color: var(--text-on-accent);
+    color: var(--text-on-tertiary);
     font-family: Cambria, serif;
     font-size: 16px;
     font-weight: bold;
@@ -183,7 +185,7 @@
 
 .save-fab:hover {
     background-color: var(--secondary);
-    color: var(--primary);
+    color: var(--text-on-secondary);
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
 }
 
@@ -221,14 +223,17 @@
 
 .toast-success { background-color: var(--good); }
 .toast-error   { background-color: var(--danger); }
-.toast-info    { background-color: var(--tertiary); }
+.toast-info    { background-color: var(--tertiary); color: var(--text-on-tertiary); }
 
 .toast span { flex: 1; }
 
 .toast-close {
     background: none;
     border: none;
-    color: white;
+    /* Matches whichever variant this toast is (white for success/error's fixed
+       --good/--danger, or --text-on-tertiary for toast-info's branded fill)
+       instead of assuming every toast background needs the same text color. */
+    color: inherit;
     font-size: 18px;
     line-height: 1;
     cursor: pointer;

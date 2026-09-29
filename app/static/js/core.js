@@ -1,3 +1,16 @@
+// '#ffffff' or '#000000', whichever reads on top of a hex color -- mirrors
+// BrandingLoader.contrast_text()'s W3C perceived-brightness formula, so a
+// branding color picker's live preview (updated here, in JS, before the page
+// re-renders) agrees with the server-computed --text-on-* CSS variables.
+function readableTextColor(hex) {
+    const clean = hex.replace('#', '');
+    const r = parseInt(clean.substring(0, 2), 16);
+    const g = parseInt(clean.substring(2, 4), 16);
+    const b = parseInt(clean.substring(4, 6), 16);
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    return brightness < 128 ? '#ffffff' : '#000000';
+}
+
 // Show a non-blocking toast notification. type: 'success' | 'error' | 'info'
 function toast(message, type = 'info') {
     let container = document.getElementById('toast-container');

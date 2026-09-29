@@ -327,10 +327,14 @@ def build_ab_pitch_charts(
             # clipped by the axes -- half a marker with no visible number,
             # rather than a legible dot. Pin it just inside the frame instead:
             # still off in the right direction, but fully drawn and readable.
-            plot_points = [
-                _clamp_to_plot_bounds(p.plate_loc_side, p.plate_loc_height, _AB_CHART_XLIM, _AB_CHART_YLIM)
-                for p in located
-            ]
+            plot_points: list[tuple[float, float]] = []
+            for p in located:
+                # located's filter already guarantees these aren't None;
+                # re-narrow into locals since mypy doesn't carry that through
+                # the list it was built from.
+                side, height = p.plate_loc_side, p.plate_loc_height
+                assert side is not None and height is not None
+                plot_points.append(_clamp_to_plot_bounds(side, height, _AB_CHART_XLIM, _AB_CHART_YLIM))
             plot_sides = [x for x, _ in plot_points]
             plot_heights = [y for _, y in plot_points]
 

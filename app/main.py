@@ -76,6 +76,12 @@ def create_app(config_overrides: dict | None = None) -> Flask:
             return None
         return user
 
+    # Readable text color for an arbitrary hex color -- used inline in templates
+    # (e.g. the branding color-picker swatches, where the label sits directly on
+    # top of whichever color is currently being edited) rather than only through
+    # inject_branding's fixed 'branding'-keyed dict below.
+    app.jinja_env.filters['contrast_text'] = BrandingLoader.contrast_text
+
     # Context processor
     @app.context_processor
     def inject_branding() -> dict[str, Any]:
@@ -83,7 +89,27 @@ def create_app(config_overrides: dict | None = None) -> Flask:
         if current_user.is_authenticated and current_user.school:
             branding = BrandingLoader.get_branding(current_user.school_id)
             logo_path = BrandingLoader.get_logo_path(current_user.school_id)
-            return {'branding': branding, 'logo_path': logo_path}
+            # Readable text color for each branding color used as a fill (table
+            # headers, buttons, etc.) -- computed here since a school's color can be
+            # any brightness, and the CSS previously assumed white always worked.
+            colors = branding.get('colors', {})
+            branding_text = {
+                token: BrandingLoader.contrast_text(colors[token])
+                for token in ('primary', 'secondary', 'tertiary', 'accent')
+                if token in colors
+            }
+            # RGB-triplet counterpart for text whose opacity also varies (the
+            # navbar's muted/hover/active link states) -- rgba(var(--x), alpha)
+            # needs bare numbers, not a hex string.
+            branding_text_rgb = {
+                token: BrandingLoader.contrast_text_rgb(colors[token])
+                for token in ('primary', 'secondary', 'tertiary', 'accent')
+                if token in colors
+            }
+            return {
+                'branding': branding, 'logo_path': logo_path,
+                'branding_text': branding_text, 'branding_text_rgb': branding_text_rgb,
+            }
         return {}
 
     # Static file serving

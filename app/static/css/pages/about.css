@@ -55,7 +55,7 @@
 
 .toggle-tab--active {
     background: var(--accent);
-    color: white;
+    color: var(--text-on-accent);
 }
 
 .toggle-tab:not(.toggle-tab--active):hover {
@@ -171,7 +171,7 @@
 
 #trackman-table-container th {
     background-color: var(--tertiary);
-    color: white;
+    color: var(--text-on-tertiary);
     font-weight: bold;
 }
 
@@ -189,7 +189,7 @@
     justify-content: center;
     align-items: center;
     background-color: var(--primary);
-    color: var(--text-primary);
+    color: var(--text-on-primary);
     border-radius: 16px;
     padding: 16px 14px;
     min-width: 170px;
@@ -257,7 +257,7 @@
 
 .readme-content th {
     background-color: var(--tertiary);
-    color: white;
+    color: var(--text-on-tertiary);
 }
 
 .readme-content tr:nth-child(even) td {

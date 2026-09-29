@@ -60,7 +60,7 @@
 }
 
 .nav-link {
-    color: rgba(255, 255, 255, 0.75);
+    color: rgba(var(--nav-text-rgb), 0.75);
     text-decoration: none;
     padding: 6px 12px;
     border-radius: 6px;
@@ -76,17 +76,17 @@
    base.css's global a:visited otherwise wins on specificity and repaints them to
    --text-primary, which in light mode equals the header's own background color. */
 .nav-link:visited {
-    color: rgba(255, 255, 255, 0.75);
+    color: rgba(var(--nav-text-rgb), 0.75);
 }
 
 .nav-link:hover {
-    color: white;
+    color: rgb(var(--nav-text-rgb));
     background-color: rgba(255, 255, 255, 0.08);
     text-decoration: none;
 }
 
 .nav-link.active {
-    color: white;
+    color: rgb(var(--nav-text-rgb));
     background-color: transparent;
     border-bottom: 2px solid var(--secondary);
     border-radius: 0;
@@ -151,7 +151,7 @@
 .icon-btn {
     background: none;
     border: none;
-    color: rgba(255, 255, 255, 0.75);
+    color: rgba(var(--nav-text-rgb), 0.75);
     cursor: pointer;
     padding: 6px;
     border-radius: 6px;
@@ -163,7 +163,7 @@
 }
 
 .icon-btn:hover {
-    color: white;
+    color: rgb(var(--nav-text-rgb));
     background-color: rgba(255, 255, 255, 0.1);
 }
 
@@ -194,7 +194,7 @@
 .logout-btn {
     background: none;
     border: 1px solid rgba(255, 255, 255, 0.3);
-    color: rgba(255, 255, 255, 0.75);
+    color: rgba(var(--nav-text-rgb), 0.75);
     cursor: pointer;
     padding: 5px 14px;
     border-radius: 6px;
@@ -204,7 +204,7 @@
 }
 
 .logout-btn:hover {
-    color: white;
+    color: rgb(var(--nav-text-rgb));
     border-color: rgba(255, 255, 255, 0.6);
     background-color: rgba(255, 255, 255, 0.08);
 }
@@ -213,7 +213,7 @@
     display: none;
     background: none;
     border: none;
-    color: white;
+    color: rgb(var(--nav-text-rgb));
     cursor: pointer;
     padding: 6px 8px;
     border-radius: 6px;
@@ -248,7 +248,7 @@
 
 .site-footer {
     background-color: var(--primary);
-    color: white;
+    color: var(--text-on-primary);
     text-align: center;
     padding: 20px;
 }
@@ -276,6 +276,12 @@
         right: 0;
         bottom: 0;
         background-color: var(--tertiary);
+        /* .nav-link and friends sit on --tertiary here instead of --primary
+           (the desktop .site-header background they're normally styled for) --
+           re-point the shared text token so it still contrasts, since a
+           school's tertiary isn't guaranteed to be the same brightness as
+           its primary. */
+        --nav-text-rgb: var(--text-on-tertiary-rgb);
         flex-direction: column;
         align-items: stretch;
         padding: 12px;
@@ -316,7 +322,7 @@
     }
 
     .nav-dropdown.mobile-open .dropdown-content a {
-        color: rgba(255, 255, 255, 0.85);
+        color: rgba(var(--nav-text-rgb), 0.85);
         font-size: 15px;
     }
 
@@ -332,6 +338,6 @@
         display: block;
         margin-top: auto;
         border-bottom: none !important;
-        color: rgba(255, 255, 255, 0.75);
+        color: rgba(var(--nav-text-rgb), 0.75);
     }
 }

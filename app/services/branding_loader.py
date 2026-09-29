@@ -162,3 +162,22 @@ class BrandingLoader:
         r, g, b = int(color_hex[0:2], 16), int(color_hex[2:4], 16), int(color_hex[4:6], 16)
         brightness = (r * 299 + g * 587 + b * 114) / 1000
         return brightness < 128
+
+    @staticmethod
+    def contrast_text(color_hex: str) -> str:
+        """
+        '#ffffff' or '#000000', whichever reads on top of color_hex -- for text/icons
+        placed on a school's own branding color, which (unlike --dark/--light) is
+        never guaranteed to be any particular brightness.
+        """
+        return '#ffffff' if BrandingLoader.is_dark(color_hex) else '#000000'
+
+    @staticmethod
+    def contrast_text_rgb(color_hex: str) -> str:
+        """
+        The same choice as contrast_text(), as a bare 'R, G, B' triplet for
+        rgba(var(--x), alpha) text that also needs to vary its own opacity
+        (e.g. the navbar's muted/hover/active link states, which are the same
+        color at different strengths rather than one flat color).
+        """
+        return '255, 255, 255' if BrandingLoader.is_dark(color_hex) else '0, 0, 0'

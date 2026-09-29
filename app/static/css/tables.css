@@ -56,8 +56,13 @@
     align-items: stretch;
     text-align: center;
     min-width: 0;
-    flex: 1;
-    max-width: 450px;
+    /* No max-width cap (unlike .pitcher-breakmap/.pitcher-heatmap .graph-block --
+       those hold fixed-size chart images) -- this fills whatever
+       .pitcher-charts-grid's column track gives it, and .table-scroll on
+       left-usage/right-usage (see pitching.html) falls back to a horizontal
+       scrollbar only if the table still doesn't fit. */
+    width: 100%;
+    gap: 8px;
 }
 
 .pitcher-table {
@@ -81,11 +86,23 @@
     vertical-align: middle;
 }
 
+/* Pitch (col 1) and Count (col 2) hold short content (e.g. "FB", "10") that
+   doesn't need the same horizontal padding as the percent columns -- trims
+   a little width off the table so it's less likely to need table-scroll's
+   fallback horizontal scrollbar inside .pitcher-usage-panel's grid column. */
+.pitch-usage-table th:nth-child(1),
+.pitch-usage-table td:nth-child(1),
+.pitch-usage-table th:nth-child(2),
+.pitch-usage-table td:nth-child(2) {
+    padding-left: 6px;
+    padding-right: 6px;
+}
+
 .pitcher-data-table th,
 .pitch-usage-table th,
 .custom-stats-table th {
     background-color: var(--tertiary);
-    color: var(--text-on-accent);
+    color: var(--text-on-tertiary);
     font-weight: bold;
 }
 
@@ -230,6 +247,11 @@
 .chart-unavailable { color: var(--text-muted); font-size: 0.85rem; font-style: italic; text-align: center; margin: 8px 0; }
 .report-img-breakmap { width: 100%; max-width: 400px; }
 
+/* Generic centered flex row -- also used by catching.html (.catcher-heatmap +
+   .catcher-pitch-location) and batting.html (.hitter-spray). The pitcher
+   report's own two-row chart section uses .pitcher-charts-grid below instead,
+   since a shared grid (not two of these stacked) is what keeps its two rows'
+   columns aligned. */
 .report-lower-row {
     display: flex;
     flex-direction: row;
@@ -241,24 +263,34 @@
     margin-right: auto;
 }
 
-.pitcher-heatmap {
-    display: flex;
-    justify-content: center;
-    align-items: center;
+/* Both "rows" (heat maps; break map + pitch usage) are one grid, not two
+   independent flex containers -- a shared pair of column tracks is what
+   actually guarantees the break map lines up under the left heat map, and the
+   usage panel under the right one. Two separate flex rows can each resolve to
+   a different total width (this bit us going from flex:1 to a hardcoded
+   400px on .pitcher-usage-panel: right for this row in isolation, but a
+   mismatch against the heatmap row's own width the moment the two diverged),
+   whereas grid columns are computed once, for every row, together. */
+.pitcher-charts-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-items: center;
+    align-items: start;
     gap: 16px;
-    overflow: hidden;
-    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
 }
 
-/* Fixed rather than content-sized: chartBlock() first renders a graph-block
-   with only a title + spinner (narrow), then swaps in the actual chart image
-   (up to 400px). Sizing this to content let that swap change the column's
-   width mid-load, which shoved .pitcher-usage-panel -- its flex row sibling --
-   sideways over the break map's title. A fixed width keeps every section's
-   position the same whether the chart is still loading or already in. */
+/* .pitcher-heatmap holds two chart blocks (LHH/RHH) appended by pitching.js;
+   display:contents drops its own box so those two become direct grid items --
+   row 1, columns 1-2 -- instead of a flex row nested inside column 1. */
+.pitcher-heatmap {
+    display: contents;
+}
+
 .pitcher-heatmap .graph-block {
-    flex: 0 0 400px;
-    width: 400px;
+    width: 100%;
+    max-width: 400px;
 }
 
 .pitcher-breakmap {
@@ -267,8 +299,8 @@
     justify-content: center;
     align-items: center;
     overflow: hidden;
-    flex: 0 0 400px;
-    width: 400px;
+    width: 100%;
+    max-width: 400px;
 }
 
 /* The break map's pitch-type key -- its own element below the chart rather
@@ -325,19 +357,14 @@
         width: 100%;
     }
 
-    .report-lower-row {
-        flex-direction: column;
-        align-items: stretch;
+    /* Collapse to a single column -- .pitcher-heatmap's two chart blocks and
+       .pitcher-breakmap/.pitcher-usage-panel all just stack in DOM order. */
+    .pitcher-charts-grid {
+        grid-template-columns: 1fr;
     }
 
-    .pitcher-heatmap .graph-block {
-        flex: 1 1 0;
-        width: auto;
-    }
-
+    .pitcher-heatmap .graph-block,
     .pitcher-breakmap {
-        flex: none;
-        width: 100%;
         max-width: 100%;
     }
 
@@ -345,11 +372,6 @@
     .catcher-pitch-location {
         flex: none;
         width: 100%;
-    }
-
-    .pitcher-usage-panel {
-        width: 100%;
-        min-width: 0;
     }
 }
 
@@ -370,7 +392,7 @@
 
 .roster-table th {
     background-color: var(--tertiary);
-    color: var(--text-on-accent);
+    color: var(--text-on-tertiary);
     padding: 10px 12px;
     text-align: left;
     white-space: nowrap;
@@ -424,7 +446,7 @@
     bottom: 4px;
     right: 4px;
     background: var(--secondary);
-    color: var(--text-secondary);
+    color: var(--text-on-secondary);
     border-radius: 50%;
     width: 16px;
     height: 16px;

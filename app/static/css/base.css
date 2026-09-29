@@ -18,6 +18,28 @@
      for one use case would break contrast for the other. */
   --text-accent: #8B1A1A;
 
+  /* Readable text for each branding color used as a fill (table headers, buttons,
+     etc). These are only a same-page fallback for when no school branding is
+     loaded -- whenever branding IS loaded, the page's own inline <style> block
+     overrides all four with a value computed per-school (see main.py's
+     inject_branding()), since a school's actual color can be any brightness. */
+  --text-on-primary: #f5f2ed;
+  --text-on-secondary: #0B1F3A;
+  --text-on-tertiary: #f5f2ed;
+
+  /* Same choices as an 'R, G, B' triplet, for rgba(var(--x), alpha) text whose
+     opacity also varies (the navbar's muted/hover/active link states). */
+  --text-on-primary-rgb: 245, 242, 237;
+  --text-on-secondary-rgb: 11, 31, 58;
+  --text-on-tertiary-rgb: 245, 242, 237;
+  --text-on-accent-rgb: 245, 242, 237;
+
+  /* Which of the two above the navbar's text actually sits on: --primary at
+     desktop width (--text-on-primary-rgb), --tertiary once the nav collapses
+     into the mobile dropdown (layout.css re-points this at --text-on-tertiary-rgb
+     inside that breakpoint, since .nav-link is shared between both). */
+  --nav-text-rgb: var(--text-on-primary-rgb);
+
   /* Light Mode */
   --bg-page: #f5f3ed;
   --bg-bubble: #edeae4;

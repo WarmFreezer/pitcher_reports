@@ -226,7 +226,7 @@ input:-webkit-autofill:active {
     border: 2px solid var(--accent);
     text-align: left;
     background-color: var(--tertiary);
-    color: white;
+    color: var(--text-on-tertiary);
     padding: 12px 16px;
     cursor: pointer;
 }

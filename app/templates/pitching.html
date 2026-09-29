@@ -22,6 +22,14 @@
             --dark: {{branding.colors.dark}};
             --light: {{branding.colors.light}};
             --accent: {{branding.colors.accent}};
+            --text-on-primary: {{ branding_text.primary }};
+            --text-on-secondary: {{ branding_text.secondary }};
+            --text-on-tertiary: {{ branding_text.tertiary }};
+            --text-on-accent: {{ branding_text.accent }};
+            --text-on-primary-rgb: {{ branding_text_rgb.primary }};
+            --text-on-secondary-rgb: {{ branding_text_rgb.secondary }};
+            --text-on-tertiary-rgb: {{ branding_text_rgb.tertiary }};
+            --text-on-accent-rgb: {{ branding_text_rgb.accent }};
         }
     </style>
     {% endif %}
@@ -95,17 +103,16 @@
             </div>
             <div class="report-card-body collapsible collapsible-lg">
                 <div class="report-card-inner">
-                    <div class="pitcher-heatmap"></div>
-                    <div class="report-lower-row">
+                    <div class="pitcher-charts-grid">
+                        <div class="pitcher-heatmap"></div>
                         <div class="pitcher-breakmap"></div>
                         <div class="pitcher-usage-panel">
-                            <p class="graph-title">Pitch Usage</p>
                             <div class="graph-block">
-                                <p class="graph-subtitle">LHH</p>
+                                <p class="graph-title">Pitch Usage vs LHH</p>
                                 <div class="table-section"><div class="left-usage table-scroll"></div></div>
                             </div>
                             <div class="graph-block">
-                                <p class="graph-subtitle">RHH</p>
+                                <p class="graph-title">Pitch Usage vs RHH</p>
                                 <div class="table-section"><div class="right-usage table-scroll"></div></div>
                             </div>
                         </div>
