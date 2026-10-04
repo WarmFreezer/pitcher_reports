@@ -204,6 +204,9 @@ function renderRunSummary(result) {
     const mergedButton = result.merged_pdf_url
         ? `<a href="${result.merged_pdf_url}" class="download-btn" download style="text-decoration: none;">Download All (${count})</a>`
         : '';
+    const pitchByPitchButton = result.pitch_by_pitch_all_url
+        ? `<a href="${result.pitch_by_pitch_all_url}" class="download-btn" download style="text-decoration: none;">Download All Pitch-by-Pitch</a>`
+        : '';
 
     area.innerHTML = `
         <div class="bubble" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
@@ -211,7 +214,7 @@ function renderRunSummary(result) {
                 <h2>${count} Pitcher Report${count === 1 ? '' : 's'}</h2>
                 <p>${result.date_range} · ${result.games} game${result.games === 1 ? '' : 's'} · ${result.opponent}</p>
             </div>
-            <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">${mergedButton}</div>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">${mergedButton}${pitchByPitchButton}</div>
         </div>`;
 }
 

@@ -114,6 +114,7 @@ function loadNavbar(logo = '') {
                             <a href="/batting">Batting Report</a>
                             <a href="/catching">Catching Report</a>
                             <a href="/stats-guide">Stats Guide</a>
+                            <a href="/stats-guide/custom">Custom Stats Guide</a>
                         </div>
                     </div>
                     <div class="nav-dropdown">

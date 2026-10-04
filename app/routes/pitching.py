@@ -205,6 +205,42 @@ def _build_one_pitcher_report(task: dict[str, Any]) -> dict[str, Any]:
         gc.collect()
 
 
+def _build_one_pitcher_pbp(task: dict[str, Any]) -> dict[str, Any]:
+    """
+    Build one pitcher's pitch-by-pitch PDF for the "download all pitch-by-pitch"
+    bulk merge. Runs in a worker process alongside its siblings (see
+    pitching_pitch_by_pitch_all's ProcessPoolExecutor) -- same no-Flask-context
+    constraint as _build_one_pitcher_report. Writes to the same path the
+    single-pitcher pitch-by-pitch route uses, so a coach who already downloaded
+    one pitcher individually just gets that file regenerated, not duplicated.
+    """
+    pitcher_id = task['pitcher_id']
+    try:
+        source = task['source']
+        user_id = task['user_id']
+        school_temp_folder = task['school_temp_folder']
+        school_output_folder = task['school_output_folder']
+
+        pbp_report = report.build_pitch_by_pitch_report(source, pitcher_id)
+        if pbp_report is None:
+            raise ValueError(f'Failed to build pitch-by-pitch data for pitcher ID {pitcher_id}')
+
+        charted_at_bats = report.build_ab_pitch_charts(
+            pbp_report.at_bats, pitcher_id, user_id, school_temp_folder, theme='light')
+        pbp_report = dataclasses.replace(pbp_report, at_bats=charted_at_bats)
+
+        gen = PDF_Generator(school_id=task['school_id'], branding=task['branding'], ink_mode=task['ink_mode'])
+        output_path = os.path.abspath(os.path.join(
+            school_output_folder, f'{user_id}_pitcher_{pitcher_id}_pitch_by_pitch.pdf'))
+        gen.generate_pitch_by_pitch_report(pbp_report, output_path)
+
+        return {'ok': True, 'pitcher_id': str(pitcher_id)}
+    except Exception as e:
+        return {'ok': False, 'pitcher_id': str(pitcher_id), 'error': str(e)}
+    finally:
+        gc.collect()
+
+
 @pitching_bp.route('/pitching')
 @login_required
 def pitching_page() -> ResponseReturnValue:
@@ -369,11 +405,18 @@ def pitching_report() -> ResponseReturnValue:
             if merge_pdfs(user_id, school_output_folder, merged_path, prefix='pitcher'):
                 merged_url = '/api/pitching/export?merged=1'
 
+        # Pitch-by-pitch PDFs aren't built here (they're lazy, per-pitcher, on
+        # their own route) -- this just hands the bulk route the same game
+        # selection so it can rebuild and merge them itself when clicked.
+        pitch_by_pitch_all_url = (
+            f'/api/pitching/pitch-by-pitch/all?target={target}&{hash_qs}' if reports_built else None)
+
         yield json.dumps({
             'type': 'done',
             'report_count': reports_built,
             'failed': failed,
             'merged_pdf_url': merged_url,
+            'pitch_by_pitch_all_url': pitch_by_pitch_all_url,
             'date_range': date_range,
             'opponent': opponent_label,
             'games': len(selected),
@@ -467,3 +510,90 @@ def pitching_pitch_by_pitch() -> ResponseReturnValue:
     safe_name = secure_filename(pitcher_name) or f'pitcher_{pitcher_id}'
     return send_file(output_path, mimetype='application/pdf',
                       as_attachment=True, download_name=f'{safe_name}_pitch_by_pitch.pdf')
+
+
+@pitching_bp.route('/api/pitching/pitch-by-pitch/all')
+@login_required
+def pitching_pitch_by_pitch_all() -> ResponseReturnValue:
+    """
+    Build every displayed pitcher's pitch-by-pitch PDF for the given game
+    selection and merge them into one download -- the bulk counterpart to
+    pitching_pitch_by_pitch, for the "Download All Pitch-by-Pitch" button next
+    to the main report's "Download All". Lazy like the single-pitcher route:
+    nothing here runs during /report, only when a coach clicks this link (built
+    from pitch_by_pitch_all_url in that same request's 'done' message).
+    """
+    params = {
+        'content_hashes': request.args.getlist('content_hash'),
+        'target': request.args.get('target', 'own'),
+    }
+    games_dir, selected, error = _selected_games(params)
+    if error:
+        return error
+    assert games_dir is not None and selected is not None
+
+    target = params['target']
+    trackman_id = current_user.school.trackman_id
+
+    source = game_archive.load_games(games_dir, [g['content_hash'] for g in selected])
+    if source.empty:
+        return jsonify({'error': 'No data in the selected games.'}), 404
+
+    if target == 'opponent':
+        matching = source[source['PitcherTeam'] != trackman_id]
+    else:
+        matching = source[source['PitcherTeam'] == trackman_id]
+
+    if matching.empty:
+        side = 'opponent' if target == 'opponent' else 'your team'
+        return jsonify({'error': f'No pitching data found for {side} in the selected games.'}), 404
+
+    school_temp_folder, school_output_folder = get_school_directories()
+    branding = BrandingLoader.get_branding(current_user.school_id)
+    school_id = current_user.school_id
+    user_id = current_user.id
+    ink_mode = current_user.ink_mode
+
+    # Clear this user's previous pitch-by-pitch output so a stale file left
+    # over from an earlier, different game selection can't get swept into
+    # today's merge.
+    stale = glob.glob(os.path.join(school_output_folder, f'{user_id}_pitcher_*_pitch_by_pitch.pdf'))
+    stale.append(os.path.join(school_output_folder, f'{user_id}_merged_pitcher_pitch_by_pitch.pdf'))
+    for path in stale:
+        try:
+            os.remove(path)
+        except OSError as e:
+            print(f"Error deleting stale pitch-by-pitch output: {path} - {e}")
+
+    pitcher_ids = list(matching['PitcherId'].unique())
+    tasks = [{
+        'pitcher_id': pid,
+        'source': source,
+        'user_id': user_id,
+        'school_id': school_id,
+        'school_temp_folder': school_temp_folder,
+        'school_output_folder': school_output_folder,
+        'branding': branding,
+        'ink_mode': ink_mode,
+    } for pid in pitcher_ids]
+
+    built = 0
+    max_workers = min(len(tasks), os.cpu_count() or 2, 4)
+    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(_build_one_pitcher_pbp, task) for task in tasks]
+        for future in as_completed(futures):
+            result = future.result()
+            if result['ok']:
+                built += 1
+            else:
+                print(f"Error building pitch-by-pitch for pitcher ID {result['pitcher_id']}: {result['error']}")
+
+    if built == 0:
+        return jsonify({'error': 'Could not build any pitch-by-pitch reports.'}), 500
+
+    merged_path = os.path.join(school_output_folder, f'{user_id}_merged_pitcher_pitch_by_pitch.pdf')
+    if not merge_pdfs(user_id, school_output_folder, merged_path, prefix='pitcher', require_suffix='_pitch_by_pitch.pdf'):
+        return jsonify({'error': 'Could not merge the pitch-by-pitch reports.'}), 500
+
+    return send_file(merged_path, mimetype='application/pdf',
+                      as_attachment=True, download_name='pitch_by_pitch_reports.pdf')

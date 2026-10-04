@@ -1613,15 +1613,18 @@ def image_to_base64(img: PILImage.Image) -> str:
     b64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
     return f"data:image/png;base64,{b64}"
 
-def merge_pdfs(id: int, pdf_folder: str, output_path: str, prefix: str = "pitcher") -> str | None:
+def merge_pdfs(id: int, pdf_folder: str, output_path: str, prefix: str = "pitcher", require_suffix: str | None = None) -> str | None:
     """
     Merge one user's reports of a single kind into a combined PDF.
 
     Only files named {id}_{prefix}_*.pdf are collected, so a hitter run cannot
-    sweep in the pitcher PDFs sharing the folder. Also excludes the standalone
-    pitch-by-pitch companion PDF ({id}_hitter_{batter_id}_pitch_by_pitch.pdf) --
-    it shares the {id}_hitter_ prefix but is a separate optional download, not
-    part of the standard per-hitter report.
+    sweep in the pitcher PDFs sharing the folder. By default this also excludes
+    the standalone pitch-by-pitch companion PDF ({id}_hitter_{batter_id}_pitch_by_pitch.pdf)
+    -- it shares the {id}_hitter_ prefix but is a separate optional download, not
+    part of the standard per-hitter report. Pass require_suffix (e.g.
+    '_pitch_by_pitch.pdf') to merge only files ending in that suffix instead --
+    the "download all pitch-by-pitch" bulk merge, the mirror image of the
+    default exclusion above.
 
     Returns the output path, or None when nothing matched -- callers use that to
     decide whether to offer a combined download at all.
@@ -1636,11 +1639,16 @@ def merge_pdfs(id: int, pdf_folder: str, output_path: str, prefix: str = "pitche
             continue
 
         pdf_path = os.path.join(pdf_folder, pdf)
-        if (os.path.exists(pdf_path) and pdf_path.endswith('.pdf')
-                and pdf.startswith(f"{id}_{prefix}_")
-                and not pdf.endswith('_pitch_by_pitch.pdf')):
-            merger.append(pdf_path)
-            appended += 1
+        if not (os.path.exists(pdf_path) and pdf_path.endswith('.pdf') and pdf.startswith(f"{id}_{prefix}_")):
+            continue
+        if require_suffix:
+            if not pdf.endswith(require_suffix):
+                continue
+        elif pdf.endswith('_pitch_by_pitch.pdf'):
+            continue
+
+        merger.append(pdf_path)
+        appended += 1
 
     # An empty writer writes a perfectly valid zero-page PDF, so the count has to
     # be tracked -- checking the file exists afterwards would always say yes.

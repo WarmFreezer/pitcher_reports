@@ -43,8 +43,7 @@ class PitchTypeStat:
     chase_pct: float
     csw_pct: float
     # % of this pitch type's balls in play hit 90+ mph exit velo with a 10-35 deg
-    # launch angle (TODO's "Damage by type" definition -- not the per-school custom
-    # report scripts' own "damage" stats, which use a different metric/threshold).
+    # launch angle.
     damage_pct: float
 
 

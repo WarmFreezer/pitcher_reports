@@ -22,6 +22,9 @@
                 and dashboard pages — not the school-specific custom stats some programs add on top, which are
                 defined by that school's own uploaded report script and can use different formulas than what's
                 documented here.
+                {% if has_custom_report %}
+                See the <a href="/stats-guide/custom">Custom Stats Guide</a> for your school's custom pitcher stats.
+                {% endif %}
             </p>
             <ul class="stats-guide-toc">
                 <li><a href="#pitching">Pitching Report</a></li>

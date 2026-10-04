@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en" style="height: 100%;">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stat_Line - Custom Stats Guide</title>
+    <meta name="description" content="How Stat_Line calculates the school-specific custom stats on the pitcher report.">
+    <link rel="icon" href="{{ url_for('static', filename='resources/favicon.ico') }}" type="image/x-icon">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/stats-guide.css') }}">
+</head>
+<body onload="loadNavbar(); loadFooter();">
+    <div id="navbar-placeholder"></div>
+
+    <main class="main-content">
+        {% if not has_custom_report %}
+        <div class="bubble">
+            <h2 style="margin-bottom: 10px;">Custom Stats Guide</h2>
+            <p class="stats-guide-intro">
+                Your school doesn't have a custom pitcher report on file, so there's nothing to document here.
+                See the <a href="/stats-guide">Stats Guide</a> for how the default report stats are calculated.
+            </p>
+        </div>
+        {% else %}
+        <div class="bubble">
+            <h2 style="margin-bottom: 10px;">Custom Stats Guide</h2>
+            <p class="stats-guide-intro">
+                Reference for the custom stats your school's own uploaded report script adds to the pitcher
+                report, on top of the <a href="/stats-guide">default stats</a> every school gets. These formulas
+                are specific to your school's custom script and can change if it's re-uploaded — this page
+                documents whatever is currently live, not a fixed contract.
+            </p>
+            <ul class="stats-guide-toc">
+                <li><a href="#overall">Overall Stats</a></li>
+                <li><a href="#contact">Pitch Type Contact Stats</a></li>
+                <li><a href="#execution">Pitch Type Execution &amp; Location</a></li>
+            </ul>
+        </div>
+
+        <div class="bubble" style="margin-top: 0;">
+            <!-- ============================== OVERALL ============================== -->
+            <section id="overall" class="stat-section">
+                <h2>Overall Stats</h2>
+                <p class="stat-section-intro">
+                    One set of numbers for the whole outing/selection, aggregated across every pitch the pitcher
+                    threw.
+                </p>
+
+                <div class="stat-group">
+                    <dl class="stat-def-grid">
+                        <dt>Impact</dt>
+                        <dd>Blended score combining swing decision, swinging-strike rate, overall execution, and
+                            the inverse of damage — a single-number read on the outing.
+                            <span class="stat-formula">(Swing Decision + Swinging Strike + Overall Execution + (1 − Damage)) / 4</span>
+                        </dd>
+
+                        <dt>Swing Decision</dt>
+                        <dd>Share of the hitter's swing/no-swing decisions that were bad ones: chasing a pitch
+                            outside the zone, or taking one in the zone.
+                            <span class="stat-formula">(swings outside the zone + takes inside the zone) / all swing-or-take decisions</span>
+                        </dd>
+
+                        <dt>Swinging Strike</dt>
+                        <dd>Swinging strikes as a share of every pitch thrown — not just swings (compare to
+                            Whiff, below, which divides by swings).
+                            <span class="stat-formula">swinging strikes / all pitches</span>
+                        </dd>
+
+                        <dt>Whiff</dt>
+                        <dd>Swing-and-miss rate on swings taken.
+                            <span class="stat-formula">swinging strikes / (swinging strikes + fouls + balls in play)</span>
+                        </dd>
+
+                        <dt>Damage</dt>
+                        <dd>Of all balls in play, the share hit hard on a line — exit velo 90+ mph with a
+                            launch angle between 10° and 35°.
+                            <span class="stat-formula">(exit velo &gt;= 90 mph AND launch angle 10°–35°) / balls in play</span>
+                        </dd>
+
+                        <dt>Overall Execution</dt>
+                        <dd>Early and Late Execution blended into one number, weighted by how many pitches went
+                            into each — so a pitcher who worked mostly early counts isn't dragged up or down by a
+                            handful of late-count pitches. 3-0/3-1 counts aren't part of either, so they're left
+                            out here and scored separately below.</dd>
+
+                        <dt>Early Execution</dt>
+                        <dd>In counts of 0-0, 0-1, 1-0, and 1-1, the share of pitches that landed in the strike
+                            zone.
+                            <span class="stat-formula">pitches in the zone / pitches thrown, in those counts</span>
+                        </dd>
+
+                        <dt>Late Execution</dt>
+                        <dd>In 0-2 and 1-2, pitches that landed in the zone or in the "around the heart" band —
+                            inside the zone padded a foot out, but outside the heart of the plate. In 2-0, 2-1,
+                            2-2, and 3-2, pitches that landed in the zone. Either way, divided by every pitch
+                            thrown in those same counts.</dd>
+
+                        <dt>3-0/3-1 Execution</dt>
+                        <dd>In 3-0 and 3-1 counts, the share of pitches called a strike by any means (called,
+                            swinging, foul, or in play) — only landing a strike counts here, location doesn't
+                            matter, since falling further behind from a 3-ball count is costly regardless of how
+                            close the pitch was.
+                            <span class="stat-formula">strikes (any kind) / pitches thrown, in 3-0 and 3-1 counts</span>
+                        </dd>
+
+                        <dt>Putaway</dt>
+                        <dd>Of every pitch thrown with two strikes, the share that ended the at-bat with a
+                            strikeout (called or swinging).
+                            <span class="stat-formula">two-strike pitches resulting in a strikeout / all two-strike pitches</span>
+                        </dd>
+
+                        <dt>R2K</dt>
+                        <dd>Share of hitters faced that the pitcher got to a 2-strike count (0-2 or 1-2) before
+                            reaching a 2-ball count. Counted once per hitter, not per pitch — a foul-ball battle
+                            at an ahead 2-strike count doesn't inflate this. Plate appearances split across a
+                            pitching change are excluded entirely; only at-bats this pitcher threw start-to-finish
+                            count.
+                            <span class="stat-formula">hitters reaching 2 strikes before 2 balls / hitters faced</span>
+                        </dd>
+
+                        <dt>Non-Competitive</dt>
+                        <dd>Share of pitches that landed more than 3 feet from the center of the zone — pitches
+                            nowhere near competitive, regardless of count.
+                            <span class="stat-formula">pitches &gt; 3 ft from zone center / all pitches</span>
+                        </dd>
+
+                        <dt>Ground Ball / Line Drive / Air Ball / Popup</dt>
+                        <dd>Balls in play bucketed by launch angle — Ground ≤ 10°, Line 10°–25°, Air 25°–50°, Pop
+                            above 50° — each as a share of all balls in play.</dd>
+                    </dl>
+                </div>
+            </section>
+
+            <!-- ============================== CONTACT ============================== -->
+            <section id="contact" class="stat-section">
+                <h2>Pitch Type Contact Stats</h2>
+                <p class="stat-section-intro">One row per pitch type thrown. Same definitions as the Overall
+                    Stats above, computed within that pitch type only.</p>
+
+                <div class="stat-group">
+                    <dl class="stat-def-grid">
+                        <dt>Impact</dt>
+                        <dd>Same blend as the overall Impact score, using this pitch type's own Swing Decision,
+                            Sw Str, Overall Execution, and Damage.</dd>
+
+                        <dt>Sw Dec</dt>
+                        <dd>This pitch type's Swing Decision — see above.</dd>
+
+                        <dt>Sw Str</dt>
+                        <dd>This pitch type's Swinging Strike rate, over every pitch of that type.</dd>
+
+                        <dt>Whiff</dt>
+                        <dd>This pitch type's Whiff rate, over swings at that type.</dd>
+
+                        <dt>Damage</dt>
+                        <dd>This pitch type's Damage rate, over balls in play of that type.</dd>
+
+                        <dt>Non-Cpv</dt>
+                        <dd>This pitch type's Non-Competitive rate.</dd>
+
+                        <dt>GB / LD / AB / Pop</dt>
+                        <dd>This pitch type's batted-ball mix, over balls in play of that type.</dd>
+                    </dl>
+                </div>
+            </section>
+
+            <!-- ============================== EXECUTION ============================== -->
+            <section id="execution" class="stat-section">
+                <h2>Pitch Type Execution &amp; Location</h2>
+                <p class="stat-section-intro">One row per pitch type thrown — execution and plate-location mix,
+                    broken out by type.</p>
+
+                <div class="stat-group">
+                    <dl class="stat-def-grid">
+                        <dt>Ov Exec / Early Exec / Late Exec / 3-0/3-1 Exec</dt>
+                        <dd>This pitch type's Overall, Early, Late, and 3-0/3-1 Execution — same definitions as
+                            the Overall Stats section, computed only on pitches of this type.</dd>
+
+                        <dt>Inner / Middle / Outer</dt>
+                        <dd>Share of this pitch type's pitches landing in the inner, middle, or outer third of
+                            the strike zone (split by horizontal location, zone height only).
+                            <span class="stat-formula">pitches in that third of the zone / pitches of this type</span>
+                        </dd>
+                    </dl>
+                </div>
+            </section>
+        </div>
+        {% endif %}
+    </main>
+
+    <div id="footer-placeholder"></div>
+
+    <script src="{{ url_for('static', filename='js/core.js') }}"></script>
+</body>
+</html>

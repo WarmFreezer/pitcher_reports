@@ -11,6 +11,7 @@ import markdown as markdown_lib
 
 from app.db.models import db
 from app.db import models
+from app.services.custom_report_loader import custom_report_path
 
 pages_bp = Blueprint('pages', __name__)
 
@@ -292,7 +293,22 @@ def about() -> ResponseReturnValue:
 @pages_bp.route('/stats-guide')
 def stats_guide() -> ResponseReturnValue:
     """Reference page for how the default (non-custom) report stats are calculated."""
-    return render_template('stats_guide.html')
+    has_custom_report = (
+        current_user.is_authenticated
+        and custom_report_path(current_user.school_id, 'custom_pitcher_report.py').exists()
+    )
+    return render_template('stats_guide.html', has_custom_report=has_custom_report)
+
+
+@pages_bp.route('/stats-guide/custom')
+@login_required
+def custom_stats_guide() -> ResponseReturnValue:
+    """Reference page for the pitcher custom-report stats, which are defined by that
+    school's own uploaded custom_pitcher_report.py and can change if it's re-uploaded --
+    unlike stats_guide.html, this one isn't a fixed contract, just current documentation
+    of whatever formulas are live for the logged-in user's school today."""
+    has_custom_report = custom_report_path(current_user.school_id, 'custom_pitcher_report.py').exists()
+    return render_template('custom_stats_guide.html', has_custom_report=has_custom_report)
 
 
 @pages_bp.route('/terms')
