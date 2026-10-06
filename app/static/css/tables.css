@@ -290,7 +290,7 @@
 
 .pitcher-heatmap .graph-block {
     width: 100%;
-    max-width: 400px;
+    max-width: 440px;
 }
 
 .pitcher-breakmap {
@@ -300,7 +300,7 @@
     align-items: center;
     overflow: hidden;
     width: 100%;
-    max-width: 400px;
+    max-width: 440px;
 }
 
 /* The break map's pitch-type key -- its own element below the chart rather

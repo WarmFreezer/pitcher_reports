@@ -87,8 +87,8 @@ class PitchByPitchPitch:
     balls: int
     strikes: int
     result: str  # this pitch's own PitchCall (e.g. "StrikeSwinging", "BallCalled", "InPlay")
-    # Only populated on the hitter side (see hitter_report.build_ab_pitch_charts) --
-    # defaults keep report.py's pitcher-side constructor unchanged.
+    # Where the pitch crossed the plate; None when TrackMan didn't track it. Drawn on the
+    # at-bat panel in the PDF (see ab_chart.py).
     plate_loc_side: float | None = None
     plate_loc_height: float | None = None
 
@@ -101,10 +101,6 @@ class PitchByPitchAtBat:
     batter_side: str
     result: str  # final PA outcome (PlayResult, or KorBB for a walk/strikeout)
     pitches: list[PitchByPitchPitch]
-    # Path to this AB's pitch-location-by-velocity chart PNG, filled in by
-    # report.build_ab_pitch_charts after this dataclass is built. None until
-    # then, or if the AB had no located pitches to plot.
-    chart_path: str | None = None
 
 
 @dataclass(frozen=True)

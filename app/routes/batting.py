@@ -1,10 +1,9 @@
-import dataclasses
-import os
-import gc
-import glob
+import io
 import json
+import os
+import traceback
 from collections.abc import Generator, Mapping
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -13,15 +12,23 @@ from flask import Blueprint, request, jsonify, render_template, send_file, Respo
 from flask.typing import ResponseReturnValue
 from flask_login import login_required, current_user
 
-from app.services import game_archive, hitter_report
+from app.services import chart_images, game_archive, hitter_card, hitter_report, pitch_filters
 from app.services.branding_loader import BrandingLoader
+from app.services.chart_prefs import ChartPrefs
 from app.services.hitter_stats import HitterReportRequest
+from app.services.pitch_filters import PitchFilters
 from app.services.report_lab_generator import PDF_Generator, merge_pdfs
-from app.routes.utils import get_school_directories, get_school_games_directory, flash_toast
+from app.routes.utils import (
+    chart_prefs, charts_enabled, export_workdir, filters_from_args, flash_toast,
+    get_school_directories, get_school_games_directory,
+)
 
 batting_bp = Blueprint('batting', __name__)
 
 DATE_FORMAT = '%Y-%m-%d'
+CHART_SLOTS = ('spray_left', 'spray_right')
+MAX_EXPORT_BYTES = 40 * 1024 * 1024
+MAX_EXPORT_HITTERS = 100
 
 
 def _parse_date(value: str | None, fallback: str | None) -> str | None:
@@ -62,148 +69,80 @@ def _resolve_range(params: Mapping[str, Any]) -> tuple[str | None, str | None, s
     return games_dir, start_date, end_date, None
 
 
-def _hitter_pdf_path(school_output_folder: str, batter_id: str) -> str:
-    return os.path.abspath(os.path.join(
-        school_output_folder, f'{current_user.id}_hitter_{batter_id}_report.pdf'))
+@dataclass
+class _Selection:
+    """What a batting request resolved to: the date window, the school's archive over it and
+    the hitters it may ask about (every id must belong to this school's own archive)."""
+    games_dir: str
+    start_date: str
+    end_date: str
+    target: str
+    source: pd.DataFrame      # unfiltered, shared across requests -- read-only
+    allowed: dict[str, dict[str, Any]]
+    filters: PitchFilters
+    prefs: ChartPrefs
+
+    @property
+    def date_range(self) -> str:
+        return f'{_display_date(self.start_date)} - {_display_date(self.end_date)}'
 
 
-def _build_one_hitter_report(task: dict[str, Any]) -> dict[str, Any]:
-    """
-    Build one hitter's charts + PDF and return the JSON-ready card data.
+def _selection(params: Mapping[str, Any]) -> tuple[_Selection | None, ResponseReturnValue | None]:
+    games_dir, start_date, end_date, error = _resolve_range(params)
+    if error:
+        return None, error
+    assert games_dir is not None and start_date is not None and end_date is not None
 
-    Runs inside a worker process (see batting_report's ProcessPoolExecutor), so
-    it must not touch current_user, db.session, or anything else that depends on
-    Flask's app/request context -- every input it needs is already resolved into
-    plain data on `task` by the caller. `source` is passed to every task rather
-    than pre-filtered to this hitter's own rows, matching exactly what the old
-    sequential loop passed to these same report functions.
-    """
-    batter_id = task['batter_id']
     try:
-        source = task['source']
-        user_id = task['user_id']
-        school_id = task['school_id']
-        school_temp_folder = task['school_temp_folder']
-        school_output_folder = task['school_output_folder']
+        filters = PitchFilters.from_request(params.get('filters'))
+        prefs = chart_prefs(dict(params))
+    except ValueError as e:
+        return None, (jsonify({'error': str(e)}), 400)
 
-        rows = hitter_report.batter_rows(source, batter_id)
-        if rows.empty:
-            return {'ok': False, 'batter_id': batter_id, 'error': None}
+    target = params.get('target', 'own')
+    allowed = {
+        h['id']: h for h in game_archive.list_hitters(
+            games_dir, current_user.school.trackman_id, target,
+            start_date=start_date, end_date=end_date,
+        )
+    }
+    source = game_archive.load_range_cached(games_dir, start_date, end_date)
+    if source.empty:
+        return None, (jsonify({'error': 'No data in the selected date range.'}), 404)
 
-        custom_stats = None
-        custom_hit_type_stats = None
-        custom_pitch_type_stats = None
-        custom_chart_paths_by_theme: dict[str, list[tuple[str, str]]] = {}
-        if task['is_active'] and task['include_charts']:
-            for theme in ('light', 'dark'):
-                hitter_report.hitter_spray_chart_by_pitcher_side(
-                    source, user_id, school_temp_folder, batter_id, theme=theme)
+    return _Selection(games_dir, start_date, end_date, target, source, allowed, filters, prefs), None
 
-        # Independent of include_charts -- gated only on whether the school has a
-        # master-uploaded custom_hitter_report.py, so a lower-tier school can still
-        # have custom reports/charts (see hitter_report.custom_stats_table)
-        if task['is_active']:
-            for theme in ('light', 'dark'):
-                custom_chart_paths_by_theme[theme] = hitter_report.custom_charts(
-                    source, batter_id, school_id, user_id, school_temp_folder, theme=theme) or []
 
-            custom_stats = hitter_report.custom_stats_table(source, batter_id, school_id)
-            custom_hit_type_stats = hitter_report.custom_hit_type_stats_table(source, batter_id, school_id)
-            custom_pitch_type_stats = hitter_report.custom_pitch_type_stats_table(source, batter_id, school_id)
+def _card_payload(sel: _Selection, batter_id: str, *, charts_only: bool = False) -> dict[str, Any]:
+    """
+    One hitter's JSON card for the current filters. Built in-process; current_user is read
+    here, in the view layer, and never inside the services it calls.
 
-        summary = hitter_report.build_hitter_summary(source, batter_id)
-        discipline = hitter_report.build_hitter_discipline_table(source, batter_id)
-        batted_ball = hitter_report.build_batted_ball_table(source, batter_id)
-        hitter_name = hitter_report.batter_name(source, batter_id)
-        games = int(rows['GameDate'].nunique()) if 'GameDate' in rows.columns else 0
+    charts_only skips the stat tables -- a color-by or scatter/heatmap change redraws the
+    charts but can't change a single number.
+    """
+    payload: dict[str, Any] = {'ok': True, 'hitter_id': str(batter_id)}
+    if not charts_only:
+        data = hitter_card.build_hitter_data(
+            sel.source, batter_id, sel.filters,
+            school_id=current_user.school_id, is_active=current_user.school.is_active)
+        if data is None:
+            payload['hitter_name'] = hitter_report.batter_name(sel.source, batter_id)
+            payload['empty'] = True
+            return payload
+        payload.update(hitter_card.tables_payload(data))
 
-        def chart_path(side: str, theme: str) -> str | None:
-            path = os.path.join(
-                school_temp_folder,
-                f'{user_id}_hitter_{batter_id}_spray_{side}_{theme}.png')
-            return path if os.path.exists(path) else None
+        # Custom charts (tier 3) are Plotly figures the school's script builds; the page draws
+        # them like any other chart. The slot name is how the export matches a rendered PNG back.
+        custom = (hitter_report.custom_charts(data.source, batter_id, current_user.school_id)
+                  if current_user.school.is_active else None)
+        payload['custom_charts'] = [
+            {'title': c.title, 'slot': f'custom_{i}', 'figure': c.figure} for i, c in enumerate(custom or [])]
 
-        gen = PDF_Generator(school_id=school_id, branding=task['branding'], ink_mode=task['ink_mode'])
-        gen.generate_hitter_report(HitterReportRequest(
-            hitter_name=hitter_name,
-            hitter_id=str(batter_id),
-            date_range=task['date_range'],
-            team=task['team'],
-            games=games,
-            summary=summary,
-            discipline_table=discipline,
-            batted_ball_table=batted_ball,
-            spray_chart_left=chart_path('left', 'light'),
-            spray_chart_right=chart_path('right', 'light'),
-            custom_stats=custom_stats,
-            custom_hit_type_stats=custom_hit_type_stats,
-            custom_pitch_type_stats=custom_pitch_type_stats,
-            # A static PDF page has no theme toggle -- always the light render.
-            custom_chart_paths=custom_chart_paths_by_theme.get('light'),
-        ), os.path.abspath(os.path.join(
-            school_output_folder, f'{user_id}_hitter_{batter_id}_report.pdf')))
-
-        # Built eagerly here (like the main PDF above) rather than on download
-        # click -- the download link is shown as soon as this report card
-        # renders, so building on click meant a multi-second lag between
-        # pressing it and the file actually arriving.
-        pbp_report = hitter_report.build_pitch_by_pitch_report(source, batter_id, task['date_range'])
-        if pbp_report is not None:
-            charted_at_bats = hitter_report.build_ab_pitch_charts(
-                pbp_report.at_bats, batter_id, user_id, school_temp_folder, theme='light')
-            pbp_report = dataclasses.replace(pbp_report, at_bats=charted_at_bats)
-            gen.generate_hitter_pitch_by_pitch_report(pbp_report, os.path.abspath(os.path.join(
-                school_output_folder, f'{user_id}_hitter_{batter_id}_pitch_by_pitch.pdf')))
-
-        chart_base = f'/storage/schools/{school_id}/temp/{user_id}_hitter_{batter_id}_spray'
-        return {
-            'ok': True,
-            'hitter_id': str(batter_id),
-            'hitter_name': hitter_name,
-            'games': games,
-            'date_range': task['date_range'],
-            'summary': summary,
-            'discipline_table': discipline.to_html('pitcher-data-table'),
-            'batted_ball_table': batted_ball.to_html('pitcher-data-table'),
-            # Custom stats/charts (school's tier-3 custom_hitter_report.py, if
-            # any) -- previously only reached the PDF, never the on-page preview.
-            # Rendered as tiles on the page (see .summary-grid), matching the tile
-            # grid the PDF shows for these via generate_stats_grid -- name/value
-            # pairs, not tabular data, so a plain HTML table looked out of place.
-            'custom_stats': {row.name: row.value for row in custom_stats.rows} if custom_stats else None,
-            'custom_hit_type_stats_tables': [
-                {'title': t.title or 'Custom Hit Type Stats', 'html': t.to_html('custom-stats-table')}
-                for t in custom_hit_type_stats
-            ] if custom_hit_type_stats else None,
-            'custom_pitch_type_stats_tables': [
-                {'title': t.title or 'Custom Pitch Type Stats', 'html': t.to_html('custom-stats-table')}
-                for t in custom_pitch_type_stats
-            ] if custom_pitch_type_stats else None,
-            # Paired light/dark by title (same script call, just a different theme
-            # param -- see custom_chart_paths_by_theme above) so the page can swap
-            # them on theme toggle the same way every other chart here does.
-            'custom_chart_urls': [
-                {
-                    'title': title,
-                    'url': f'/storage/schools/{school_id}/temp/{os.path.basename(light_path)}',
-                    'dark_url': f'/storage/schools/{school_id}/temp/{os.path.basename(dark_path)}',
-                }
-                for (title, light_path), (_, dark_path) in zip(
-                    custom_chart_paths_by_theme.get('light', []),
-                    custom_chart_paths_by_theme.get('dark', []),
-                )
-            ] or None,
-            'spray_left_url': f'{chart_base}_left_light.png',
-            'spray_right_url': f'{chart_base}_right_light.png',
-            'spray_left_dark_url': f'{chart_base}_left_dark.png',
-            'spray_right_dark_url': f'{chart_base}_right_dark.png',
-            'pdf_url': task['export_url'],
-            'pitch_by_pitch_url': task['pitch_by_pitch_url'],
-        }
-    except Exception as e:
-        return {'ok': False, 'batter_id': batter_id, 'error': str(e)}
-    finally:
-        gc.collect()
+    if charts_enabled():
+        payload.update(hitter_card.charts_payload(
+            hitter_card.build_hitter_charts(sel.source, batter_id, sel.filters, sel.prefs)))
+    return payload
 
 
 @batting_bp.route('/batting')
@@ -251,177 +190,224 @@ def batting_hitters() -> ResponseReturnValue:
 @login_required
 def batting_report() -> ResponseReturnValue:
     """
-    Build reports for every selected hitter over the date range.
+    Build the preview cards for every selected hitter over the date range.
 
-    Charts are written in both themes so the page can swap them on theme toggle,
-    and each hitter's PDF is written here rather than on export -- the expensive
-    part is the chart render, which has already happened by that point.
+    Streams newline-delimited JSON: one 'meta' line (the pitch types and velocity range the
+    filter bar is built from, plus the account's chart defaults), one 'report' line per hitter
+    as their card finishes, then a 'done' summary. One hitter failing does not fail the batch:
+    log it, toast it, keep going.
 
-    Streams one NDJSON line per hitter as their report finishes -- built in
-    parallel via a process pool -- instead of waiting for the whole selection and
-    returning one JSON blob, matching the pitcher route. One hitter failing does
-    not fail the batch: log it, toast it, keep going.
+    No chart images or PDFs are produced here. Charts are Plotly figures drawn by the browser;
+    the PDF is built on demand by POST /api/batting/export, with chart images the browser
+    renders from those same figures.
     """
     params = request.get_json(silent=True) or {}
     batter_ids = params.get('batter_ids') or []
     if not batter_ids:
         return jsonify({'error': 'No hitters selected.'}), 400
+    if not isinstance(batter_ids, list):
+        return jsonify({'error': 'Invalid request.'}), 400
 
-    games_dir, start_date, end_date, error = _resolve_range(params)
+    sel, error = _selection(params)
     if error:
         return error
-    assert games_dir is not None and start_date is not None and end_date is not None
+    assert sel is not None
 
-    target = params.get('target', 'own')
-
-    # Every id must belong to this school's archive before it is used for anything
-    allowed = {
-        h['id']: h for h in game_archive.list_hitters(
-            games_dir, current_user.school.trackman_id, target,
-            start_date=start_date, end_date=end_date,
-        )
-    }
     requested = [str(b) for b in batter_ids]
-    unknown = [b for b in requested if b not in allowed]
-    if unknown:
+    if [b for b in requested if b not in sel.allowed]:
         return jsonify({'error': 'Hitter not found'}), 404
 
-    source = game_archive.load_range(games_dir, start_date, end_date)
-    if source.empty:
-        return jsonify({'error': 'No data in the selected date range.'}), 404
-
-    school_temp_folder, school_output_folder = get_school_directories()
-    branding = BrandingLoader.get_branding(current_user.school_id)
-
-    # Clear this user's previous hitter output so a stale chart or PDF from an
-    # earlier selection can never be served or swept into the merged file
-    stale = glob.glob(os.path.join(school_temp_folder, f'{current_user.id}_hitter_*_spray_*.png'))
-    stale += glob.glob(os.path.join(school_temp_folder, f'{current_user.id}_hitter_*_custom_*.png'))
-    stale += glob.glob(os.path.join(school_temp_folder, f'{current_user.id}_hitter_*_ab_chart_*.png'))
-    stale += glob.glob(os.path.join(school_output_folder, f'{current_user.id}_hitter_*.pdf'))
-    stale += glob.glob(os.path.join(school_output_folder, f'{current_user.id}_merged_hitter_*.pdf'))
-    for path in stale:
-        try:
-            os.remove(path)
-        except OSError as e:
-            print(f"Error deleting stale hitter output: {path} - {e}")
-
-    date_range = f'{_display_date(start_date)} - {_display_date(end_date)}'
-    school_id = current_user.school_id
-    user_id = current_user.id
-    is_active = current_user.school.is_active
-    include_charts = current_user.school.tier >= 2
-    ink_mode = current_user.ink_mode
-
-    tasks = [{
-        'batter_id': batter_id,
-        'source': source,
-        'user_id': user_id,
-        'school_id': school_id,
-        'school_temp_folder': school_temp_folder,
-        'school_output_folder': school_output_folder,
-        'is_active': is_active,
-        'include_charts': include_charts,
-        'branding': branding,
-        'ink_mode': ink_mode,
-        'date_range': date_range,
-        'team': allowed[batter_id].get('team', ''),
-        'export_url': (f'/api/batting/export?batter_id={batter_id}&target={target}'
-                        f'&start_date={start_date}&end_date={end_date}'),
-        'pitch_by_pitch_url': (f'/api/batting/pitch-by-pitch?batter_id={batter_id}&target={target}'
-                                f'&start_date={start_date}&end_date={end_date}'),
-    } for batter_id in requested]
+    charts_on = charts_enabled()
+    ids = pd.to_numeric(sel.source['BatterId'], errors='coerce')
+    wanted = {float(b) for b in requested if str(b).replace('.', '', 1).isdigit()}
+    selected_rows = sel.source[ids.isin(wanted)]
+    bounds = pitch_filters.velo_bounds(selected_rows)
+    pitch_type_options = pitch_filters.pitch_type_options(selected_rows)
+    total_games = int(selected_rows['GameDate'].nunique()) if 'GameDate' in selected_rows.columns else 0
 
     def stream() -> Generator[str, None, None]:
+        yield json.dumps({
+            'type': 'meta',
+            'pitch_types': pitch_type_options,
+            'velo_min': bounds[0] if bounds else None,
+            'velo_max': bounds[1] if bounds else None,
+            'defaults': {'view': sel.prefs.view, 'color_by': sel.prefs.color_by},
+            'charts_enabled': charts_on,
+        }) + '\n'
+
         reports_built = 0
         failed: list[str] = []
-        max_workers = min(len(tasks), os.cpu_count() or 2, 4)
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(_build_one_hitter_report, task) for task in tasks]
-            for future in as_completed(futures):
-                result = future.result()
-                if result['ok']:
-                    reports_built += 1
-                    yield json.dumps({'type': 'report', **result}) + '\n'
-                else:
-                    failed.append(result['batter_id'])
-                    if result['error']:
-                        print(f"Error processing hitter ID {result['batter_id']}: {result['error']}")
-                        flash_toast(f"Error processing hitter {result['batter_id']}: {result['error']}", type='error')
-                    yield json.dumps({'type': 'failed', 'batter_id': result['batter_id'], 'error': result['error']}) + '\n'
-
-        merged_url = None
-        if reports_built:
-            merged_path = os.path.join(
-                school_output_folder, f'{user_id}_merged_hitter_reports.pdf')
-            if merge_pdfs(user_id, school_output_folder, merged_path, prefix='hitter'):
-                merged_url = (f'/api/batting/export?merged=1&target={target}'
-                              f'&start_date={start_date}&end_date={end_date}')
-
-        # Distinct games across the whole selection. Ids are compared numerically --
-        # astype(str) would yield '500.0' whenever pandas reads BatterId as float.
-        total_games = 0
-        if 'GameDate' in source.columns and requested:
-            ids = pd.to_numeric(source['BatterId'], errors='coerce')
-            targets = {float(b) for b in requested if str(b).replace('.', '', 1).isdigit()}
-            total_games = int(source[ids.isin(targets)]['GameDate'].nunique())
+        for batter_id in requested:
+            try:
+                card = _card_payload(sel, batter_id)
+            except Exception as e:
+                failed.append(batter_id)
+                print(f"Error processing hitter ID {batter_id}: {e}")
+                flash_toast(f"Error processing hitter {batter_id}: {e}", type='error')
+                yield json.dumps({'type': 'failed', 'batter_id': batter_id, 'error': str(e)}) + '\n'
+                continue
+            card['pitch_by_pitch_url'] = (
+                f'/api/batting/pitch-by-pitch?batter_id={batter_id}&target={sel.target}'
+                f'&start_date={sel.start_date}&end_date={sel.end_date}')
+            reports_built += 1
+            yield json.dumps({'type': 'report', **card}) + '\n'
 
         yield json.dumps({
             'type': 'done',
             'report_count': reports_built,
             'failed': failed,
-            'merged_pdf_url': merged_url,
-            'date_range': date_range,
-            'start_date': start_date,
-            'end_date': end_date,
+            'date_range': sel.date_range,
+            'start_date': sel.start_date,
+            'end_date': sel.end_date,
             'games': total_games,
         }) + '\n'
 
     return Response(stream_with_context(stream()), mimetype='application/x-ndjson')
 
 
-@batting_bp.route('/api/batting/export')
+@batting_bp.route('/api/batting/hitter', methods=['POST'])
+@login_required
+def batting_hitter() -> ResponseReturnValue:
+    """
+    Rebuild one hitter's card for new filters or chart options, so a slider release
+    recomputes only the cards the user has open instead of the whole selection.
+
+    charts_only=true redraws just the figures (color-by / scatter-heatmap changes).
+    """
+    params = request.get_json(silent=True) or {}
+    batter_id = str(params.get('batter_id', ''))
+    if not batter_id:
+        return jsonify({'error': 'Invalid request.'}), 400
+
+    sel, error = _selection(params)
+    if error:
+        return error
+    assert sel is not None
+    if batter_id not in sel.allowed:
+        return jsonify({'error': 'Hitter not found'}), 404
+
+    try:
+        card = _card_payload(sel, batter_id, charts_only=params.get('charts_only') is True)
+    except Exception:
+        print(f"Error rebuilding hitter ID {batter_id}:")
+        traceback.print_exc()
+        return jsonify({'error': 'Could not rebuild that report.'}), 500
+    return jsonify(card)
+
+
+@batting_bp.route('/api/batting/export', methods=['POST'])
 @login_required
 def batting_export() -> ResponseReturnValue:
     """
-    Stream a PDF built by the preceding /report call.
+    Build and stream the PDF for the requested hitters under the current filters.
 
-    Streams through send_file rather than handing back a /storage URL: those
-    static routes are unauthenticated, and an export is worth keeping behind
-    the login. Pass merged=1 for the combined file.
+    The numbers and tables are recomputed here from the school's own archive; the only
+    client-supplied inputs are the filters (validated) and each hitter's chart images, which
+    the browser rendered from the same Plotly figures it is displaying (see
+    services/chart_images.py for how they are checked). One hitter streams back as their own
+    PDF, several as one merged file.
     """
-    games_dir, start_date, end_date, error = _resolve_range(request.args)
+    if (request.content_length or 0) > MAX_EXPORT_BYTES:
+        return jsonify({'error': 'Export is too large.'}), 413
+
+    params = request.get_json(silent=True) or {}
+    requested = params.get('hitters')
+    if not isinstance(requested, list) or not requested or len(requested) > MAX_EXPORT_HITTERS:
+        return jsonify({'error': 'No hitters selected.'}), 400
+    try:
+        batter_ids = [str(h['batter_id']) for h in requested]
+        images_by_hitter = {str(h['batter_id']): h.get('images') or {} for h in requested}
+        if not all(isinstance(imgs, dict) for imgs in images_by_hitter.values()):
+            raise ValueError('Invalid images.')
+    except (TypeError, ValueError, KeyError):
+        return jsonify({'error': 'Invalid request.'}), 400
+
+    sel, error = _selection(params)
     if error:
         return error
-    assert games_dir is not None
+    assert sel is not None
+    if [b for b in batter_ids if b not in sel.allowed]:
+        return jsonify({'error': 'Hitter not found'}), 404
 
-    _, school_output_folder = get_school_directories()
+    school_temp_folder, _ = get_school_directories()
+    branding = BrandingLoader.get_branding(current_user.school_id)
+    user_id = current_user.id
+    use_images = charts_enabled()
 
-    if request.args.get('merged'):
-        path = os.path.join(school_output_folder, f'{current_user.id}_merged_hitter_reports.pdf')
-        download_name = f'hitter_reports_{start_date}_to_{end_date}.pdf'
-    else:
-        batter_id = request.args.get('batter_id')
-        if not batter_id:
-            return jsonify({'error': 'No hitter selected.'}), 400
+    with export_workdir(school_temp_folder, user_id) as work_dir:
+        gen = PDF_Generator(school_id=current_user.school_id, branding=branding, ink_mode=current_user.ink_mode)
+        built: list[str] = []
+        failed = 0
+        for batter_id in batter_ids:
+            data = hitter_card.build_hitter_data(
+                sel.source, batter_id, sel.filters,
+                school_id=current_user.school_id, is_active=current_user.school.is_active)
+            if data is None:
+                continue  # nothing passes the filters for this hitter
 
-        target = request.args.get('target', 'own')
-        hitters = game_archive.list_hitters(
-            games_dir, current_user.school.trackman_id, target,
-            start_date=start_date, end_date=end_date,
-        )
-        hitter = next((h for h in hitters if h['id'] == str(batter_id)), None)
-        if hitter is None:
-            return jsonify({'error': 'Hitter not found'}), 404
+            # The school's own charts, in the order the page showed them: slot custom_0, custom_1, ...
+            custom = (hitter_report.custom_charts(data.source, batter_id, current_user.school_id)
+                      if current_user.school.is_active else None) or []
+            custom_slots = [f'custom_{i}' for i in range(len(custom))]
+            image_paths: dict[str, str | None] = {slot: None for slot in (*CHART_SLOTS, *custom_slots)}
+            if use_images:
+                for slot in image_paths:
+                    posted = images_by_hitter[batter_id].get(slot)
+                    if posted is None:
+                        continue
+                    path = os.path.join(work_dir, f'{user_id}_hitter_{batter_id}_{slot}.png')
+                    try:
+                        chart_images.save_chart_image(posted, path)
+                    except chart_images.InvalidChartImage as e:
+                        return jsonify({'error': str(e)}), 400
+                    image_paths[slot] = path
 
-        path = _hitter_pdf_path(school_output_folder, batter_id)
-        safe_name = hitter['name'].replace(', ', '_').replace(' ', '_')
-        download_name = f'{safe_name}_{start_date}_to_{end_date}.pdf'
+            try:
+                custom_chart_paths = [
+                    (chart.title, chart_path) for chart, slot in zip(custom, custom_slots)
+                    if (chart_path := image_paths[slot]) is not None] or None
+                gen.generate_hitter_report(HitterReportRequest(
+                    hitter_name=data.name,
+                    hitter_id=str(batter_id),
+                    date_range=sel.date_range,
+                    team=sel.allowed[batter_id].get('team', ''),
+                    games=data.games,
+                    summary=data.summary,
+                    discipline_table=data.discipline,
+                    batted_ball_table=data.batted_ball,
+                    spray_chart_left=image_paths['spray_left'],
+                    spray_chart_right=image_paths['spray_right'],
+                    custom_stats=data.custom_stats,
+                    custom_hit_type_stats=data.custom_hit_type_stats,
+                    custom_pitch_type_stats=data.custom_pitch_type_stats,
+                    custom_chart_paths=custom_chart_paths,
+                ), os.path.abspath(os.path.join(work_dir, f'{user_id}_hitter_{batter_id}_report.pdf')))
+            except Exception:
+                failed += 1
+                print(f"Error generating PDF for hitter ID {batter_id}:")
+                traceback.print_exc()
+                continue
+            built.append(batter_id)
 
-    if not os.path.exists(path):
-        return jsonify({'error': 'Report not found. Generate it first.'}), 404
+        if not built:
+            if failed:
+                return jsonify({'error': 'Could not build the PDF.'}), 500
+            return jsonify({'error': 'No pitches match the current filters.'}), 404
 
-    return send_file(path, mimetype='application/pdf',
+        if len(built) == 1:
+            path = os.path.join(work_dir, f'{user_id}_hitter_{built[0]}_report.pdf')
+            name = str(sel.allowed[built[0]]['name']).replace(', ', '_').replace(' ', '_')
+            download_name = f'{name}_{sel.start_date}_to_{sel.end_date}.pdf'
+        else:
+            path = os.path.join(work_dir, f'{user_id}_merged_hitter_reports.pdf')
+            if not merge_pdfs(user_id, work_dir, path, prefix='hitter'):
+                return jsonify({'error': 'Could not merge the reports.'}), 500
+            download_name = f'hitter_reports_{sel.start_date}_to_{sel.end_date}.pdf'
+
+        with open(path, 'rb') as f:
+            pdf_bytes = f.read()
+
+    return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf',
                      as_attachment=True, download_name=download_name)
 
 
@@ -429,20 +415,24 @@ def batting_export() -> ResponseReturnValue:
 @login_required
 def batting_pitch_by_pitch() -> ResponseReturnValue:
     """
-    Stream a pitch-by-pitch PDF built by the preceding /report call (see
-    _build_one_hitter_report). Mirrors batting_export's "serve what's already on
-    disk" pattern -- the download link only ever appears once /report has already
-    built this file, so there's no build-time lag between clicking it and the
-    file arriving.
+    Build and stream a hitter's pitch-by-pitch PDF for the current filters.
+
+    Built on request, not ahead of time: the at-bat panels are vector drawings now, so this is
+    fast, and a pre-built file couldn't honor filters the user changes afterwards. Filters
+    arrive as a JSON `filters` query param since this is a plain GET download.
     """
     batter_id = request.args.get('batter_id')
     if not batter_id:
         return jsonify({'error': 'No hitter selected.'}), 400
 
+    filters = filters_from_args()
+    if filters is None:
+        return jsonify({'error': 'Invalid filters.'}), 400
+
     games_dir, start_date, end_date, error = _resolve_range(request.args)
     if error:
         return error
-    assert games_dir is not None
+    assert games_dir is not None and start_date is not None and end_date is not None
 
     target = request.args.get('target', 'own')
     hitters = game_archive.list_hitters(
@@ -453,12 +443,21 @@ def batting_pitch_by_pitch() -> ResponseReturnValue:
     if hitter is None:
         return jsonify({'error': 'Hitter not found'}), 404
 
-    _, school_output_folder = get_school_directories()
-    path = os.path.abspath(os.path.join(
-        school_output_folder, f'{current_user.id}_hitter_{batter_id}_pitch_by_pitch.pdf'))
-    if not os.path.exists(path):
-        return jsonify({'error': 'Report not found. Generate it first.'}), 404
+    source = filters.apply(game_archive.load_range_cached(games_dir, start_date, end_date))
+    date_range = f'{_display_date(start_date)} - {_display_date(end_date)}'
+    pbp_report = hitter_report.build_pitch_by_pitch_report(source, batter_id, date_range)
+    if pbp_report is None:
+        return jsonify({'error': 'No pitches match the current filters.'}), 404
+
+    school_temp_folder, _ = get_school_directories()
+    branding = BrandingLoader.get_branding(current_user.school_id)
+    gen = PDF_Generator(school_id=current_user.school_id, branding=branding, ink_mode=current_user.ink_mode)
+    with export_workdir(school_temp_folder, current_user.id) as work_dir:
+        output_path = os.path.abspath(os.path.join(work_dir, f'hitter_{batter_id}_pitch_by_pitch.pdf'))
+        gen.generate_hitter_pitch_by_pitch_report(pbp_report, output_path)
+        with open(output_path, 'rb') as f:
+            pdf_bytes = f.read()
 
     safe_name = hitter['name'].replace(', ', '_').replace(' ', '_')
-    return send_file(path, mimetype='application/pdf',
-                      as_attachment=True, download_name=f'{safe_name}_pitch_by_pitch.pdf')
+    return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf',
+                     as_attachment=True, download_name=f'{safe_name}_pitch_by_pitch.pdf')

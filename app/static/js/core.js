@@ -152,6 +152,7 @@ function loadNavbar(logo = '') {
             avatarImg.src = `/static/resources/${newTheme === 'dark' ? 'statline-logo' : 'statline-logo-light'}.svg`;
         }
         _swapChartImages(newTheme);
+        if (typeof applyThemeToCharts === 'function') applyThemeToCharts(newTheme);
     });
 
     // Hamburger
@@ -218,6 +219,13 @@ function downloadPDFs() {
 
     if (!downloadUrl) {
         toast('No reports available for download.', 'info');
+        return false;
+    }
+
+    // '#client' marks a page whose PDFs are built from chart images its own browser
+    // renders (see pitching.js's downloadAllReports), so there's no URL to follow.
+    if (downloadUrl === '#client' && typeof window.downloadAllReports === 'function') {
+        window.downloadAllReports();
         return false;
     }
 
@@ -313,44 +321,6 @@ const SPINNER_SVG = `<svg viewBox="0 0 90 90" xmlns="http://www.w3.org/2000/svg"
     <animate attributeName="stroke-dashoffset" values="253.44;253.44;0" keyTimes="0;0.5;1" dur="5s" calcMode="spline" keySplines="0.5 0 0.5 1;0.5 0 0.5 1" repeatCount="indefinite"/>
   </path>
 </svg>`;
-
-// Builds one chart <img> (theme-aware via data-light-src/data-dark-src, see
-// _swapChartImages), wrapped with its title and a small spinner that covers the
-// gap between the image landing in the DOM and it actually finishing its
-// download -- these are large 300 DPI PNGs, so that gap is often still open
-// when a report card's collapsed body is first opened. errorText customizes
-// the message shown if the image 404s (charts gated behind a subscription
-// tier vs. an optional custom chart that simply doesn't exist read differently).
-function chartBlock(lightSrc, darkSrc, label, theme, alt, imgClass, errorText = 'Not available on your plan') {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'graph-block';
-
-    const title = document.createElement('p');
-    title.className = 'graph-title';
-    title.textContent = label;
-    wrapper.appendChild(title);
-
-    const spinner = document.createElement('div');
-    spinner.className = 'chart-spinner';
-    spinner.innerHTML = SPINNER_SVG;
-    wrapper.appendChild(spinner);
-
-    const img = document.createElement('img');
-    img.hidden = true;
-    img.dataset.lightSrc = lightSrc;
-    img.dataset.darkSrc = darkSrc;
-    img.src = (theme === 'dark' && darkSrc) ? darkSrc : lightSrc;
-    img.alt = alt;
-    img.className = `report-img ${imgClass}`;
-    img.onload = () => { spinner.remove(); img.hidden = false; };
-    img.onerror = function () {
-        spinner.remove();
-        this.outerHTML = `<p class="chart-unavailable">${errorText}</p>`;
-    };
-    wrapper.appendChild(img);
-
-    return wrapper;
-}
 
 // Generic custom dropdown: a trigger button + menu of option buttons, used in
 // place of a native <select> (e.g. organization picker, chart style picker).

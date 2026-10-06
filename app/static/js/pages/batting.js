@@ -121,6 +121,22 @@ function updateSelectionCount() {
     label.textContent = n ? `${n} hitter${n === 1 ? '' : 's'} selected` : 'No hitters selected';
 }
 
+// ── Report generation ────────────────────────────────────────────────────────
+
+const reports = createReportCards({
+    idField: 'hitter_id', nameField: 'hitter_name', requestIdKey: 'batter_id',
+    cardUrl: '/api/batting/hitter', exportUrl: '/api/batting/export', exportListKey: 'hitters',
+    noun: 'hitter',
+    // Spray charts are landscape; a school's own charts are wider still.
+    pngSize: slot => slot.startsWith('custom_')
+        ? { width: 560, height: 311, scale: 3 }
+        : { width: 560, height: 400, scale: 3 },
+    fill: fillHitterCard,
+});
+
+// A hitter's spray chart colors by exit velocity, and the slider filters the pitches he saw.
+const FILTER_BAR_OPTIONS = { veloLabel: 'Pitch velocity', veloColorLabel: 'Exit velocity' };
+
 async function generateBattingReports() {
     const batterIds = selectedHitterIds();
     if (batterIds.length === 0) {
@@ -137,12 +153,17 @@ async function generateBattingReports() {
 
     const reportOutput = document.querySelector('#report-output');
     const summaryArea = document.getElementById('battingSummary');
+    const filterArea = document.getElementById('chartFilters');
     const button = document.getElementById('generateBtn');
     const spinnerStart = Date.now();
 
     if (reportOutput) reportOutput.innerHTML = SPINNER_SVG;
     if (summaryArea) summaryArea.innerHTML = '';
+    if (filterArea) { filterArea.hidden = true; filterArea.replaceChildren(); }
     if (button) button.disabled = true;
+
+    reports.start(filters);   // what a single card / the export is built from: the window + side
+    updateDownloadLink(false);
 
     let reportCount = 0;
 
@@ -165,16 +186,19 @@ async function generateBattingReports() {
 
         if (reportOutput) reportOutput.innerHTML = '';
 
-        // Server streams one NDJSON line per hitter as their report finishes
-        // (built in parallel), plus a final 'done' line -- render each card as
-        // its line arrives instead of waiting for the whole selection.
+        // Server streams one NDJSON line per hitter as their card finishes, preceded by a
+        // 'meta' line (what the filter bar is built from) and followed by 'done'.
         for await (const msg of readNdjson(response)) {
-            if (msg.type === 'report') {
+            if (msg.type === 'meta') {
+                if (filterArea) {
+                    reports.setFilterBar(createChartFilterBar(filterArea, msg, reports.handleFilterChange, FILTER_BAR_OPTIONS));
+                }
+            } else if (msg.type === 'report') {
                 renderHitterCard(msg);
                 reportCount++;
             } else if (msg.type === 'done') {
                 renderRunSummary({ ...msg, count: reportCount });
-                if (msg.merged_pdf_url) updateDownloadLink(true, msg.merged_pdf_url);
+                if (reportCount) updateDownloadLink(true, '#client');
                 if (msg.failed && msg.failed.length) {
                     toast(`${msg.failed.length} hitter(s) could not be generated.`, 'error');
                 }
@@ -198,8 +222,8 @@ function renderRunSummary(result) {
     if (!area) return;
 
     const count = result.count ?? 0;
-    const mergedButton = result.merged_pdf_url
-        ? `<a href="${result.merged_pdf_url}" class="download-btn" download style="text-decoration: none;">Download All (${count})</a>`
+    const mergedButton = count
+        ? `<button type="button" class="download-btn" id="downloadAllBtn">Download All (${count})</button>`
         : '';
 
     area.innerHTML = `
@@ -210,6 +234,90 @@ function renderRunSummary(result) {
             </div>
             <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">${mergedButton}</div>
         </div>`;
+
+    document.getElementById('downloadAllBtn')?.addEventListener('click', () => reports.downloadAll());
+}
+
+// ── Cards ────────────────────────────────────────────────────────────────────
+
+// The hitter-specific part of a card: summary tiles, tables, custom section, spray charts + legend.
+// Runs for the first render and every refresh; a charts-only refresh has no tables in it.
+function fillHitterCard(card, data) {
+    const root = card.el;
+
+    if (data.discipline_table !== undefined) {
+        root.querySelector('.hitter-meta').textContent =
+            `${data.summary?.PA ?? 0} PA · ${data.games} game${data.games === 1 ? '' : 's'}`;
+        const tiles = root.querySelector('.summary-grid');
+        tiles.replaceChildren();
+        renderStatTiles(tiles, data.summary);
+        root.querySelector('.batted-ball-table').innerHTML =
+            data.batted_ball_table || '<p class="filter-note">No batted balls in this range.</p>';
+        root.querySelector('.discipline-table').innerHTML =
+            data.discipline_table || '<p class="filter-note">No pitch data in this range.</p>';
+        renderHitterCustom(card, data);
+    }
+
+    const sprayContainer = root.querySelector('.hitter-spray');
+    if (data.figures) {
+        if (!sprayContainer.childElementCount) {
+            sprayContainer.append(
+                plotBlock('vs LHP', 'spray_left', 'plotly-chart-spray'),
+                plotBlock('vs RHP', 'spray_right', 'plotly-chart-spray'));
+        }
+        const slot = root.querySelector('.spray-legend-slot');
+        slot.replaceChildren();
+        // Marker shape is the batted-ball type (keyed inside the chart); color is the pitch type
+        // unless it is showing exit velocity, which has its own key.
+        if (data.legend && data.legend.length && reports.getFilterBar()?.getChartPrefs().color_by !== 'velo') {
+            slot.appendChild(pitchTypeLegend(data.legend));
+        }
+    } else if (!sprayContainer.childElementCount) {
+        const note = document.createElement('p');
+        note.className = 'chart-unavailable';
+        note.textContent = 'Not available on your plan';
+        sprayContainer.appendChild(note);
+    }
+}
+
+// Custom stats/charts from the school's own uploaded report script, if any -- most schools
+// have none, so the section stays hidden. A custom chart is a Plotly figure like the rest: it
+// lives in card.figures under its own slot so it is drawn, themed and exported the same way.
+function renderHitterCustom(card, data) {
+    const root = card.el;
+    const charts = data.custom_charts || [];
+    const hasCustom = data.custom_stats
+        || (data.custom_hit_type_stats_tables && data.custom_hit_type_stats_tables.length)
+        || (data.custom_pitch_type_stats_tables && data.custom_pitch_type_stats_tables.length)
+        || charts.length;
+    root.querySelector('.custom-stats-section').hidden = !hasCustom;
+
+    const tiles = root.querySelector('.custom-stats');
+    tiles.replaceChildren();
+    if (data.custom_stats) renderStatTiles(tiles, data.custom_stats);
+
+    const chartsContainer = root.querySelector('.custom-charts');
+    chartsContainer.replaceChildren();
+    card.figures = card.figures || {};
+    for (const slot of Object.keys(card.figures)) {
+        if (slot.startsWith('custom_')) { delete card.figures[slot]; delete card.plotted[slot]; }
+    }
+    for (const { title, slot, figure } of charts) {
+        card.figures[slot] = figure;
+        chartsContainer.appendChild(plotBlock(title, slot, 'plotly-chart-wide'));
+    }
+
+    const renderStatSections = (container, tables) => {
+        container.replaceChildren();
+        for (const { title, html } of tables || []) {
+            const section = document.createElement('div');
+            section.style.cssText = 'max-width:1200px; margin: 8px auto;';
+            section.innerHTML = `<p class="graph-title">${title}</p><div class="table-section"><div class="table-scroll">${html}</div></div>`;
+            container.appendChild(section);
+        }
+    };
+    renderStatSections(root.querySelector('.custom-hit-type-stats'), data.custom_hit_type_stats_tables);
+    renderStatSections(root.querySelector('.custom-pitch-type-stats'), data.custom_pitch_type_stats_tables);
 }
 
 // Stamps one hitter's data into the hidden <template> and appends the clone
@@ -221,87 +329,42 @@ function renderHitterCard(data) {
     }
 
     const clone = template.content.cloneNode(true);
-
-    clone.querySelector('.user-name').textContent = data.hitter_name;
-    clone.querySelector('.hitter-meta').textContent =
-        `${data.summary?.PA ?? 0} PA · ${data.games} game${data.games === 1 ? '' : 's'}`;
+    const el = clone.querySelector('.report-card');
 
     const downloadContainer = clone.querySelector('.download-container');
-    if (downloadContainer && data.pdf_url) {
-        downloadContainer.innerHTML = `
-            <a href="${data.pdf_url}" download class="download-btn-small">
-                ${_fileIcon()} Download PDF
-            </a>`;
-        if (data.pitch_by_pitch_url) {
-            downloadContainer.innerHTML += `
-                <a href="${data.pitch_by_pitch_url}" download class="download-btn-small">
-                    ${_listIcon()} Pitch-by-Pitch
-                </a>`;
-        }
+    const pdfButton = document.createElement('button');
+    pdfButton.type = 'button';
+    pdfButton.className = 'download-btn-small';
+    pdfButton.innerHTML = `${_fileIcon()} Download PDF`;
+    pdfButton.addEventListener('click', () => reports.download([data.hitter_id], pdfButton));
+    downloadContainer.appendChild(pdfButton);
+
+    if (data.pitch_by_pitch_url) {
+        const pbp = document.createElement('a');
+        pbp.className = 'download-btn-small pbp-link';
+        pbp.href = data.pitch_by_pitch_url;
+        pbp.download = '';
+        pbp.innerHTML = `${_listIcon()} Pitch-by-Pitch`;
+        downloadContainer.appendChild(pbp);
     }
 
-    renderStatTiles(clone.querySelector('.summary-grid'), data.summary);
-
-    // data-light-src / data-dark-src let core.js _swapChartImages() react to the theme toggle
-    const currentTheme = document.documentElement.getAttribute('data-theme') ?? 'light';
-    const sprayContainer = clone.querySelector('.hitter-spray');
-    if (sprayContainer) {
-        for (const [lightSrc, darkSrc, label] of [
-            [data.spray_left_url, data.spray_left_dark_url, 'vs LHP'],
-            [data.spray_right_url, data.spray_right_dark_url, 'vs RHP'],
-        ]) {
-            sprayContainer.appendChild(chartBlock(
-                lightSrc, darkSrc, label, currentTheme,
-                `${data.hitter_name} spray chart ${label}`, 'report-img-spray'));
-        }
-    }
-
-    clone.querySelector('.batted-ball-table').innerHTML =
-        data.batted_ball_table || '<p class="filter-note">No batted balls in this range.</p>';
-    clone.querySelector('.discipline-table').innerHTML =
-        data.discipline_table || '<p class="filter-note">No pitch data in this range.</p>';
-
-    // Custom stats/charts from the school's own uploaded report script, if any --
-    // most schools have none, so the section stays hidden.
-    const hasCustom = data.custom_stats
-        || (data.custom_hit_type_stats_tables && data.custom_hit_type_stats_tables.length)
-        || (data.custom_pitch_type_stats_tables && data.custom_pitch_type_stats_tables.length)
-        || (data.custom_chart_urls && data.custom_chart_urls.length);
-    if (hasCustom) {
-        const customSection = clone.querySelector('.custom-stats-section');
-        if (customSection) customSection.hidden = false;
-        renderStatTiles(clone.querySelector('.custom-stats'), data.custom_stats);
-
-        const chartsContainer = clone.querySelector('.custom-charts');
-        if (chartsContainer && data.custom_chart_urls) {
-            for (const { title, url, dark_url } of data.custom_chart_urls) {
-                chartsContainer.appendChild(chartBlock(
-                    url, dark_url, title, currentTheme,
-                    `${data.hitter_name} ${title}`, 'report-img-custom-chart', 'Chart unavailable'));
-            }
-        }
-
-        const renderStatSections = (container, tables) => {
-            if (!container || !tables) return;
-            for (const { title, html } of tables) {
-                const section = document.createElement('div');
-                section.style.cssText = 'max-width:1200px; margin: 8px auto;';
-                section.innerHTML = `<p class="graph-title">${title}</p><div class="table-section"><div class="table-scroll">${html}</div></div>`;
-                container.appendChild(section);
-            }
-        };
-        renderStatSections(clone.querySelector('.custom-hit-type-stats'), data.custom_hit_type_stats_tables);
-        renderStatSections(clone.querySelector('.custom-pitch-type-stats'), data.custom_pitch_type_stats_tables);
-    }
-
-    const header = clone.querySelector('.report-card-header');
-    const body = clone.querySelector('.report-card-body');
-    header.addEventListener('click', (event) => {
-        // The download link lives inside the header; don't toggle when it's clicked
-        if (event.target.closest('a')) return;
-        const isOpen = body.classList.toggle('open');
-        header.classList.toggle('open', isOpen);
-    });
-
+    reports.register(el, data);
     document.querySelector('#report-output')?.appendChild(clone);
 }
+
+// The pitch-by-pitch PDF is built from a link, so it carries the filters as they are at click
+// time rather than as they were when the card was drawn.
+document.addEventListener('click', (event) => {
+    const link = event.target.closest('a.pbp-link');
+    if (!link) return;
+    const url = new URL(link.href, window.location.origin);
+    url.searchParams.delete('filters');
+    const filters = reports.getFilterBar()?.getFilters();
+    if (filters && (filters.pitch_types || filters.velo)) {
+        url.searchParams.set('filters', JSON.stringify(filters));
+    }
+    link.href = url.pathname + url.search;
+});
+
+// The navbar's download link.
+window.downloadAllReports = () => reports.downloadAll();

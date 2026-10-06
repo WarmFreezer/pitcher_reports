@@ -50,3 +50,45 @@ Spin Efficiency
 
 School -> Organization (user-facing copy done -- templates, flash messages, navbar alt text.
   DB columns/routes/URLs (school_id, /schools, /storage/schools/...) still say school, entirety deferred)
+
+------ Deferred from the Plotly chart + filters rework (pitching page, phase 1) ------
+Phases still to do, in order:
+  2. DONE -- pitch-by-pitch at-bat panels are native ReportLab vector drawings (services/ab_chart.py),
+     for both the pitcher and hitter PDFs; no matplotlib, no image files, no process pool for the bulk download
+  3. DONE -- hitter + catcher pages: same filter bar, Plotly charts, client-rendered PDF images; no
+     worker pool is left anywhere (shared card controller in static/js/report_cards.js)
+  4. DONE -- custom report contract: get_charts(source, id) returns CustomChart(title, Plotly figure) instead
+     of PNG paths; school 2's custom_hitter_report.py rewritten; matplotlib + seaborn removed from
+     requirements.txt and from report_theme.py (nothing in the app imports either any more)
+Accepted risks / known limits:
+  - PDF chart images are client-supplied. chart_images.save_chart_image validates and re-encodes them
+    (PNG only, size/dimension caps, fixed slot names), but a user can put any picture in their OWN
+    PDF's chart slots. Numbers and tables are always recomputed server-side.
+  - plotly.js loads from cdn.plot.ly with no SRI hash. If a school network blocks the CDN the
+    charts (and PDF chart images) are unavailable; tables still work. Vendor it into /static if
+    that ever shows up.
+  - game_archive.load_games_cached keeps the last 2 selections' DataFrames in memory per worker
+    (shared across requests -- callers must treat them as read-only). Gunicorn recycles workers
+    every ~20 requests, which bounds this.
+  - A pitch with no tracked velocity is dropped once a velocity range is set (can't show it
+    falls in range); it is kept, in gray, when coloring by velocity with no range set.
+  - Filters also narrow the pitch-by-pitch PDFs (at-bat sequences lose the filtered-out pitches).
+  - Heatmaps are a numpy Gaussian KDE evaluated over the plot's own limits, so they look close to
+    the old seaborn ones but not pixel-identical (contour levels differ).
+  - Every filter/chart-mode change re-runs build_table etc. for each OPEN card; closed cards refetch
+    when opened or exported. Fine at roster scale; revisit if a selection spans many games.
+  - Hitter pages: the velocity slider filters the pitch velocity the hitter saw, but the "velocity" chart
+    color on a spray chart is the batted ball's EXIT velocity (quartile scale from his unfiltered exit speeds).
+  - Catcher page: color defaults to framing value regardless of the account's pitch-type/velocity setting
+    (a framing chart is for framing); the page's color control is a dropdown since it has three choices.
+  - DEPLOY: a school's custom_hitter_report.py lives in that school's assets (the Railway volume, not this repo
+    for schools other than the ones checked in). Any copy still using the old get_charts(source, id, user_id,
+    output_dir) contract or importing matplotlib must be re-uploaded before this ships: a script that imports
+    matplotlib now fails to load, which drops that school's custom hitter section (stats and tables too), and
+    one that only has the old get_charts signature just loses its charts (logged, never an error on the page).
+    School assets are gitignored (the rewritten school 2 script exists only in app/storage/schools/2/assets/ on
+    this machine); docs/examples/custom_hitter_chart.py is the tracked worked example of the new contract.
+  - Dockerfile still apt-installs libcairo2/libpango/libgdk-pixbuf; nothing in the repo uses them. Probably
+    left over from before ReportLab and safe to drop to shrink the image -- verify on a Railway build first.
+  - A heatmap needs HEATMAP_MIN_PITCHES (8) points per group; a hitter with fewer batted balls, or a catcher
+    with few taken pitches, silently shows points in heatmap view.

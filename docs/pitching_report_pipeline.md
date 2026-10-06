@@ -23,22 +23,26 @@ owns. See the dedicated section below.
 
 ## Entry point: `app/routes/pitching.py`
 
-The export route resolves a date range and set of games into a single
-`source` DataFrame (already filtered to `current_user.school_id` per the
-school-scoping invariant in `CLAUDE.md`), then loops
-`matching['PitcherId'].unique()`. For each pitcher it:
+Three routes share one `source` DataFrame (the selected archived games, already scoped to
+`current_user.school_id`), narrowed once by `PitchFilters.apply(source)` -- the pitch type
+checkboxes and velocity range on the page -- before any stat or chart is computed:
 
-1. If `current_user.school.is_active` (the paid/tier-gated flag): renders
-   heat maps and a break map (`report.pitch_heat_map_by_batter_side()`,
-   `report.pitch_break_map()`), then collects tier-3 custom stats
-   (`report.custom_stats_table()`, `report.custom_pitch_type_stats_table()`).
-2. Unconditionally: `report.build_table()` for the per-pitch-type stats table
-   and `report.usage_table()` for the pitch-usage-by-count tables.
-3. Assembles all of the above into one `PitcherReportRequest` and calls
-   `PDF_Generator.generate_pitcher_report()`.
+- **`POST /api/pitching/report`** streams NDJSON: a `meta` line (pitch types and velocity
+  range for the filter bar, plus the account's default view/color-by), one `report` card per
+  pitcher, then `done`. Pitchers are built one after another in-process.
+- **`POST /api/pitching/pitcher`** rebuilds a single card for new filters or chart options.
+  `charts_only` skips the stat tables (a scatter/heatmap or color-by change can't alter a
+  number).
+- **`POST /api/pitching/export`** builds the PDF on demand. The browser renders each chart to
+  a PNG (`Plotly.toImage`) from the figure it is already showing and posts those with the
+  current filters; the server recomputes everything else and validates the images
+  (`chart_images.save_chart_image`). One pitcher returns their PDF, several one merged file.
 
-Each pitcher is wrapped in its own `try/except` — one pitcher failing doesn't
-stop the rest of the batch from exporting.
+For each pitcher (`pitcher_card.py`): `report.build_table()` for the per-pitch-type stats,
+`report.usage_table()` for pitch usage by count, tier-3 custom stats if the school has any,
+and -- when the school is active and tier >= 2 -- the Plotly figures from `plotly_charts.py`.
+Each pitcher is wrapped in its own `try/except` -- one pitcher failing doesn't stop the rest.
+A pitcher with no pitches passing the filters comes back as an `empty` card, not an error.
 
 ## The strike zone — `app/services/report_theme.py`
 
@@ -56,8 +60,8 @@ ZONE_TOP = 3.5
   or a scalar. **NaN locations fall out as `False` for `in_zone` and `True`
   for `out_of_zone`** — an untracked pitch is treated as not-a-strike, never
   as evidence of one.
-- `make_strike_zone()` draws the same box as a dashed `Rectangle` for
-  heatmap/break-map plots — the constants above are the single source of
+- `make_strike_zone()` draws the same box as a dashed `Rectangle` for the
+  other charts (the Plotly location chart reads the constants directly) — the constants above are the single source of
   truth, so the drawn box and the in/out-zone math can't drift apart.
 - **Shadow zone**: `baseball_width = 0.24` ft (one ball-width) padding
   outside the rulebook zone, drawn by `make_shadow_zone()` as a dotted
@@ -77,7 +81,7 @@ the bounds.
 Raw rows are expected to carry the TrackMan columns listed in
 `required_columns` (`report.py:48-76`) — notably `PitcherId`,
 `TaggedPitchType`, `PlateLocSide`/`PlateLocHeight`, `PitchCall`, `Balls`,
-`Strikes`, `RelSpeed`, and the movement/release columns. Four functions do
+`Strikes`, `RelSpeed`, and the movement/release columns. The functions below do
 the real aggregation, all pushing `sum`/`mean`/`isin` down to pandas rather
 than looping in Python:
 
@@ -87,10 +91,8 @@ than looping in Python:
   four possible TrackMan export formats). Keeps the top 6 most-thrown pitch
   types via `_top_pitches()`, then reorders them into the canonical
   `pitch_order` from `report_theme.py`. Returns a `PitcherGameReport`.
-- **`pitch_heat_map_by_batter_side(...)`** — KDE location heatmaps, one image
-  per batter side (`Left`/`Right`) and theme (`light`/`dark`), saved as PNGs.
-- **`pitch_break_map(...)`** — induced-vertical-break vs. horizontal-break
-  KDE plot; also returns the pitcher's overall arm angle.
+- **`pitch_break_map_legend(source, pitcher_id)`** -- pitch-type/color/count entries for the
+  break map's key, computed from the filtered pitches.
 - **`usage_table(source, pitcher_id)`** — pitch usage broken out by count
   situation (first pitch, hitter-favorable, pitcher-favorable, 2-strike),
   split by batter side, returned as `PitchUsageSides(left, right)`.
@@ -126,9 +128,9 @@ spec.
 `elements` list in this order:
 
 1. Header (`generate_header`) — player photo, name, school logo, game info.
-2. Heat maps, left/right side-by-side (if present).
+2. Heat maps, left/right side-by-side (if the browser sent images for them).
 3. Break map + usage tables side-by-side, or usage tables alone if there's
-   no break map.
+   no break map image.
 4. Pitch stats table (`generate_pitcher_stats_table`, from `data.pitch_stats`).
 5. **Tier-3 custom elements** — a school's own flowables, typically a page
    break + its own header (see below). This has to come *before* step 6 so
@@ -191,6 +193,17 @@ is the only one in the repo today and is a useful worked example — it
 defines an `early_execution()` helper (percentage of 0-0/0-1/1-0/1-1-count
 pitches thrown in the zone) that both `get_stats` and `get_pitch_type_stats`
 call into.
+
+## Charts
+
+Charts are Plotly figures: `plotly_charts.py` builds `{'data', 'layout'}` dicts, the page's
+`charts.js` draws them with Plotly.js (loaded from the CDN) and renders the PDF's PNGs. The
+page's view toggle (heatmap/scatter) and color-by (pitch type/velocity) start from the
+account's `chart_style` (`auto` = heatmap, `pitch_point` = scatter) and `chart_color_mode`.
+A heatmap is a per-pitch-type Gaussian KDE, falling back to points for a type with fewer than
+8 pitches; colored by velocity it shows mean velocity per cell. The velocity scale runs from
+the pitcher's own first to third quartile, taken before filtering so colors keep their meaning
+as the sliders move. The at-bat panels in the pitch-by-pitch PDFs are not Plotly: `ab_chart.py` draws each as native ReportLab vector shapes (numbered dots colored on the same cool-to-hot scale, from `velo_scale.py`), so they cost almost nothing and need no browser or image files.
 
 ## Known gaps (as of writing)
 

@@ -51,13 +51,24 @@
             <div style="display: flex; flex-direction: column;">
                 <div class="switch-row">
                     <label class="switch-field switch-field-subtle" style="margin: 0;">
-                        <span class="switch-text switch-label-fixed">Auto</span>
+                        <span class="switch-text switch-label-fixed">Heatmap</span>
                         <input type="checkbox" id="chart-style-toggle" class="switch-input" {% if current_user.chart_style == 'pitch_point' %}checked{% endif %}>
                         <span class="switch-slider switch-slider-subtle"></span>
-                        <span class="switch-text">Always Points</span>
+                        <span class="switch-text">Scatter</span>
                     </label>
                     <span class="hint-icon" tabindex="0">?
-                        <span class="hint-tooltip">Auto shows a heatmap once a pitch type has enough pitches to trust one, and individual points below that. Always Points skips the heatmap entirely.</span>
+                        <span class="hint-tooltip">The view charts start in. Heatmap shows a density once a pitch type has enough pitches to trust one, and individual points below that. Scatter shows points throughout. You can switch views on the report page at any time.</span>
+                    </span>
+                </div>
+                <div class="switch-row">
+                    <label class="switch-field switch-field-subtle" style="margin: 0;">
+                        <span class="switch-text switch-label-fixed">Pitch Type</span>
+                        <input type="checkbox" id="chart-color-toggle" class="switch-input" {% if current_user.chart_color_mode == 'velo' %}checked{% endif %}>
+                        <span class="switch-slider switch-slider-subtle"></span>
+                        <span class="switch-text">Velocity</span>
+                    </label>
+                    <span class="hint-icon" tabindex="0">?
+                        <span class="hint-tooltip">What the charts are colored by to start. Velocity uses a cool-to-hot scale between the 25th and 75th percentile (pitch velocity; exit velocity on a hitter's spray chart). The catcher page always starts on framing value. You can switch on the report page at any time.</span>
                     </span>
                 </div>
                 <div class="switch-row">

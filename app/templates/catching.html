@@ -87,6 +87,9 @@
 
         <div id="catchingSummary"></div>
 
+        <!-- Pitch type / velocity / color-by / view -- built by charts.js once a report loads -->
+        <div id="chartFilters" class="bubble chart-filters" hidden></div>
+
         <!-- Report Output Container -->
         <div id="report-output" style="margin: 0px;"></div>
     </main>
@@ -103,13 +106,17 @@
             </div>
             <div class="report-card-body collapsible collapsible-lg">
                 <div class="report-card-inner">
+                    <p class="card-empty filter-note" hidden>No pitches match the current filters.</p>
+                    <div class="card-content">
                     <div class="report-lower-row">
                         <div class="catcher-heatmap"></div>
                         <div class="catcher-pitch-location"></div>
                     </div>
+                    <div class="catcher-legend-slot"></div>
                     <div style="max-width: 1200px; margin: 8px auto;">
                         <p class="graph-title">Framing</p>
                         <div class="table-section"><div class="framing-table table-scroll"></div></div>
+                    </div>
                     </div>
                 </div>
             </div>
@@ -119,7 +126,10 @@
     <!-- Footer Placeholder -->
     <div id="footer-placeholder"></div>
 
+    <script src="https://cdn.plot.ly/plotly-cartesian-2.35.2.min.js" charset="utf-8"></script>
     <script src="{{ url_for('static', filename='js/core.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/report_cards.js') }}"></script>
     <script src="{{ url_for('static', filename='js/pages/catching.js') }}"></script>
 </body>
 </html>

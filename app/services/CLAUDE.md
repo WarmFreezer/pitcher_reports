@@ -3,10 +3,31 @@
 Report-building and business logic. Pure Python/pandas — no Flask, no `current_user`,
 no `db.session` in this folder (verified across `report.py`, `hitter_report.py`,
 `pitch_stats.py`, `hitter_stats.py`, `report_lab_generator.py`, `custom_report_loader.py`).
-Keep it that way: `app/routes/pitching.py` and `app/routes/batting.py` run per-pitcher/
-per-hitter report building in a `ProcessPoolExecutor`, so anything in here that started
-depending on Flask's app/request context would break silently in a worker process
-(no error at import time — it fails the first time the code path actually runs).
+Keep it that way: it is what lets the same functions serve the web preview, the on-demand
+PDF export and the tests, and it keeps open the option of moving report building off the request
+thread again.
+
+## Filters, Plotly figures, chart images (pitching, batting, catching)
+
+- `pitch_filters.PitchFilters` -- parsed + validated from the request, applied once to `source`
+  (`apply`) before anything else is computed. `pitch_type_options`/`velo_bounds` feed the
+  filter bar. A pitch with no tracked velocity is dropped only when a velo range is set.
+- `plotly_charts` -- builds `{'data', 'layout'}` dicts directly (no `plotly` dependency; the
+  browser's Plotly.js draws them). Everything goes through `_floats` so NaN becomes null --
+  a bare `NaN` isn't valid JSON. Figures are light-themed; the page recolors them for dark
+  mode using each shape's `name` ('ink'/'muted'). The heatmap is a numpy Gaussian KDE (Scott's
+  rule x bw_adjust, like seaborn did), with a per-type fallback to points under
+  `HEATMAP_MIN_PITCHES`. The velocity scale is pinned to the pitcher's own *unfiltered*
+  Q1-Q3 (`velo_limits`) so colors don't shift as the sliders move.
+- `pitcher_card` / `hitter_card` / `catcher_card` -- one person's tables/charts for given filters,
+  shared by the web card and the PDF export so both are built from the same pitches. `chart_prefs`
+  holds the validated view/color options. Charts are built by `plotly_charts` around one
+  `_cloud_traces` core: a `ValueScale` says which column the color means (pitch velocity, exit
+  velocity, framing value), and the figure functions (`location_figure`, `break_figure`,
+  `spray_figure`, `catcher_figure`) only choose axes, field drawing and scale.
+- `ab_chart` -- the per-at-bat panel in the pitch-by-pitch PDFs, drawn as ReportLab vector shapes (`Drawing`), built by `report_lab_generator` at render time from `ab.pitches`; nothing is stored on the at-bat dataclasses. `velo_scale` holds the cool-to-hot palette and the Q1-Q3 scale rule shared with `plotly_charts`.
+- `chart_images` -- the only client-supplied input to a PDF is the chart PNGs; this validates
+  and re-encodes them. Don't accept images any other way.
 
 ## StatTable pattern
 
@@ -31,7 +52,11 @@ handled as `None`, not an error:
 - `get_elements(gen, data) -> list` (raw ReportLab flowables, for `PDF_Generator`'s
   `generate_pitcher_report`/`generate_hitter_report` custom-report section)
 
-Hitter side additionally supports `get_hit_type_stats` and `get_charts`. Every call site
+Hitter side additionally supports `get_hit_type_stats` and `get_charts(source, id) ->
+list[CustomChart]` -- a `CustomChart(title, figure)` whose figure is a Plotly
+`{'data', 'layout'}` (build it with `plotly_charts.base_layout`/`floats`); the browser draws it
+and renders the PDF's PNG, so a script never writes an image. `hitter_report.custom_charts`
+validates what comes back and skips anything invalid. Every call site
 wraps the module call in try/except and logs+returns `None` on failure — a broken
 custom script degrades that one section, never the rest of the report. See the root
 CLAUDE.md's TODO-adjacent note: this exec is unsandboxed by design (master-only,

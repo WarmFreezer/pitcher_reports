@@ -71,6 +71,7 @@ def update_information() -> ResponseReturnValue:
 # ── Report display preferences ──────────────────────────────────────────────
 
 CHART_STYLES = {'auto', 'pitch_point'}
+CHART_COLOR_MODES = {'pitch_type', 'velo'}
 INK_MODES = {'full_color', 'light_ink'}
 
 
@@ -85,6 +86,11 @@ def update_preferences() -> ResponseReturnValue:
         if data['chart_style'] not in CHART_STYLES:
             return jsonify({'error': 'Invalid chart style.'}), 400
         current_user.chart_style = data['chart_style']
+
+    if 'chart_color_mode' in data:
+        if data['chart_color_mode'] not in CHART_COLOR_MODES:
+            return jsonify({'error': 'Invalid chart color mode.'}), 400
+        current_user.chart_color_mode = data['chart_color_mode']
 
     if 'ink_mode' in data:
         if data['ink_mode'] not in INK_MODES:

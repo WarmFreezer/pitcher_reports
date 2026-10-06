@@ -210,11 +210,6 @@
     width: 100%;
 }
 
-.report-img-spray {
-    width: 100%;
-    max-width: 420px;
-}
-
 .custom-charts {
     display: flex;
     justify-content: center;
@@ -223,17 +218,204 @@
     width: 100%;
 }
 
-/* Custom (tier-3) charts render wider (landscape) than the other report charts,
-   so they get a larger cap rather than reusing report-img-spray's -- still
-   capped, just not squeezed to the same width as a portrait-ish chart. */
-.report-img-custom-chart {
+/* A school's own (tier-3) charts are landscape and wider than the other report charts. */
+.plotly-chart.plotly-chart-wide {
+    max-width: 560px;
+    aspect-ratio: 9 / 5;
+}
+
+.custom-charts .graph-block {
     width: 100%;
     max-width: 560px;
 }
 
-@media (max-width: 900px) {
-    .report-img-spray,
-    .report-img-custom-chart {
-        max-width: 100%;
-    }
+/* ------------------------------------------------------------ chart filters */
+
+.chart-filters {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px 32px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+
+.chart-filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.chart-filter-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-width: 520px;
+}
+
+.chip-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.type-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--bg-card);
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    cursor: pointer;
+    user-select: none;
+}
+
+/* forms.css sizes bare inputs to the full row; checkboxes here are inline */
+.type-chip input {
+    width: auto;
+    margin: 0;
+}
+
+.type-chip-swatch {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+}
+
+.type-chip:has(input:not(:checked)) {
+    opacity: 0.45;
+}
+
+.chart-filter-group .switch-field {
+    margin: 0;
+}
+
+.chart-select {
+    width: auto;
+    min-width: 150px;
+    max-width: none;
+    padding: 5px 8px;
+    font-size: 0.9rem;
+}
+
+/* Two overlapping range inputs form one two-handle slider: the inputs ignore the
+   pointer except on their thumbs, so each handle can be grabbed independently. */
+.dual-range {
+    position: relative;
+    width: 220px;
+    height: 22px;
+    --lo: 0%;
+    --hi: 100%;
+}
+
+.dual-range-track {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 9px;
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(to right,
+        var(--bg-card) var(--lo), var(--secondary) var(--lo),
+        var(--secondary) var(--hi), var(--bg-card) var(--hi));
+}
+
+.dual-range input[type="range"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    max-width: none;
+    border: none;          /* forms.css underlines every bare input */
+    background: none;
+    pointer-events: none;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.dual-range input[type="range"]:focus { border: none; }
+
+.dual-range input[type="range"]::-webkit-slider-runnable-track { background: none; }
+.dual-range input[type="range"]::-moz-range-track { background: none; }
+
+.dual-range input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    pointer-events: auto;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid var(--bg-page);
+    background: var(--secondary);
+    cursor: pointer;
+}
+
+.dual-range input[type="range"]::-moz-range-thumb {
+    pointer-events: auto;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid var(--bg-page);
+    background: var(--secondary);
+    cursor: pointer;
+}
+
+.velo-readout {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* --------------------------------------------------------------- plotly charts */
+
+.plotly-chart {
+    width: 100%;
+    max-width: 440px;
+    aspect-ratio: 19 / 18;
+}
+
+/* Spray charts are landscape (the field is wider than it is deep) */
+.plotly-chart.plotly-chart-spray {
+    max-width: 560px;
+    aspect-ratio: 7 / 5;
+}
+
+.hitter-spray .graph-block {
+    width: 100%;
+    max-width: 560px;
+}
+
+.catcher-heatmap .graph-block,
+.catcher-pitch-location .graph-block {
+    width: 100%;
+}
+
+.spray-legend-slot,
+.catcher-legend-slot {
+    display: flex;
+    justify-content: center;
+}
+
+/* The break map's column centers its content, which would shrink a block with no
+   intrinsic width (a chart) to nothing -- make it fill the column instead. */
+.pitcher-breakmap .graph-block {
+    width: 100%;
+}
+
+.report-card.is-refreshing .report-card-inner {
+    opacity: 0.55;
+    transition: opacity 0.15s;
+}
+
+.card-empty {
+    margin: 24px;
+    text-align: center;
 }

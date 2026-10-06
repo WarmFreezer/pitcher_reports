@@ -87,6 +87,9 @@
 
         <div id="battingSummary"></div>
 
+        <!-- Pitch type / velocity / color-by / view -- built by charts.js once a report loads -->
+        <div id="chartFilters" class="bubble chart-filters" hidden></div>
+
         <!-- Report Output Container -->
         <div id="report-output" style="margin: 0px;"></div>
     </main>
@@ -104,10 +107,13 @@
             </div>
             <div class="report-card-body collapsible collapsible-lg">
                 <div class="report-card-inner">
+                    <p class="card-empty filter-note" hidden>No pitches match the current filters.</p>
+                    <div class="card-content">
                     <div class="summary-grid"></div>
                     <div class="report-lower-row">
                         <div class="hitter-spray"></div>
                     </div>
+                    <div class="spray-legend-slot"></div>
                     <!-- Titles sit outside .table-section: it carries border-radius +
                          overflow:hidden, so anything inside it steals the rounded corners
                          from the table. Same structure as the usage tables on /pitching. -->
@@ -126,6 +132,7 @@
                         <div class="custom-hit-type-stats"></div>
                         <div class="custom-pitch-type-stats"></div>
                     </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -134,7 +141,10 @@
     <!-- Footer Placeholder -->
     <div id="footer-placeholder"></div>
 
+    <script src="https://cdn.plot.ly/plotly-cartesian-2.35.2.min.js" charset="utf-8"></script>
     <script src="{{ url_for('static', filename='js/core.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/report_cards.js') }}"></script>
     <script src="{{ url_for('static', filename='js/pages/batting.js') }}"></script>
 </body>
 </html>

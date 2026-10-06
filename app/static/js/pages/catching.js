@@ -123,6 +123,18 @@ function updateSelectionCount() {
     label.textContent = n ? `${n} catcher${n === 1 ? '' : 's'} selected` : 'No catchers selected';
 }
 
+// ── Report generation ────────────────────────────────────────────────────────
+
+const reports = createReportCards({
+    idField: 'catcher_id', nameField: 'catcher_name', requestIdKey: 'catcher_id',
+    cardUrl: '/api/catching/catcher', exportUrl: '/api/catching/export', exportListKey: 'catchers',
+    noun: 'catcher',
+    fill: fillCatcherCard,
+});
+
+// The velocity slider filters the pitches he received; the color switch also offers framing value.
+const FILTER_BAR_OPTIONS = { veloLabel: 'Pitch velocity', veloColorLabel: 'Pitch velocity' };
+
 async function generateCatchingReports() {
     const catcherIds = selectedCatcherIds();
     if (catcherIds.length === 0) {
@@ -139,12 +151,17 @@ async function generateCatchingReports() {
 
     const reportOutput = document.querySelector('#report-output');
     const summaryArea = document.getElementById('catchingSummary');
+    const filterArea = document.getElementById('chartFilters');
     const button = document.getElementById('generateBtn');
     const spinnerStart = Date.now();
 
     if (reportOutput) reportOutput.innerHTML = SPINNER_SVG;
     if (summaryArea) summaryArea.innerHTML = '';
+    if (filterArea) { filterArea.hidden = true; filterArea.replaceChildren(); }
     if (button) button.disabled = true;
+
+    reports.start(filters);   // what a single card / the export is built from: the window + side
+    updateDownloadLink(false);
 
     let reportCount = 0;
 
@@ -167,16 +184,19 @@ async function generateCatchingReports() {
 
         if (reportOutput) reportOutput.innerHTML = '';
 
-        // Server streams one NDJSON line per catcher as their report finishes
-        // (built in parallel), plus a final 'done' line -- render each card as
-        // its line arrives instead of waiting for the whole selection.
+        // Server streams one NDJSON line per catcher as their card finishes, preceded by a
+        // 'meta' line (what the filter bar is built from) and followed by 'done'.
         for await (const msg of readNdjson(response)) {
-            if (msg.type === 'report') {
+            if (msg.type === 'meta') {
+                if (filterArea) {
+                    reports.setFilterBar(createChartFilterBar(filterArea, msg, reports.handleFilterChange, FILTER_BAR_OPTIONS));
+                }
+            } else if (msg.type === 'report') {
                 renderCatcherCard(msg);
                 reportCount++;
             } else if (msg.type === 'done') {
                 renderRunSummary({ ...msg, count: reportCount });
-                if (msg.merged_pdf_url) updateDownloadLink(true, msg.merged_pdf_url);
+                if (reportCount) updateDownloadLink(true, '#client');
                 if (msg.failed && msg.failed.length) {
                     toast(`${msg.failed.length} catcher(s) could not be generated.`, 'error');
                 }
@@ -200,8 +220,8 @@ function renderRunSummary(result) {
     if (!area) return;
 
     const count = result.count ?? 0;
-    const mergedButton = result.merged_pdf_url
-        ? `<a href="${result.merged_pdf_url}" class="download-btn" download style="text-decoration: none;">Download All (${count})</a>`
+    const mergedButton = count
+        ? `<button type="button" class="download-btn" id="downloadAllBtn">Download All (${count})</button>`
         : '';
 
     area.innerHTML = `
@@ -212,8 +232,43 @@ function renderRunSummary(result) {
             </div>
             <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">${mergedButton}</div>
         </div>`;
+
+    document.getElementById('downloadAllBtn')?.addEventListener('click', () => reports.downloadAll());
 }
 
+// ── Cards ────────────────────────────────────────────────────────────────────
+
+// The catcher-specific part of a card: the framing table and the two charts + pitch-type key.
+// Runs for the first render and every refresh; a charts-only refresh has no table in it.
+function fillCatcherCard(card, data) {
+    const root = card.el;
+
+    if (data.framing_table !== undefined) {
+        root.querySelector('.framing-table').innerHTML =
+            data.framing_table || '<p class="filter-note">No taken-pitch data in this range.</p>';
+    }
+
+    const heatMapContainer = root.querySelector('.catcher-heatmap');
+    const locationContainer = root.querySelector('.catcher-pitch-location');
+    if (data.figures) {
+        if (!heatMapContainer.childElementCount) {
+            heatMapContainer.appendChild(plotBlock('Notable', 'heat_map'));
+            locationContainer.appendChild(plotBlock('Pitch Location', 'pitch_location'));
+        }
+        const slot = root.querySelector('.catcher-legend-slot');
+        slot.replaceChildren();
+        if (data.legend && data.legend.length && reports.getFilterBar()?.getChartPrefs().color_by === 'pitch_type') {
+            slot.appendChild(pitchTypeLegend(data.legend));
+        }
+    } else if (!heatMapContainer.childElementCount) {
+        for (const container of [heatMapContainer, locationContainer]) {
+            const note = document.createElement('p');
+            note.className = 'chart-unavailable';
+            note.textContent = 'Not available on your plan';
+            container.appendChild(note);
+        }
+    }
+}
 
 // Stamps one catcher's data into the hidden <template> and appends the clone
 function renderCatcherCard(data) {
@@ -224,44 +279,19 @@ function renderCatcherCard(data) {
     }
 
     const clone = template.content.cloneNode(true);
-
-    clone.querySelector('.user-name').textContent = data.catcher_name;
+    const el = clone.querySelector('.report-card');
 
     const downloadContainer = clone.querySelector('.download-container');
-    if (downloadContainer && data.pdf_url) {
-        downloadContainer.innerHTML = `
-            <a href="${data.pdf_url}" download class="download-btn-small">
-                ${_fileIcon()} Download PDF
-            </a>`;
-    }
+    const pdfButton = document.createElement('button');
+    pdfButton.type = 'button';
+    pdfButton.className = 'download-btn-small';
+    pdfButton.innerHTML = `${_fileIcon()} Download PDF`;
+    pdfButton.addEventListener('click', () => reports.download([data.catcher_id], pdfButton));
+    downloadContainer.appendChild(pdfButton);
 
-    const currentTheme = document.documentElement.getAttribute('data-theme') ?? 'light';
-
-    const heatMapContainer = clone.querySelector('.catcher-heatmap');
-    if (heatMapContainer) {
-        heatMapContainer.appendChild(chartBlock(
-            data.heat_map_url, data.heat_map_dark_url, 'Notable', currentTheme,
-            `${data.catcher_name} notable`, 'report-img-catcher'));
-    }
-
-    const pitchLocationContainer = clone.querySelector('.catcher-pitch-location');
-    if (pitchLocationContainer) {
-        pitchLocationContainer.appendChild(chartBlock(
-            data.pitch_location_url, data.pitch_location_dark_url, 'Pitch Location', currentTheme,
-            `${data.catcher_name} pitch location`, 'report-img-catcher'));
-    }
-
-    clone.querySelector('.framing-table').innerHTML =
-        data.framing_table || '<p class="filter-note">No taken-pitch data in this range.</p>';
-
-    const header = clone.querySelector('.report-card-header');
-    const body = clone.querySelector('.report-card-body');
-    header.addEventListener('click', (event) => {
-        // The download link lives inside the header; don't toggle when it's clicked
-        if (event.target.closest('a')) return;
-        const isOpen = body.classList.toggle('open');
-        header.classList.toggle('open', isOpen);
-    });
-
+    reports.register(el, data);
     document.querySelector('#report-output')?.appendChild(clone);
 }
+
+// The navbar's download link.
+window.downloadAllReports = () => reports.downloadAll();

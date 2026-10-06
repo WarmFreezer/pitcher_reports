@@ -28,23 +28,23 @@ See the dedicated section below.
 
 ## Entry point: `app/routes/batting.py`
 
-`batting_report()` resolves a date range, loads every archived game inside
-it into a single `source` DataFrame (school-scoped per the invariant in
-`CLAUDE.md`), then loops the requested `batter_ids`. For each hitter it:
+Three routes share one `source` DataFrame (the archived games inside the date range, already
+scoped to `current_user.school_id`), narrowed once by `PitchFilters.apply(source)` -- the pitch
+type checkboxes and pitch-velocity range on the page -- before any stat or chart is computed:
 
-1. If `current_user.school.is_active` (the paid/tier-gated flag): renders
-   spray charts (`hitter_report.hitter_spray_chart_by_pitcher_side()`), then
-   collects tier-3 custom stats/hit-type stats/pitch-type stats/charts
-   (`hitter_report.custom_stats_table()`,
-   `custom_hit_type_stats_table()`, `custom_pitch_type_stats_table()`,
-   `custom_charts()`).
-2. Unconditionally: `hitter_report.build_hitter_summary()`,
-   `build_hitter_discipline_table()`, `build_batted_ball_table()`.
-3. Assembles all of the above into one `HitterReportRequest` and calls
-   `PDF_Generator.generate_hitter_report()`.
+- **`POST /api/batting/report`** streams NDJSON: a `meta` line (pitch types and velocity range for
+  the filter bar, plus the account's chart defaults), one `report` card per hitter, then `done`.
+- **`POST /api/batting/hitter`** rebuilds one card for new filters or chart options
+  (`charts_only` skips the tables).
+- **`POST /api/batting/export`** builds the PDF on demand from the browser-rendered spray-chart
+  PNGs plus the current filters; the server recomputes every number itself.
 
-Each hitter is wrapped in its own `try/except` -- one hitter failing doesn't
-stop the rest of the batch, matching `pitching.py`'s loop.
+For each hitter (`hitter_card.py`): `build_hitter_summary()`, `build_hitter_discipline_table()`,
+`build_batted_ball_table()`, tier-3 custom stats if the school has any, and -- when the school is
+active and tier >= 2 -- the two spray figures from `plotly_charts.spray_figure()`. A hitter with
+no pitches passing the filters comes back as an `empty` card, not an error. Each hitter is wrapped
+in its own `try/except` -- one failing doesn't stop the rest. The pitch-by-pitch PDF is a GET link
+built on request (`/api/batting/pitch-by-pitch`), carrying the filters.
 
 ## Aggregation -- `app/services/hitter_report.py`
 
@@ -66,10 +66,12 @@ functions:
 - **`build_batted_ball_table(source, batter_id)`** -- batted-ball mix by
   launch-angle bucket (`classify_hit_type`: Ground/Line/Fly/Pop), with exit
   velocity and distance per bucket.
-- **`hitter_spray_chart_by_pitcher_side(...)`** -- landing-spot scatter
-  colored by exit velocity, one image per pitcher side (`Left`/`Right`) and
-  theme, built from `Bearing`/`Distance` (TrackMan leaves
-  `PitchLastMeasuredX/Z` empty, so those aren't usable here).
+- **Spray charts** (`plotly_charts.spray_figure`) -- landing spots from
+  `Bearing`/`Distance` (TrackMan leaves `PitchLastMeasuredX/Z` empty, so those aren't usable
+  here), one chart per pitcher side (`Left`/`Right`). Marker shape is the batted-ball type; color
+  is the pitch type or, in velocity mode, *exit* velocity on a scale pinned to the hitter's own
+  unfiltered first-to-third quartile. Drawn by the browser (Plotly.js); the PDF uses PNGs the
+  browser renders from the same figures.
 
 ## Typed value objects -- `hitter_stats.py`
 
@@ -115,7 +117,9 @@ identical to a pitcher's).
    `generate_stats_grid`).
 7. Tier-3 **custom charts** (`data.custom_chart_paths`, via
    `add_image_section`) -- stacked full-width, since a school may return any
-   number of them, unlike the fixed left/right spray-chart pair.
+   number of them, unlike the fixed left/right spray-chart pair. Each is a
+   Plotly figure the school's script returned; the browser renders it to a PNG
+   for the export (slots `custom_0`, `custom_1`, ... in the order the page showed them).
 8. Tier-3 **custom hit-type tables** (`data.custom_hit_type_stats`, via
    `generate_data_table`).
 9. Tier-3 **custom pitch-type tables** (`data.custom_pitch_type_stats`, via
@@ -141,7 +145,7 @@ the pitcher path) and may define up to five functions:
 | `get_stats` | `(source: pd.DataFrame, batter_id) -> list[CustomStat]` | `hitter_report.custom_stats_table` | Overall (not broken out by anything) per-hitter stat rows. Wrapped into a `CustomStatsTable`, rendered as a "Custom Stats" tile grid. |
 | `get_hit_type_stats` | `(source: pd.DataFrame, batter_id) -> list[CustomHitTypeStatsTable]` | `hitter_report.custom_hit_type_stats_table` | Per-hit-type rows (Ground/Line/Fly/Pop), each carrying a `stats: dict[str, str]`. |
 | `get_pitch_type_stats` | `(source: pd.DataFrame, batter_id) -> list[CustomPitchTypeStatsTable]` | `hitter_report.custom_pitch_type_stats_table` | Per-pitch-type rows -- same `CustomPitchTypeStat`/`CustomPitchTypeStatsTable` types the pitcher tier uses. |
-| `get_charts` | `(source: pd.DataFrame, batter_id, user_id: int, output_dir: str) -> list[tuple[str, str]]` | `hitter_report.custom_charts` | The one capability the pitcher tier doesn't have. The school's script does its own matplotlib rendering from the raw rows and saves PNG(s) into `output_dir`, returning `(title, path)` pairs. `user_id` is passed through (not just `batter_id`) so the script can namespace filenames the way every built-in temp file in this app already does -- prefixed by the requesting user's id, so two coaches at the same school generating reports for the same batter concurrently can't clobber each other's output. |
+| `get_charts` | `(source: pd.DataFrame, batter_id) -> list[CustomChart]` | `hitter_report.custom_charts` | The one capability the pitcher tier doesn't have. Returns `CustomChart(title, figure)` where `figure` is a Plotly `{'data': [...], 'layout': {...}}` -- the page draws it (and re-colors it for dark mode) and the browser renders the PNG the PDF uses, so a script never writes an image file. Build the layout with `plotly_charts.base_layout(...)` and use `plotly_charts.floats(...)` for any numbers (NaN becomes null; a bare NaN isn't valid JSON). Shapes named `'ink'`/`'muted'` follow the theme; any other shape keeps its own color. See `docs/examples/custom_hitter_chart.py` for a worked example. `hitter_report.custom_charts` skips anything that isn't a valid, strict-JSON, reasonably small figure (at most 6 charts), logging why -- including a script still returning the old `(title, path)` tuples. |
 
 All five receive the **same raw TrackMan DataFrame** described under
 Aggregation above -- same column names, not a renamed/lowercased schema.
@@ -161,11 +165,7 @@ shaded.
 
 ## Multi-user filename isolation
 
-Every temp file this pipeline writes -- built-in spray charts and tier-3
-custom charts alike -- is prefixed by the *requesting user's* id, not just
-the batter's: `{user_id}_hitter_{batter_id}_...`. Two coaches at the same
-school can generate reports for the same batter at the same time without
-overwriting each other's PNGs, and `batting_report()`'s stale-file cleanup
-glob (`{current_user.id}_hitter_*_spray_*.png` /
-`{current_user.id}_hitter_*_custom_*.png`) only ever clears the requesting
-user's own prior output.
+This pipeline writes no image or PDF files ahead of time any more. A PDF export works in a private
+per-request directory (`export_workdir`, prefixed with the requesting user's id) that is removed when the
+response is built, so two coaches at the same school exporting the same hitter at the same time can't
+collide.

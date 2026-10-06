@@ -20,7 +20,9 @@ from reportlab.platypus import (
     NextPageTemplate, KeepTogether,
 )
 
+from app.services import ab_chart
 from app.services.custom_report_loader import load_custom_module
+from app.services.velo_scale import velo_scale
 from app.services.pitch_stats import (
     PitcherReportRequest,
     PitcherStatsTable,
@@ -998,6 +1000,8 @@ class PDF_Generator:
         fixed_widths = [0.3 * inch, 0.9 * inch, 0.55 * inch, 0.55 * inch]
         inner_col_widths = fixed_widths + [half_width - sum(fixed_widths)]
         chart_w = min(half_width, 2.6 * inch)
+        # One color scale across the whole report, so a pitch is the same color on every panel.
+        velo_lim = velo_scale([p.velo for ab in data.at_bats for p in ab.pitches if p.velo is not None])
 
         def truncate_to_width(text: str, font_name: str, font_size: float, max_width: float) -> str:
             """Hard-cap a string to one line at max_width, since a wrapped second
@@ -1037,10 +1041,9 @@ class PDF_Generator:
             ]))
 
             cell: list[Any] = [Paragraph(heading, ab_heading_style)]
-            if ab.chart_path and os.path.exists(ab.chart_path):
-                chart_img = PILImage.open(ab.chart_path)
-                chart_h = chart_w * chart_img.height / chart_img.width
-                chart_holder = Table([[Image(ab.chart_path, width=chart_w, height=chart_h)]], colWidths=[half_width])
+            chart = ab_chart.ab_chart_drawing(ab.pitches, chart_w, velo_lim)
+            if chart is not None:
+                chart_holder = Table([[chart]], colWidths=[half_width])
                 chart_holder.setStyle(TableStyle([
                     ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                     ('LEFTPADDING', (0, 0), (-1, -1), 0),
@@ -1123,6 +1126,8 @@ class PDF_Generator:
         fixed_widths = [0.3 * inch, 0.9 * inch, 0.55 * inch, 0.55 * inch]
         inner_col_widths = fixed_widths + [half_width - sum(fixed_widths)]
         chart_w = min(half_width, 2.6 * inch)
+        # One color scale across the whole report, so a pitch is the same color on every panel.
+        velo_lim = velo_scale([p.velo for ab in data.at_bats for p in ab.pitches if p.velo is not None])
 
         def truncate_to_width(text: str, font_name: str, font_size: float, max_width: float) -> str:
             """Hard-cap a string to one line at max_width, since a wrapped second
@@ -1162,10 +1167,9 @@ class PDF_Generator:
             ]))
 
             cell: list[Any] = [Paragraph(heading, ab_heading_style)]
-            if ab.chart_path and os.path.exists(ab.chart_path):
-                chart_img = PILImage.open(ab.chart_path)
-                chart_h = chart_w * chart_img.height / chart_img.width
-                chart_holder = Table([[Image(ab.chart_path, width=chart_w, height=chart_h)]], colWidths=[half_width])
+            chart = ab_chart.ab_chart_drawing(ab.pitches, chart_w, velo_lim)
+            if chart is not None:
+                chart_holder = Table([[chart]], colWidths=[half_width])
                 chart_holder.setStyle(TableStyle([
                     ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                     ('LEFTPADDING', (0, 0), (-1, -1), 0),

@@ -1,9 +1,9 @@
+import io
 import os
 import gc
 import glob
 import json
-import dataclasses
-from concurrent.futures import ProcessPoolExecutor, as_completed
+import traceback
 from datetime import date, datetime
 from typing import Any, Generator
 from urllib.parse import quote
@@ -15,11 +15,16 @@ from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 
 from app.db import models
-from app.services import game_archive, report
+from app.services import chart_images, game_archive, pitch_filters, pitcher_card, report
 from app.services.branding_loader import BrandingLoader
+from app.services.pitch_filters import PitchFilters
 from app.services.pitch_stats import PitcherReportRequest
+from app.services.chart_prefs import ChartPrefs
 from app.services.report_lab_generator import PDF_Generator, merge_pdfs
-from app.routes.utils import get_school_directories, get_school_games_directory, flash_toast
+from app.routes.utils import (
+    chart_prefs, charts_enabled, export_workdir, filters_from_args, flash_toast,
+    get_school_directories, get_school_games_directory,
+)
 
 pitching_bp = Blueprint('pitching', __name__)
 
@@ -87,132 +92,13 @@ def _pitcher_meta(pitcher_id: int) -> tuple[str, str, int | None]:
     )
 
 
-def _build_one_pitcher_report(task: dict[str, Any]) -> dict[str, Any]:
-    """
-    Build one pitcher's charts + PDF and return the JSON-ready card data.
-
-    Runs inside a worker process (see pitching_report's ProcessPoolExecutor), so
-    it must not touch current_user, db.session, or anything else that depends on
-    Flask's app/request context -- every input it needs is already resolved into
-    plain data on `task` by the caller. `source` (the full multi-pitcher/both-teams
-    DataFrame) is passed to every task rather than pre-filtered to this pitcher's
-    own rows, matching exactly what the old sequential loop passed to these same
-    report functions -- filtering it down would shrink the per-task pickle cost,
-    but risks changing behavior in a function that hasn't been audited for
-    whether it relies on rows outside its own pitcher_id (e.g. build_table reads
-    source['BatterTeam'].iloc[0] rather than a pitcher-scoped value).
-    """
-    pitcher_id = task['pitcher_id']
-    try:
-        source = task['source']
-        user_id = task['user_id']
-        school_id = task['school_id']
-        school_temp_folder = task['school_temp_folder']
-        school_output_folder = task['school_output_folder']
-
-        arm_angle = None
-        custom_stats = None
-        custom_pitch_type_stats = None
-        breakmap_legend: list = []
-        if task['is_active'] and task['include_charts']:
-            for theme in ('light', 'dark'):
-                report.pitch_heat_map_by_batter_side(
-                    source, user_id, school_temp_folder, pitcher_id, 0.75, theme=theme,
-                    chart_style=task['chart_style'])
-                result = report.pitch_break_map(
-                    source, user_id, school_temp_folder, pitcher_id, 0.75, theme=theme,
-                    chart_style=task['chart_style'], show_arrows=task['show_break_arrows'])
-                if arm_angle is None and result is not None:
-                    arm_angle = result
-            # Theme-independent -- computed once rather than once per theme.
-            breakmap_legend = report.pitch_break_map_legend(source, pitcher_id)
-
-        # Independent of include_charts -- gated only on whether the school has a
-        # master-uploaded custom_pitcher_report.py, so a lower-tier school can still
-        # have custom reports (see report.custom_stats_table)
-        if task['is_active']:
-            custom_stats = report.custom_stats_table(source, pitcher_id, school_id)
-            custom_pitch_type_stats = report.custom_pitch_type_stats_table(source, pitcher_id, school_id)
-
-        game_report = report.build_table(source, pitcher_id)
-        if game_report is None:
-            raise ValueError(f'Failed to build table data for pitcher ID {pitcher_id}')
-
-        usage_sides = report.usage_table(source, pitcher_id)
-        if usage_sides is None:
-            raise ValueError(f'Failed to build pitch usage table for pitcher ID {pitcher_id}')
-
-        height, weight, age = task['pitcher_meta']
-
-        gen = PDF_Generator(school_id=school_id, branding=task['branding'], ink_mode=task['ink_mode'])
-        gen.generate_pitcher_report(PitcherReportRequest(
-            pitcher_name=game_report.header.pitcher_name,
-            pitcher_id=str(pitcher_id),
-            date=task['date_range'],
-            home_team=task['home_team'],
-            away_team=task['opponent_label'],
-            matchup_separator=task['matchup_separator'],
-            pitcher_height=height,
-            pitcher_weight=weight,
-            pitcher_age=age,
-            pitch_stats=game_report.stats,
-            pitch_usage_left=usage_sides.left,
-            pitch_usage_right=usage_sides.right,
-            pitch_heat_map_left=os.path.join(school_temp_folder, f'{user_id}_pitcher_{pitcher_id}_heat_map_left_light.png'),
-            pitch_heat_map_right=os.path.join(school_temp_folder, f'{user_id}_pitcher_{pitcher_id}_heat_map_right_light.png'),
-            pitch_break_map=os.path.join(school_temp_folder, f'{user_id}_pitcher_{pitcher_id}_break_map_light.png'),
-            pitch_break_map_legend=breakmap_legend,
-            custom_stats=custom_stats,
-            custom_pitch_type_stats=custom_pitch_type_stats,
-        ), os.path.abspath(os.path.join(
-            school_output_folder, f'{user_id}_pitcher_{pitcher_id}_report.pdf')))
-
-        chart_base = f'/storage/schools/{school_id}/temp/{user_id}_pitcher_{pitcher_id}'
-        return {
-            'ok': True,
-            'pitcher_id': str(pitcher_id),
-            'pitcher_name': game_report.header.pitcher_name,
-            'pitcher_table': game_report.stats.to_html('pitcher-data-table'),
-            'left_usage_table': usage_sides.left.to_html('pitch-usage-table'),
-            'right_usage_table': usage_sides.right.to_html('pitch-usage-table'),
-            # Custom stats (school's tier-3 custom_pitcher_report.py, if any) --
-            # previously only reached the PDF, never the on-page preview.
-            # Rendered as tiles on the page (see .summary-grid), matching the tile
-            # grid the PDF shows for these via generate_stats_grid -- name/value
-            # pairs, not tabular data, so a plain HTML table looked out of place.
-            'custom_stats': {row.name: row.value for row in custom_stats.rows} if custom_stats else None,
-            'custom_pitch_type_stats_tables': [
-                {'title': t.title or 'Custom Pitch Type Stats', 'html': t.to_html('custom-stats-table')}
-                for t in custom_pitch_type_stats
-            ] if custom_pitch_type_stats else None,
-            'heatmap_left_url': f'{chart_base}_heat_map_left_light.png',
-            'heatmap_right_url': f'{chart_base}_heat_map_right_light.png',
-            'heatmap_left_dark_url': f'{chart_base}_heat_map_left_dark.png',
-            'heatmap_right_dark_url': f'{chart_base}_heat_map_right_dark.png',
-            'breakmap_url': f'{chart_base}_break_map_light.png',
-            'breakmap_dark_url': f'{chart_base}_break_map_dark.png',
-            'breakmap_legend': [
-                {'abbreviation': e.abbreviation, 'color': e.color, 'count': e.count}
-                for e in breakmap_legend
-            ],
-            'arm_angle': f'{arm_angle:.1f}°' if arm_angle is not None else '',
-            'pdf_url': f'/api/pitching/export?pitcher_id={pitcher_id}',
-            'pitch_by_pitch_url': f'/api/pitching/pitch-by-pitch?pitcher_id={pitcher_id}&target={task["target"]}&{task["hash_qs"]}',
-        }
-    except Exception as e:
-        return {'ok': False, 'pitcher_id': str(pitcher_id), 'error': str(e)}
-    finally:
-        gc.collect()
-
-
 def _build_one_pitcher_pbp(task: dict[str, Any]) -> dict[str, Any]:
     """
     Build one pitcher's pitch-by-pitch PDF for the "download all pitch-by-pitch"
-    bulk merge. Runs in a worker process alongside its siblings (see
-    pitching_pitch_by_pitch_all's ProcessPoolExecutor) -- same no-Flask-context
-    constraint as _build_one_pitcher_report. Writes to the same path the
-    single-pitcher pitch-by-pitch route uses, so a coach who already downloaded
-    one pitcher individually just gets that file regenerated, not duplicated.
+    bulk merge. Takes everything it needs on `task` as plain data (no current_user).
+    Writes to the same path the single-pitcher pitch-by-pitch route uses, so a coach
+    who already downloaded one pitcher individually just gets that file regenerated,
+    not duplicated.
     """
     pitcher_id = task['pitcher_id']
     try:
@@ -224,10 +110,6 @@ def _build_one_pitcher_pbp(task: dict[str, Any]) -> dict[str, Any]:
         pbp_report = report.build_pitch_by_pitch_report(source, pitcher_id)
         if pbp_report is None:
             raise ValueError(f'Failed to build pitch-by-pitch data for pitcher ID {pitcher_id}')
-
-        charted_at_bats = report.build_ab_pitch_charts(
-            pbp_report.at_bats, pitcher_id, user_id, school_temp_folder, theme='light')
-        pbp_report = dataclasses.replace(pbp_report, at_bats=charted_at_bats)
 
         gen = PDF_Generator(school_id=task['school_id'], branding=task['branding'], ink_mode=task['ink_mode'])
         output_path = os.path.abspath(os.path.join(
@@ -280,22 +162,78 @@ def pitching_games() -> ResponseReturnValue:
     })
 
 
+def _team_pitchers(source: pd.DataFrame, target: str) -> pd.DataFrame:
+    """The Own/Opponent switch filters which arms get reports, not which games were
+    selected -- both teams pitched in every game on the list."""
+    trackman_id = current_user.school.trackman_id
+    if target == 'opponent':
+        return source[source['PitcherTeam'] != trackman_id]
+    return source[source['PitcherTeam'] == trackman_id]
+
+
+def _card_payload(
+    source: pd.DataFrame, pitcher_id: int, filters: PitchFilters, prefs: ChartPrefs,
+    *, charts_only: bool = False,
+) -> dict[str, Any]:
+    """
+    One pitcher's JSON card for the current filters. Built in-process; current_user is
+    read here, in the view layer, and never inside the services it calls.
+
+    charts_only skips the stat tables -- a color-by or scatter/heatmap change redraws the
+    charts but can't change a single number.
+    """
+    payload: dict[str, Any] = {'ok': True, 'pitcher_id': str(pitcher_id)}
+
+    if not charts_only:
+        data = pitcher_card.build_pitcher_data(
+            source, pitcher_id, filters,
+            school_id=current_user.school_id, is_active=current_user.school.is_active)
+        if data is None:
+            payload['pitcher_name'] = pitcher_card.pitcher_name_in(source, pitcher_id) or str(pitcher_id)
+            payload['empty'] = True
+            return payload
+        payload['pitcher_name'] = data.pitcher_name
+        payload.update(pitcher_card.tables_payload(data))
+
+    if charts_enabled():
+        payload.update(pitcher_card.charts_payload(
+            pitcher_card.build_pitcher_charts(source, pitcher_id, filters, prefs)))
+    return payload
+
+
+def _report_context(selected: list[dict[str, Any]]) -> dict[str, str]:
+    dates = sorted(g['date'] for g in selected)
+    date_range = (_display_date(dates[0]) if dates[0] == dates[-1]
+                  else f'{_display_date(dates[0])} - {_display_date(dates[-1])}')
+    opponents = sorted({g['opponent'] for g in selected})
+    return {
+        'date_range': date_range,
+        'opponent_label': opponents[0] if len(opponents) == 1 else f'{len(opponents)} opponents',
+        # A true single selected game reads correctly as "us @ opponent"; anything
+        # aggregated across games isn't a real single-game home/away pair.
+        'matchup_separator': '@' if len(selected) == 1 else 'vs',
+    }
+
+
 @pitching_bp.route('/api/pitching/report', methods=['POST'])
 @login_required
 def pitching_report() -> ResponseReturnValue:
     """
-    Build reports for every pitcher in the selected games.
+    Build the preview cards for every pitcher in the selected games.
 
     A selection may span several outings -- a weekend series against one opponent
     is the motivating case -- so each pitcher gets one report aggregating their
     work across everything selected, and the header carries the date range rather
     than a single game date.
 
-    Streams one NDJSON line per pitcher as their report finishes -- built in
-    parallel via a process pool -- instead of waiting for the whole staff and
-    returning one JSON blob, so the page can show results as they arrive. One
-    pitcher failing does not fail the batch, matching the loop this replaced in
-    upload.py: log it, toast it, keep going.
+    Streams newline-delimited JSON: one 'meta' line (the pitch types and velocity range
+    the filter bar is built from, plus the account's chart defaults), one 'report' line
+    per pitcher as their card finishes, then a 'done' summary. One pitcher failing does
+    not fail the batch: log it, toast it, keep going.
+
+    No chart images or PDFs are produced here. Charts are Plotly figures drawn by the
+    browser; the PDF is built on demand by POST /api/pitching/export, with chart images
+    the browser renders from those same figures.
     """
     params = request.get_json(silent=True) or {}
     games_dir, selected, error = _selected_games(params)
@@ -304,106 +242,52 @@ def pitching_report() -> ResponseReturnValue:
     assert games_dir is not None and selected is not None
 
     target = params.get('target', 'own')
-    trackman_id = current_user.school.trackman_id
+    try:
+        filters = PitchFilters.from_request(params.get('filters'))
+        prefs = chart_prefs(params)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
 
-    source = game_archive.load_games(games_dir, [g['content_hash'] for g in selected])
+    source = game_archive.load_games_cached(games_dir, [g['content_hash'] for g in selected])
     if source.empty:
         return jsonify({'error': 'No data in the selected games.'}), 404
 
-    # The Own/Opponent switch filters which arms get reports, not which games
-    # were selected -- both teams pitched in every game on the list.
-    if target == 'opponent':
-        matching = source[source['PitcherTeam'] != trackman_id]
-    else:
-        matching = source[source['PitcherTeam'] == trackman_id]
-
+    matching = _team_pitchers(source, target)
     if matching.empty:
         side = 'opponent' if target == 'opponent' else 'your team'
         return jsonify({'error': f'No pitching data found for {side} in the selected games.'}), 404
 
-    school_temp_folder, school_output_folder = get_school_directories()
-    branding = BrandingLoader.get_branding(current_user.school_id)
-
-    # Clear this user's previous pitcher output so a stale chart or PDF from an
-    # earlier selection cannot be served or swept into the merged file
-    stale = glob.glob(os.path.join(school_temp_folder, f'{current_user.id}_pitcher_*.png'))
-    stale += glob.glob(os.path.join(school_output_folder, f'{current_user.id}_pitcher_*.pdf'))
-    stale += glob.glob(os.path.join(school_output_folder, f'{current_user.id}_merged_pitcher_*.pdf'))
-    for path in stale:
-        try:
-            os.remove(path)
-        except OSError as e:
-            print(f"Error deleting stale pitcher output: {path} - {e}")
-
-    dates = sorted(g['date'] for g in selected)
-    date_range = (_display_date(dates[0]) if dates[0] == dates[-1]
-                  else f'{_display_date(dates[0])} - {_display_date(dates[-1])}')
-    opponents = sorted({g['opponent'] for g in selected})
-    opponent_label = opponents[0] if len(opponents) == 1 else f'{len(opponents)} opponents'
-    # A true single selected game reads correctly as "us @ opponent"; anything
-    # aggregated across games isn't a real single-game home/away pair.
-    matchup_separator = '@' if len(selected) == 1 else 'vs'
-
-    school_id = current_user.school_id
-    user_id = current_user.id
-    # Resolved here, in the request/app-context-bound view function, and handed
-    # to each worker as plain data -- _build_one_pitcher_report runs in a separate
-    # process with no Flask app context, so it can't touch current_user itself.
-    is_active = current_user.school.is_active
-    include_charts = current_user.school.tier >= 2
-    chart_style = current_user.chart_style
-    ink_mode = current_user.ink_mode
-    show_break_arrows = current_user.show_break_arrows
+    context = _report_context(selected)
     hash_qs = '&'.join(f'content_hash={quote(g["content_hash"])}' for g in selected)
-
     pitcher_ids = list(matching['PitcherId'].unique())
-    pitcher_meta_by_id = {pid: _pitcher_meta(pid) for pid in pitcher_ids}
-
-    tasks = [{
-        'pitcher_id': pid,
-        'source': source,
-        'user_id': user_id,
-        'school_id': school_id,
-        'school_temp_folder': school_temp_folder,
-        'school_output_folder': school_output_folder,
-        'is_active': is_active,
-        'include_charts': include_charts,
-        'chart_style': chart_style,
-        'ink_mode': ink_mode,
-        'show_break_arrows': show_break_arrows,
-        'branding': branding,
-        'date_range': date_range,
-        'home_team': trackman_id,
-        'opponent_label': opponent_label,
-        'matchup_separator': matchup_separator,
-        'target': target,
-        'hash_qs': hash_qs,
-        'pitcher_meta': pitcher_meta_by_id[pid],
-    } for pid in pitcher_ids]
+    charts_on = charts_enabled()
+    bounds = pitch_filters.velo_bounds(matching)
+    pitch_type_options = pitch_filters.pitch_type_options(matching)
 
     def stream() -> Generator[str, None, None]:
+        yield json.dumps({
+            'type': 'meta',
+            'pitch_types': pitch_type_options,
+            'velo_min': bounds[0] if bounds else None,
+            'velo_max': bounds[1] if bounds else None,
+            'defaults': {'view': prefs.view, 'color_by': prefs.color_by},
+            'charts_enabled': charts_on,
+        }) + '\n'
+
         reports_built = 0
         failed: list[str] = []
-        max_workers = min(len(tasks), os.cpu_count() or 2, 4)
-        with ProcessPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(_build_one_pitcher_report, task) for task in tasks]
-            for future in as_completed(futures):
-                result = future.result()
-                if result['ok']:
-                    reports_built += 1
-                    yield json.dumps({'type': 'report', **result}) + '\n'
-                else:
-                    failed.append(result['pitcher_id'])
-                    print(f"Error processing pitcher ID {result['pitcher_id']}: {result['error']}")
-                    flash_toast(f"Error processing pitcher {result['pitcher_id']}: {result['error']}", type='error')
-                    yield json.dumps({'type': 'failed', 'pitcher_id': result['pitcher_id'], 'error': result['error']}) + '\n'
-
-        merged_url = None
-        if reports_built:
-            merged_path = os.path.join(
-                school_output_folder, f'{user_id}_merged_pitcher_reports.pdf')
-            if merge_pdfs(user_id, school_output_folder, merged_path, prefix='pitcher'):
-                merged_url = '/api/pitching/export?merged=1'
+        for pid in pitcher_ids:
+            try:
+                card = _card_payload(source, pid, filters, prefs)
+            except Exception as e:
+                failed.append(str(pid))
+                print(f"Error processing pitcher ID {pid}: {e}")
+                flash_toast(f"Error processing pitcher {pid}: {e}", type='error')
+                yield json.dumps({'type': 'failed', 'pitcher_id': str(pid), 'error': str(e)}) + '\n'
+                continue
+            card['pitch_by_pitch_url'] = f'/api/pitching/pitch-by-pitch?pitcher_id={pid}&target={target}&{hash_qs}'
+            reports_built += 1
+            yield json.dumps({'type': 'report', **card}) + '\n'
 
         # Pitch-by-pitch PDFs aren't built here (they're lazy, per-pitcher, on
         # their own route) -- this just hands the bulk route the same game
@@ -415,43 +299,179 @@ def pitching_report() -> ResponseReturnValue:
             'type': 'done',
             'report_count': reports_built,
             'failed': failed,
-            'merged_pdf_url': merged_url,
             'pitch_by_pitch_all_url': pitch_by_pitch_all_url,
-            'date_range': date_range,
-            'opponent': opponent_label,
+            'date_range': context['date_range'],
+            'opponent': context['opponent_label'],
             'games': len(selected),
         }) + '\n'
 
     return Response(stream_with_context(stream()), mimetype='application/x-ndjson')
 
 
-@pitching_bp.route('/api/pitching/export')
+@pitching_bp.route('/api/pitching/pitcher', methods=['POST'])
+@login_required
+def pitching_pitcher() -> ResponseReturnValue:
+    """
+    Rebuild one pitcher's card for new filters or chart options, so a slider release
+    recomputes only the cards the user has open instead of the whole staff.
+
+    charts_only=true redraws just the figures (color-by / scatter-heatmap changes).
+    """
+    params = request.get_json(silent=True) or {}
+    games_dir, selected, error = _selected_games(params)
+    if error:
+        return error
+    assert games_dir is not None and selected is not None
+
+    try:
+        pitcher_id = int(params['pitcher_id'])
+        filters = PitchFilters.from_request(params.get('filters'))
+        prefs = chart_prefs(params)
+    except (KeyError, TypeError, ValueError):
+        return jsonify({'error': 'Invalid request.'}), 400
+
+    source = game_archive.load_games_cached(games_dir, [g['content_hash'] for g in selected])
+    if source.empty:
+        return jsonify({'error': 'No data in the selected games.'}), 404
+
+    matching = _team_pitchers(source, params.get('target', 'own'))
+    if pitcher_id not in set(matching['PitcherId'].unique()):
+        return jsonify({'error': 'Pitcher not found'}), 404
+
+    try:
+        card = _card_payload(source, pitcher_id, filters, prefs,
+                             charts_only=params.get('charts_only') is True)
+    except Exception as e:
+        print(f"Error rebuilding pitcher ID {pitcher_id}: {e}")
+        return jsonify({'error': 'Could not rebuild that report.'}), 500
+    return jsonify(card)
+
+
+MAX_EXPORT_BYTES = 40 * 1024 * 1024
+MAX_EXPORT_PITCHERS = 100
+CHART_SLOTS = ('heat_left', 'heat_right', 'break')
+
+
+@pitching_bp.route('/api/pitching/export', methods=['POST'])
 @login_required
 def pitching_export() -> ResponseReturnValue:
     """
-    Stream a PDF built by the preceding /report call.
+    Build and stream the PDF for the requested pitchers under the current filters.
 
-    send_file rather than a /storage URL: the export is worth keeping behind the
-    login even though the /storage routes now check school ownership too. Pass
-    merged=1 for the combined file, pitcher_id for one arm.
+    The numbers and tables are recomputed here from the school's own archive; the only
+    client-supplied inputs are the filters (validated) and each pitcher's chart images,
+    which the browser rendered from the same Plotly figures it is displaying
+    (see services/chart_images.py for how they are checked). One pitcher streams back
+    as their own PDF, several as one merged file.
     """
-    _, school_output_folder = get_school_directories()
+    if (request.content_length or 0) > MAX_EXPORT_BYTES:
+        return jsonify({'error': 'Export is too large.'}), 413
 
-    if request.args.get('merged'):
-        path = os.path.join(school_output_folder, f'{current_user.id}_merged_pitcher_reports.pdf')
-        download_name = 'pitcher_reports.pdf'
-    else:
-        pitcher_id = request.args.get('pitcher_id')
-        if not pitcher_id:
-            return jsonify({'error': 'No pitcher selected.'}), 400
-        path = os.path.join(
-            school_output_folder, f'{current_user.id}_pitcher_{pitcher_id}_report.pdf')
-        download_name = f'pitcher_{pitcher_id}_report.pdf'
+    params = request.get_json(silent=True) or {}
+    games_dir, selected, error = _selected_games(params)
+    if error:
+        return error
+    assert games_dir is not None and selected is not None
 
-    if not os.path.exists(path):
-        return jsonify({'error': 'Report not found. Generate it first.'}), 404
+    requested = params.get('pitchers')
+    if not isinstance(requested, list) or not requested or len(requested) > MAX_EXPORT_PITCHERS:
+        return jsonify({'error': 'No pitchers selected.'}), 400
 
-    return send_file(path, mimetype='application/pdf',
+    try:
+        filters = PitchFilters.from_request(params.get('filters'))
+        pitcher_ids = [int(p['pitcher_id']) for p in requested]
+        images_by_pitcher = {int(p['pitcher_id']): p.get('images') or {} for p in requested}
+        if not all(isinstance(imgs, dict) for imgs in images_by_pitcher.values()):
+            raise ValueError('Invalid images.')
+    except (TypeError, ValueError, KeyError):
+        return jsonify({'error': 'Invalid request.'}), 400
+
+    source = game_archive.load_games_cached(games_dir, [g['content_hash'] for g in selected])
+    if source.empty:
+        return jsonify({'error': 'No data in the selected games.'}), 404
+
+    matching = _team_pitchers(source, params.get('target', 'own'))
+    if not set(pitcher_ids) <= set(matching['PitcherId'].unique()):
+        return jsonify({'error': 'Pitcher not found'}), 404
+
+    school_temp_folder, _ = get_school_directories()
+    branding = BrandingLoader.get_branding(current_user.school_id)
+    context = _report_context(selected)
+    user_id = current_user.id
+    use_images = charts_enabled()
+
+    # The finished PDF is read into memory and the working directory removed (see export_workdir).
+    with export_workdir(school_temp_folder, user_id) as work_dir:
+        gen = PDF_Generator(school_id=current_user.school_id, branding=branding, ink_mode=current_user.ink_mode)
+        built: list[int] = []
+        failed = 0
+        for pid in pitcher_ids:
+            data = pitcher_card.build_pitcher_data(
+                source, pid, filters,
+                school_id=current_user.school_id, is_active=current_user.school.is_active)
+            if data is None:
+                continue  # nothing passes the filters for this arm
+
+            image_paths: dict[str, str | None] = {slot: None for slot in CHART_SLOTS}
+            if use_images:
+                for slot in CHART_SLOTS:
+                    posted = images_by_pitcher[pid].get(slot)
+                    if posted is None:
+                        continue
+                    path = os.path.join(work_dir, f'{user_id}_pitcher_{pid}_{slot}.png')
+                    try:
+                        chart_images.save_chart_image(posted, path)
+                    except chart_images.InvalidChartImage as e:
+                        return jsonify({'error': str(e)}), 400
+                    image_paths[slot] = path
+
+            height, weight, age = _pitcher_meta(pid)
+            try:
+                gen.generate_pitcher_report(PitcherReportRequest(
+                    pitcher_name=data.pitcher_name,
+                    pitcher_id=str(pid),
+                    date=context['date_range'],
+                    home_team=current_user.school.trackman_id,
+                    away_team=context['opponent_label'],
+                    matchup_separator=context['matchup_separator'],
+                    pitcher_height=height,
+                    pitcher_weight=weight,
+                    pitcher_age=age,
+                    pitch_stats=data.game_report.stats,
+                    pitch_usage_left=data.usage_sides.left,
+                    pitch_usage_right=data.usage_sides.right,
+                    pitch_heat_map_left=image_paths['heat_left'],
+                    pitch_heat_map_right=image_paths['heat_right'],
+                    pitch_break_map=image_paths['break'],
+                    pitch_break_map_legend=data.legend,
+                    custom_stats=data.custom_stats,
+                    custom_pitch_type_stats=data.custom_pitch_type_stats,
+                ), os.path.abspath(os.path.join(work_dir, f'{user_id}_pitcher_{pid}_report.pdf')))
+            except Exception:
+                failed += 1
+                print(f"Error generating PDF for pitcher ID {pid}:")
+                traceback.print_exc()
+                continue
+            built.append(pid)
+
+        if not built:
+            if failed:
+                return jsonify({'error': 'Could not build the PDF.'}), 500
+            return jsonify({'error': 'No pitches match the current filters.'}), 404
+
+        if len(built) == 1:
+            path = os.path.join(work_dir, f'{user_id}_pitcher_{built[0]}_report.pdf')
+            download_name = f'pitcher_{built[0]}_report.pdf'
+        else:
+            path = os.path.join(work_dir, f'{user_id}_merged_pitcher_reports.pdf')
+            if not merge_pdfs(user_id, work_dir, path, prefix='pitcher'):
+                return jsonify({'error': 'Could not merge the reports.'}), 500
+            download_name = 'pitcher_reports.pdf'
+
+        with open(path, 'rb') as f:
+            pdf_bytes = f.read()
+
+    return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf',
                      as_attachment=True, download_name=download_name)
 
 
@@ -482,9 +502,14 @@ def pitching_pitch_by_pitch() -> ResponseReturnValue:
         return error
     assert games_dir is not None and selected is not None
 
-    source = game_archive.load_games(games_dir, [g['content_hash'] for g in selected])
+    filters = filters_from_args()
+    if filters is None:
+        return jsonify({'error': 'Invalid filters.'}), 400
+
+    source = game_archive.load_games_cached(games_dir, [g['content_hash'] for g in selected])
     if source.empty:
         return jsonify({'error': 'No data in the selected games.'}), 404
+    source = filters.apply(source)
 
     pitcher_rows = source[source['PitcherId'] == pitcher_id]
     if pitcher_rows.empty:
@@ -498,10 +523,7 @@ def pitching_pitch_by_pitch() -> ResponseReturnValue:
     branding = BrandingLoader.get_branding(current_user.school_id)
     gen = PDF_Generator(school_id=current_user.school_id, branding=branding, ink_mode=current_user.ink_mode)
 
-    school_temp_folder, school_output_folder = get_school_directories()
-    charted_at_bats = report.build_ab_pitch_charts(
-        pbp_report.at_bats, pitcher_id, current_user.id, school_temp_folder, theme='light')
-    pbp_report = dataclasses.replace(pbp_report, at_bats=charted_at_bats)
+    _, school_output_folder = get_school_directories()
 
     output_path = os.path.abspath(os.path.join(
         school_output_folder, f'{current_user.id}_pitcher_{pitcher_id}_pitch_by_pitch.pdf'))
@@ -535,9 +557,14 @@ def pitching_pitch_by_pitch_all() -> ResponseReturnValue:
     target = params['target']
     trackman_id = current_user.school.trackman_id
 
-    source = game_archive.load_games(games_dir, [g['content_hash'] for g in selected])
+    filters = filters_from_args()
+    if filters is None:
+        return jsonify({'error': 'Invalid filters.'}), 400
+
+    source = game_archive.load_games_cached(games_dir, [g['content_hash'] for g in selected])
     if source.empty:
         return jsonify({'error': 'No data in the selected games.'}), 404
+    source = filters.apply(source)
 
     if target == 'opponent':
         matching = source[source['PitcherTeam'] != trackman_id]
@@ -577,16 +604,15 @@ def pitching_pitch_by_pitch_all() -> ResponseReturnValue:
         'ink_mode': ink_mode,
     } for pid in pitcher_ids]
 
+    # In-process: the at-bat panels are vector drawings now, so there is no chart rendering
+    # worth fanning out to worker processes.
     built = 0
-    max_workers = min(len(tasks), os.cpu_count() or 2, 4)
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(_build_one_pitcher_pbp, task) for task in tasks]
-        for future in as_completed(futures):
-            result = future.result()
-            if result['ok']:
-                built += 1
-            else:
-                print(f"Error building pitch-by-pitch for pitcher ID {result['pitcher_id']}: {result['error']}")
+    for task in tasks:
+        result = _build_one_pitcher_pbp(task)
+        if result['ok']:
+            built += 1
+        else:
+            print(f"Error building pitch-by-pitch for pitcher ID {result['pitcher_id']}: {result['error']}")
 
     if built == 0:
         return jsonify({'error': 'Could not build any pitch-by-pitch reports.'}), 500

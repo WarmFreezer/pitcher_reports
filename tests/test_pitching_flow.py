@@ -54,24 +54,25 @@ def _hashes(client, **params):
     return [g['content_hash'] for g in client.get(f'/api/pitching/games{query}').get_json()['games']]
 
 
-def _report(client, hashes=None, target='own'):
+def _report(client, hashes=None, target='own', **extra):
     if hashes is None:
         hashes = _hashes(client)
     return client.post('/api/pitching/report',
-                       json={'content_hashes': hashes, 'target': target})
+                       json={'content_hashes': hashes, 'target': target, **extra})
 
 
-def _report_data(client, hashes=None, target='own'):
+def _report_data(client, hashes=None, target='own', **extra):
     """
     /api/pitching/report streams one NDJSON line per pitcher (built in parallel)
     plus a final 'done' summary line, instead of one JSON blob -- reconstruct the
     old single-dict shape so the assertions below don't need to know that.
     """
-    resp = _report(client, hashes=hashes, target=target)
+    resp = _report(client, hashes=hashes, target=target, **extra)
     assert resp.status_code == 200, resp.get_data(as_text=True)
 
     reports = []
     done = {}
+    meta = {}
     for line in resp.get_data(as_text=True).splitlines():
         if not line.strip():
             continue
@@ -80,11 +81,13 @@ def _report_data(client, hashes=None, target='own'):
             reports.append(msg)
         elif msg['type'] == 'done':
             done = msg
+        elif msg['type'] == 'meta':
+            meta = msg
 
     return {
         'reports': reports,
+        'meta': meta,
         'failed': done.get('failed', []),
-        'merged_pdf_url': done.get('merged_pdf_url'),
         'date_range': done.get('date_range'),
         'opponent': done.get('opponent'),
         'games': done.get('games'),
@@ -161,29 +164,116 @@ def test_multi_game_selection_spans_the_dates(archived_games, client):
     assert data['date_range'] == '03/01/2026 - 03/08/2026'
 
 
-def test_report_generates_charts_in_both_themes(archived_games, client, app, home_school, home_user):
-    # _report_data forces the streamed response to be fully read -- a bare
-    # _report(client) only guarantees the generator advanced far enough to
-    # yield its first 'report' line, not that it ran to the trailing 'done'
-    # line (and whatever happens after the per-pitcher loop, like the merge).
+def test_report_cards_carry_plotly_figures_not_image_urls(archived_games, client):
+    card = _report_data(client)['reports'][0]
+
+    assert set(card['figures']) == {'heat_left', 'heat_right', 'break'}
+    for figure in card['figures'].values():
+        assert set(figure) == {'data', 'layout'}
+    assert not any(key.endswith('_url') and 'map' in key for key in card)
+
+
+def test_report_writes_no_chart_images_or_pdfs(archived_games, client, app, home_school):
     _report_data(client)
 
-    temp_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'temp')
-    for name in (
-        f'{home_user.id}_pitcher_1001_heat_map_left_light.png',
-        f'{home_user.id}_pitcher_1001_heat_map_left_dark.png',
-        f'{home_user.id}_pitcher_1001_break_map_light.png',
-        f'{home_user.id}_pitcher_1001_break_map_dark.png',
-    ):
-        assert os.path.exists(os.path.join(temp_dir, name)), f'missing {name}'
+    school_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id))
+    for sub in ('temp', 'reports'):
+        folder = os.path.join(school_dir, sub)
+        generated = [f for f in os.listdir(folder) if f.endswith(('.png', '.pdf'))] if os.path.isdir(folder) else []
+        assert generated == []
 
 
-def test_report_produces_a_merged_pdf(archived_games, client, app, home_school, home_user):
-    data = _report_data(client)
+def test_report_meta_describes_the_filter_bar(archived_games, client):
+    meta = _report_data(client, target='opponent')['meta']
 
-    assert data['merged_pdf_url']
-    reports_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'reports')
-    assert os.path.exists(os.path.join(reports_dir, f'{home_user.id}_merged_pitcher_reports.pdf'))
+    assert [t['name'] for t in meta['pitch_types']] == ['Fastball', 'Slider', 'ChangeUp']
+    assert meta['velo_min'] == 89 and meta['velo_max'] == 89
+    assert meta['defaults'] == {'view': 'heatmap', 'color_by': 'pitch_type'}
+
+
+def test_report_meta_defaults_follow_the_account_settings(archived_games, client, home_user):
+    from app.db.models import db
+    home_user.chart_style = 'pitch_point'
+    home_user.chart_color_mode = 'velo'
+    db.session.commit()
+
+    meta = _report_data(client)['meta']
+
+    assert meta['defaults'] == {'view': 'scatter', 'color_by': 'velo'}
+
+
+def test_report_filters_change_the_stat_tables(archived_games, client):
+    everything = _report_data(client, target='opponent')['reports'][0]
+    sliders = _report_data(
+        client, target='opponent', filters={'pitch_types': ['Slider']})['reports'][0]
+
+    assert 'Fastball' not in sliders['pitcher_table']
+    assert sliders['pitcher_table'] != everything['pitcher_table']
+    assert sliders['pitch_count'] == 4   # the four sliders Smith threw in game 1
+    assert everything['pitch_count'] == 13
+
+
+def test_report_with_a_velo_range_nobody_threw_is_an_empty_card(archived_games, client):
+    data = _report_data(client, target='opponent', filters={'velo': [95, 99]})
+
+    assert data['failed'] == []
+    assert data['reports'][0]['empty'] is True
+
+
+def test_report_rejects_malformed_filters(archived_games, client):
+    for bad in ({'pitch_types': 'Slider'}, {'velo': [1]}, {'velo': ['a', 'b']}, 'x'):
+        resp = _report(client, filters=bad)
+        assert resp.status_code == 400, bad
+
+
+def test_report_rejects_unknown_chart_options(archived_games, client):
+    assert _report(client, view='3d').status_code == 400
+    assert _report(client, color_by='spin').status_code == 400
+
+
+# --- single-card refresh ----------------------------------------------------
+
+def _card(client, **extra):
+    body = {'content_hashes': _hashes(client), 'target': 'opponent', 'pitcher_id': 2002, **extra}
+    return client.post('/api/pitching/pitcher', json=body)
+
+
+def test_pitcher_endpoint_rebuilds_one_card_for_new_filters(archived_games, client):
+    resp = _card(client, filters={'pitch_types': ['Slider']})
+
+    assert resp.status_code == 200
+    card = resp.get_json()
+    assert card['pitcher_id'] == '2002'
+    assert card['pitch_count'] == 4
+    assert 'pitcher_table' in card
+
+
+def test_pitcher_endpoint_charts_only_skips_the_tables(archived_games, client):
+    card = _card(client, charts_only=True, view='scatter', color_by='velo').get_json()
+
+    assert 'figures' in card
+    assert 'pitcher_table' not in card
+
+
+def test_pitcher_endpoint_scatter_view_draws_only_points(archived_games, client):
+    card = _card(client, charts_only=True, view='scatter').get_json()
+
+    for figure in card['figures'].values():
+        assert {t['type'] for t in figure['data']} <= {'scatter'}
+
+
+def test_pitcher_endpoint_404s_for_a_pitcher_on_the_other_side(archived_games, client):
+    resp = client.post('/api/pitching/pitcher', json={
+        'content_hashes': _hashes(client), 'target': 'own', 'pitcher_id': 2002})
+
+    assert resp.status_code == 404
+
+
+def test_pitcher_endpoint_rejects_a_game_outside_this_archive(archived_games, client):
+    resp = client.post('/api/pitching/pitcher', json={
+        'content_hashes': ['nope'], 'target': 'own', 'pitcher_id': 1001})
+
+    assert resp.status_code == 404
 
 
 def test_report_without_a_selection_is_rejected(archived_games, client):
@@ -213,27 +303,178 @@ def test_report_with_no_pitchers_on_that_side_explains_why(client, login_as, mak
 
 # --- export -----------------------------------------------------------------
 
-def test_export_streams_a_single_pitcher_pdf(archived_games, client):
-    _report_data(client)
+# A 1x1 PNG: valid, tiny, and enough for ReportLab to place.
+PNG_1X1 = ('data:image/png;base64,'
+           'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==')
 
-    resp = client.get('/api/pitching/export?pitcher_id=1001')
+
+def _export(client, pitchers, target='own', **extra):
+    body = {'content_hashes': _hashes(client), 'target': target, 'pitchers': pitchers, **extra}
+    return client.post('/api/pitching/export', json=body)
+
+
+def test_export_builds_a_single_pitcher_pdf(archived_games, client):
+    resp = _export(client, [{'pitcher_id': 1001, 'images': {
+        'heat_left': PNG_1X1, 'heat_right': PNG_1X1, 'break': PNG_1X1}}])
+
+    assert resp.status_code == 200
+    assert resp.mimetype == 'application/pdf'
+    assert resp.data.startswith(b'%PDF')
+    assert 'pitcher_1001_report.pdf' in resp.headers['Content-Disposition']
+
+
+def test_export_without_images_still_builds_the_tables(archived_games, client):
+    resp = _export(client, [{'pitcher_id': 1001}])
+
+    assert resp.status_code == 200
+    assert resp.data.startswith(b'%PDF')
+
+
+def test_export_merges_several_pitchers_into_one_pdf(client, login_as, home_user, tmp_path):
+    """Relabel the away arm as HOME so the own side has two pitchers to merge."""
+    login_as(client, home_user)
+    both_home = tmp_path / 'both_home.csv'
+    both_home.write_text(GAME_1.read_text().replace(',AWAY,HOME,2026', ',HOME,AWAY,2026'))
+    _save_game(client, both_home)
+
+    resp = _export(client, [{'pitcher_id': 1001}, {'pitcher_id': 2002}])
+
+    assert resp.status_code == 200
+    assert resp.data.startswith(b'%PDF')
+    assert 'pitcher_reports.pdf' in resp.headers['Content-Disposition']
+
+
+def test_export_applies_the_filters_to_the_pdf(archived_games, client):
+    resp = _export(client, [{'pitcher_id': 2002}], target='opponent',
+                   filters={'velo': [95, 99]})
+
+    assert resp.status_code == 404
+    assert 'No pitches match' in resp.get_json()['error']
+
+
+def test_export_rejects_an_image_that_is_not_a_png(archived_games, client):
+    resp = _export(client, [{'pitcher_id': 1001, 'images': {'break': 'data:image/png;base64,AAAA'}}])
+
+    assert resp.status_code == 400
+
+
+def test_export_rejects_a_non_png_data_url(archived_games, client):
+    resp = _export(client, [{'pitcher_id': 1001, 'images': {'break': 'data:image/svg+xml;base64,AAAA'}}])
+
+    assert resp.status_code == 400
+
+
+def test_export_ignores_slots_it_does_not_know(archived_games, client, app, home_school):
+    resp = _export(client, [{'pitcher_id': 1001, 'images': {'../../evil': PNG_1X1}}])
+
+    assert resp.status_code == 200
+    temp_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'temp')
+    assert not any('evil' in f for f in os.listdir(temp_dir))
+
+
+def test_export_rejects_a_pitcher_from_the_other_dugout(archived_games, client):
+    assert _export(client, [{'pitcher_id': 2002}], target='own').status_code == 404
+
+
+def test_export_requires_pitchers(archived_games, client):
+    assert _export(client, []).status_code == 400
+    assert _export(client, 'all').status_code == 400
+
+
+def test_export_rejects_a_game_outside_this_archive(archived_games, client):
+    resp = client.post('/api/pitching/export', json={
+        'content_hashes': ['nope'], 'target': 'own', 'pitchers': [{'pitcher_id': 1001}]})
+
+    assert resp.status_code == 404
+
+
+def test_export_leaves_no_working_files_behind(archived_games, client, app, home_school):
+    _export(client, [{'pitcher_id': 1001, 'images': {'break': PNG_1X1}}])
+
+    temp_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'temp')
+    assert [f for f in os.listdir(temp_dir) if '_export_' in f or f.endswith(('.png', '.pdf'))] == []
+
+
+def test_a_second_export_can_run_right_after_the_first(archived_games, client):
+    """Each export has its own working directory, so nothing from one can block the next."""
+    for _ in range(2):
+        assert _export(client, [{'pitcher_id': 1001, 'images': {'break': PNG_1X1}}]).status_code == 200
+
+
+def test_a_pdf_that_fails_to_build_is_a_server_error_not_no_matches(archived_games, client, monkeypatch):
+    from app.services.report_lab_generator import PDF_Generator
+
+    def boom(self, data, output_path):
+        raise RuntimeError('layout blew up')
+
+    monkeypatch.setattr(PDF_Generator, 'generate_pitcher_report', boom)
+
+    resp = _export(client, [{'pitcher_id': 1001}])
+
+    assert resp.status_code == 500
+    assert resp.get_json()['error'] == 'Could not build the PDF.'
+
+
+def test_old_get_export_is_gone(archived_games, client):
+    assert client.get('/api/pitching/export?pitcher_id=1001').status_code == 405
+
+
+# --- pitch-by-pitch ---------------------------------------------------------
+
+def _pbp_query(client, target='own', **extra):
+    from urllib.parse import urlencode
+    pairs = [('target', target), *[('content_hash', h) for h in _hashes(client)],
+             *[(k, v) for k, v in extra.items()]]
+    return urlencode(pairs)
+
+
+def test_pitch_by_pitch_streams_one_pitchers_pdf(archived_games, client):
+    resp = client.get(f'/api/pitching/pitch-by-pitch?pitcher_id=1001&{_pbp_query(client)}')
 
     assert resp.status_code == 200
     assert resp.mimetype == 'application/pdf'
     assert resp.data.startswith(b'%PDF')
 
 
-def test_export_streams_the_merged_pdf(archived_games, client):
-    _report_data(client)
+def test_pitch_by_pitch_writes_no_chart_images(archived_games, client, app, home_school):
+    client.get(f'/api/pitching/pitch-by-pitch?pitcher_id=1001&{_pbp_query(client)}')
 
-    resp = client.get('/api/pitching/export?merged=1')
+    temp_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'temp')
+    assert [f for f in os.listdir(temp_dir) if f.endswith('.png')] == []
+
+
+def test_pitch_by_pitch_honors_the_filters(archived_games, client):
+    nothing = json.dumps({'velo': [95, 99]})
+
+    resp = client.get(f'/api/pitching/pitch-by-pitch?pitcher_id=2002&{_pbp_query(client, "opponent", filters=nothing)}')
+
+    assert resp.status_code == 404   # no pitch passes, so there is nothing to chart
+
+
+def test_pitch_by_pitch_rejects_malformed_filters(archived_games, client):
+    resp = client.get(f'/api/pitching/pitch-by-pitch?pitcher_id=1001&{_pbp_query(client, filters="{nope")}')
+
+    assert resp.status_code == 400
+
+
+def test_pitch_by_pitch_all_merges_the_staff(client, login_as, home_user, tmp_path):
+    """Relabel the away arm as HOME so the own side has two pitchers to merge."""
+    login_as(client, home_user)
+    both_home = tmp_path / 'both_home.csv'
+    both_home.write_text(GAME_1.read_text().replace(',AWAY,HOME,2026', ',HOME,AWAY,2026'))
+    _save_game(client, both_home)
+
+    resp = client.get(f'/api/pitching/pitch-by-pitch/all?{_pbp_query(client)}')
 
     assert resp.status_code == 200
     assert resp.data.startswith(b'%PDF')
+    assert 'pitch_by_pitch_reports.pdf' in resp.headers['Content-Disposition']
 
 
-def test_export_before_generating_returns_404(archived_games, client):
-    resp = client.get('/api/pitching/export?pitcher_id=1001')
+def test_pitch_by_pitch_all_with_no_matching_pitches_is_an_error(archived_games, client):
+    nothing = json.dumps({'velo': [95, 99]})
+
+    resp = client.get(f'/api/pitching/pitch-by-pitch/all?{_pbp_query(client, filters=nothing)}')
 
     assert resp.status_code == 404
 

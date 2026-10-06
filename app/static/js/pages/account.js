@@ -48,6 +48,7 @@ async function updatePassword() {
 
 async function updateReportSettings() {
     const chartStyle = document.getElementById('chart-style-toggle').checked ? 'pitch_point' : 'auto';
+    const chartColorMode = document.getElementById('chart-color-toggle').checked ? 'velo' : 'pitch_type';
     const inkMode = document.getElementById('ink-mode-toggle').checked ? 'light_ink' : 'full_color';
     const showBreakArrows = !document.getElementById('break-arrows-toggle').checked;
 
@@ -55,7 +56,7 @@ async function updateReportSettings() {
         const response = await fetch('/api/account/preferences', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chart_style: chartStyle, ink_mode: inkMode, show_break_arrows: showBreakArrows })
+            body: JSON.stringify({ chart_style: chartStyle, chart_color_mode: chartColorMode, ink_mode: inkMode, show_break_arrows: showBreakArrows })
         });
         const data = await response.json();
         if (response.ok) {

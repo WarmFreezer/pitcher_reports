@@ -80,6 +80,7 @@ def _report_data(client, **overrides):
 
     reports = []
     done = {}
+    meta = {}
     for line in resp.get_data(as_text=True).splitlines():
         if not line.strip():
             continue
@@ -88,11 +89,13 @@ def _report_data(client, **overrides):
             reports.append(msg)
         elif msg['type'] == 'done':
             done = msg
+        elif msg['type'] == 'meta':
+            meta = msg
 
     return {
         'reports': reports,
+        'meta': meta,
         'failed': done.get('failed', []),
-        'merged_pdf_url': done.get('merged_pdf_url'),
         'date_range': done.get('date_range'),
         'start_date': done.get('start_date'),
         'end_date': done.get('end_date'),
@@ -280,21 +283,6 @@ def test_range_covering_no_games_returns_404_not_500(archived_games, client):
     assert resp.status_code == 404
 
 
-def test_report_generates_both_themes_of_both_spray_charts(archived_games, client, app, home_school, home_user):
-    report = _first_report(_report_data(client))
-
-    temp_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'temp')
-    for side in ('left', 'right'):
-        for theme in ('light', 'dark'):
-            name = f'{home_user.id}_hitter_{BATTER_ID}_spray_{side}_{theme}.png'
-            assert os.path.exists(os.path.join(temp_dir, name)), f'missing {name}'
-            assert os.path.getsize(os.path.join(temp_dir, name)) > 0
-
-    # The page needs both theme URLs so core.js can swap them on toggle
-    assert report['spray_left_url'].endswith('_left_light.png')
-    assert report['spray_left_dark_url'].endswith('_left_dark.png')
-
-
 def test_report_includes_rendered_tables(archived_games, client):
     report = _first_report(_report_data(client))
 
@@ -385,7 +373,7 @@ def test_custom_collectors_return_none_without_a_school_script(monkeypatch):
     assert hitter_report.custom_stats_table(source, 1, 999) is None
     assert hitter_report.custom_hit_type_stats_table(source, 1, 999) is None
     assert hitter_report.custom_pitch_type_stats_table(source, 1, 999) is None
-    assert hitter_report.custom_charts(source, 1, 999, 1, str(FIXTURES)) is None
+    assert hitter_report.custom_charts(source, 1, 999) is None
 
 
 def test_custom_collectors_wire_a_schools_hooks_through(monkeypatch, tmp_path):
@@ -393,13 +381,13 @@ def test_custom_collectors_wire_a_schools_hooks_through(monkeypatch, tmp_path):
     A school's custom_hitter_report.py hooks land in the typed tables the PDF
     renders -- get_stats -> CustomStatsTable, get_hit_type_stats ->
     CustomHitTypeStatsTable, get_pitch_type_stats -> CustomPitchTypeStatsTable,
-    get_charts -> (title, path) pairs with the file actually written to disk.
+    get_charts -> CustomChart(title, Plotly figure).
     """
     import types
     import pandas as pd
     from app.services import hitter_report
     from app.services.pitch_stats import CustomStat, CustomPitchTypeStat, CustomPitchTypeStatsTable
-    from app.services.hitter_stats import CustomHitTypeStat, CustomHitTypeStatsTable
+    from app.services.hitter_stats import CustomChart, CustomHitTypeStat, CustomHitTypeStatsTable
 
     fake_module = types.ModuleType('fake_custom_hitter_report')
     fake_module.get_stats = lambda source, batter_id: [CustomStat(name='Barrel', value='42.0%')]
@@ -410,13 +398,7 @@ def test_custom_collectors_wire_a_schools_hooks_through(monkeypatch, tmp_path):
         CustomPitchTypeStatsTable([CustomPitchTypeStat(pitch_type='Fastball', stats={'Damage': '5.0%'})])
     ]
 
-    def get_charts(source, batter_id, user_id, output_dir):
-        path = os.path.join(output_dir, f'{user_id}_hitter_{batter_id}_custom_test.png')
-        with open(path, 'wb') as f:
-            f.write(b'not a real png -- just proving the hook wrote a file')
-        return [('Test Chart', path)]
-
-    fake_module.get_charts = get_charts
+    fake_module.get_charts = lambda source, batter_id: [CustomChart('Test Chart', _figure())]
 
     monkeypatch.setattr(hitter_report, 'load_custom_module', lambda school_id, filename: fake_module)
 
@@ -431,11 +413,10 @@ def test_custom_collectors_wire_a_schools_hooks_through(monkeypatch, tmp_path):
     pitch_type = hitter_report.custom_pitch_type_stats_table(source, 1, 999)
     assert pitch_type is not None and pitch_type[0].rows[0].pitch_type == 'Fastball'
 
-    charts = hitter_report.custom_charts(source, 1, 999, 7, str(tmp_path))
+    charts = hitter_report.custom_charts(source, 1, 999)
     assert charts is not None
-    title, path = charts[0]
-    assert title == 'Test Chart'
-    assert os.path.exists(path)
+    assert charts[0].title == 'Test Chart'
+    assert charts[0].figure['data'][0]['x'] == [1, 2, 3]
 
 
 def test_custom_collectors_swallow_a_broken_scripts_exception(monkeypatch):
@@ -452,6 +433,163 @@ def test_custom_collectors_swallow_a_broken_scripts_exception(monkeypatch):
     assert hitter_report.custom_stats_table(source, 1, 999) is None
     assert hitter_report.custom_hit_type_stats_table(source, 1, 999) is None
     assert hitter_report.custom_pitch_type_stats_table(source, 1, 999) is None
+
+
+def _figure(**overrides):
+    figure = {'data': [{'type': 'scatter', 'mode': 'markers', 'x': [1, 2, 3], 'y': [4, 5, 6]}],
+              'layout': {'xaxis': {'title': {'text': 'x'}}}}
+    figure.update(overrides)
+    return figure
+
+
+def _fake_school_script(monkeypatch, charts):
+    """Make hitter_report see a school script whose get_charts returns `charts`."""
+    import types
+    from app.services import hitter_report
+
+    module = types.ModuleType('fake_custom_hitter_report')
+    module.get_charts = lambda source, batter_id: charts
+    monkeypatch.setattr(hitter_report, 'load_custom_module', lambda school_id, filename: module)
+
+
+def test_custom_charts_skip_anything_the_page_cannot_safely_draw(monkeypatch, capsys):
+    import pandas as pd
+    from app.services import hitter_report
+    from app.services.hitter_stats import CustomChart
+
+    good = CustomChart('Good', _figure())
+    _fake_school_script(monkeypatch, [
+        good,
+        ('Legacy', '/tmp/an-image-path.png'),                                  # the old (title, path) contract
+        CustomChart('No data', {'layout': {}}),
+        CustomChart('Not a figure', 'oops'),                                   # type: ignore[arg-type]
+        CustomChart('', _figure()),
+        CustomChart('NaN', _figure(data=[{'type': 'scatter', 'x': [float('nan')], 'y': [1]}])),
+        CustomChart('Huge', _figure(data=[{'type': 'scatter', 'x': list(range(300_000)), 'y': [0]}])),
+    ])
+
+    charts = hitter_report.custom_charts(pd.DataFrame({'BatterId': [1]}), 1, 999)
+
+    assert charts == [good]
+    assert 'needs updating' in capsys.readouterr().out    # the legacy script is told why
+
+
+def test_custom_charts_are_capped(monkeypatch):
+    import pandas as pd
+    from app.services import hitter_report
+    from app.services.hitter_stats import CustomChart
+
+    _fake_school_script(monkeypatch, [CustomChart(f'Chart {n}', _figure()) for n in range(20)])
+
+    assert len(hitter_report.custom_charts(pd.DataFrame({'BatterId': [1]}), 1, 999)) == hitter_report.MAX_CUSTOM_CHARTS
+
+
+def test_a_script_that_returns_nothing_or_raises_has_no_custom_charts(monkeypatch):
+    import types
+    import pandas as pd
+    from app.services import hitter_report
+
+    source = pd.DataFrame({'BatterId': [1]})
+    _fake_school_script(monkeypatch, None)
+    assert hitter_report.custom_charts(source, 1, 999) is None
+
+    module = types.ModuleType('boom')
+
+    def boom(source, batter_id):
+        raise RuntimeError('chart blew up')
+
+    module.get_charts = boom
+    monkeypatch.setattr(hitter_report, 'load_custom_module', lambda school_id, filename: module)
+    assert hitter_report.custom_charts(source, 1, 999) is None
+
+
+def test_a_legacy_get_charts_signature_degrades_to_no_charts(monkeypatch):
+    """A script still written for (source, id, user_id, output_dir) raises TypeError; that must not escape."""
+    import types
+    import pandas as pd
+    from app.services import hitter_report
+
+    module = types.ModuleType('legacy')
+    module.get_charts = lambda source, batter_id, user_id, output_dir, theme='light': []
+    monkeypatch.setattr(hitter_report, 'load_custom_module', lambda school_id, filename: module)
+
+    assert hitter_report.custom_charts(pd.DataFrame({'BatterId': [1]}), 1, 999) is None
+
+
+def test_custom_charts_reach_the_card_and_the_pdf(archived_games, client, monkeypatch):
+    import io as _io
+    import pypdf
+    from app.services.hitter_stats import CustomChart
+
+    _fake_school_script(monkeypatch, [CustomChart('Mine', _figure()), CustomChart('Also mine', _figure())])
+
+    card = _first_report(_report_data(client))
+    assert [(c['title'], c['slot']) for c in card['custom_charts']] == [('Mine', 'custom_0'), ('Also mine', 'custom_1')]
+    assert card['custom_charts'][0]['figure']['data'][0]['x'] == [1, 2, 3]
+
+    plain = _export(client, [{'batter_id': BATTER_ID, 'images': {'spray_left': PNG_1X1}}])
+    with_charts = _export(client, [{'batter_id': BATTER_ID, 'images': {
+        'spray_left': PNG_1X1, 'custom_0': PNG_1X1, 'custom_1': PNG_1X1, 'custom_9': PNG_1X1}}])
+
+    assert with_charts.status_code == 200
+    # the two custom charts add to the PDF; the made-up custom_9 slot is ignored
+    pages = lambda resp: sum(len(p.extract_text()) for p in pypdf.PdfReader(_io.BytesIO(resp.data)).pages)
+    assert pages(with_charts) > pages(plain)
+
+
+def test_a_charts_only_refresh_has_no_custom_charts_to_replace(archived_games, client, monkeypatch):
+    from app.services.hitter_stats import CustomChart
+
+    _fake_school_script(monkeypatch, [CustomChart('Mine', _figure())])
+
+    card = client.post('/api/batting/hitter', json={'batter_id': BATTER_ID, 'target': 'own', 'charts_only': True}).get_json()
+
+    assert 'custom_charts' not in card
+
+
+def test_school_2s_exit_velocity_chart_is_a_plotly_figure():
+    import importlib.util
+    import json
+    import pandas as pd
+    from app.services.hitter_stats import CustomChart
+
+    path = Path(__file__).parent.parent / 'app' / 'storage' / 'schools' / '2' / 'assets' / 'custom_hitter_report.py'
+    spec = importlib.util.spec_from_file_location('school2_hitter', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    source = pd.DataFrame({
+        'BatterId': [7, 7, 7, 7], 'PitchCall': ['InPlay', 'InPlay', 'InPlay', 'StrikeCalled'],
+        'Angle': [12.0, 28.0, float('nan'), None], 'ExitSpeed': [101.5, 88.0, 90.0, None]})
+
+    charts = module.get_charts(source, 7)
+
+    assert len(charts) == 1 and isinstance(charts[0], CustomChart)
+    figure = charts[0].figure
+    json.dumps(figure, allow_nan=False)
+    assert figure['data'][0]['x'] == [12.0, 28.0] and figure['data'][0]['y'] == [101.5, 88.0]
+    assert figure['layout']['yaxis'].get('scaleanchor') is None          # EV vs LA aren't the same units
+    assert 'name' not in figure['layout']['shapes'][0]                    # the barrel zone keeps its red in dark mode
+    assert module.get_charts(source.iloc[0:0], 7) == []
+
+
+def test_the_app_runs_without_matplotlib_or_seaborn():
+    """They were dropped from requirements.txt; blocking them proves nothing still reaches for them."""
+    import subprocess
+    import sys
+
+    code = (
+        "import sys\n"
+        "sys.modules['matplotlib'] = None\n"
+        "sys.modules['seaborn'] = None\n"
+        "import app.main\n"
+        "from app.services import report, hitter_report, catching_report, plotly_charts, report_lab_generator\n"
+        "print('ok')\n"
+    )
+    result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True,
+                            cwd=Path(__file__).parent.parent)
+
+    assert result.returncode == 0, result.stderr
+    assert 'ok' in result.stdout
 
 
 # --- multi-hitter selection + merged PDF -----------------------------------
@@ -471,74 +609,126 @@ def test_selecting_multiple_hitters_returns_one_report_each(archived_games, clie
     assert data['failed'] == []
 
 
-def test_multi_hitter_run_produces_a_merged_pdf(archived_games, client, app, home_school, home_user):
-    ids = _all_own_ids(client)
-    data = _report_data(client, batter_ids=ids)
+# --- report cards: filters, charts, no files --------------------------------
 
-    assert data['merged_pdf_url'], 'a multi-hitter run must produce a merged PDF'
-
-    reports_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'reports')
-    merged = os.path.join(reports_dir, f'{home_user.id}_merged_hitter_reports.pdf')
-    assert os.path.exists(merged)
-
-    # Every selected hitter also gets their own file
-    for batter_id in ids:
-        assert os.path.exists(os.path.join(reports_dir, f'{home_user.id}_hitter_{batter_id}_report.pdf'))
+def _points(figure):
+    """Number of plotted points in a figure (the legend-only traces carry no data)."""
+    return sum(len(t['x']) for t in figure['data'] if t.get('showlegend') is not True and t.get('type') == 'scatter')
 
 
-def test_merged_pdf_excludes_pitcher_reports(archived_games, client, app, home_school, home_user):
-    """A2: merge_pdfs must filter on the hitter prefix, not sweep the whole folder."""
-    from reportlab.pdfgen import canvas
+def test_report_cards_carry_plotly_spray_figures_not_image_urls(archived_games, client):
+    card = _first_report(_report_data(client))
 
-    reports_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'reports')
-    os.makedirs(reports_dir, exist_ok=True)
+    assert set(card['figures']) == {'spray_left', 'spray_right'}
+    for figure in card['figures'].values():
+        assert set(figure) == {'data', 'layout'}
+    assert not any(key.startswith('spray_') and key.endswith('_url') for key in card)
 
-    # A decoy pitcher report sharing the folder. Written here rather than relying
-    # on the upload step, which no longer generates PDFs at all.
-    decoy = os.path.join(reports_dir, f'{home_user.id}_pitcher_999_report.pdf')
-    c = canvas.Canvas(decoy)
-    c.drawString(100, 100, 'pitcher decoy')
-    c.save()
 
-    ids = _all_own_ids(client)
-    _report_data(client, batter_ids=ids)
+def test_spray_charts_plot_every_batted_ball_against_each_side(archived_games, client):
+    figures = _first_report(_report_data(client))['figures']
 
-    resp = client.get('/api/batting/export?merged=1&target=own')
+    # Three batted balls vs RHP on 03-01 and two vs LHP on 03-08 (see the module docstring)
+    assert _points(figures['spray_right']) == 3
+    assert _points(figures['spray_left']) == 2
+
+
+def test_report_writes_no_chart_images_or_pdfs(archived_games, client, app, home_school):
+    _report_data(client)
+
+    school_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id))
+    for sub in ('temp', 'reports'):
+        folder = os.path.join(school_dir, sub)
+        generated = [f for f in os.listdir(folder) if f.endswith(('.png', '.pdf'))] if os.path.isdir(folder) else []
+        assert generated == []
+
+
+def test_report_meta_describes_the_filter_bar(archived_games, client):
+    meta = _report_data(client)['meta']
+
+    assert [t['name'] for t in meta['pitch_types']] == ['Fastball', 'Slider', 'ChangeUp']
+    assert meta['velo_min'] == 89 and meta['velo_max'] == 89
+    assert meta['defaults'] == {'view': 'heatmap', 'color_by': 'pitch_type'}
+
+
+def test_report_meta_defaults_follow_the_account_settings(archived_games, client, home_user):
+    from app.db.models import db
+    home_user.chart_style = 'pitch_point'
+    home_user.chart_color_mode = 'velo'
+    db.session.commit()
+
+    assert _report_data(client)['meta']['defaults'] == {'view': 'scatter', 'color_by': 'velo'}
+
+
+def test_report_filters_change_the_numbers(archived_games, client):
+    everything = _first_report(_report_data(client))
+    sliders = _first_report(_report_data(client, filters={'pitch_types': ['Slider']}))
+
+    assert int(sliders['summary']['PA']) < int(everything['summary']['PA'])
+    assert 'FB' not in sliders['discipline_table']
+
+
+def test_report_with_a_velo_range_nobody_threw_is_an_empty_card(archived_games, client):
+    data = _report_data(client, filters={'velo': [95, 99]})
+
+    assert data['failed'] == []
+    assert data['reports'][0]['empty'] is True
+
+
+def test_report_rejects_malformed_filters_and_chart_options(archived_games, client):
+    for bad in ({'pitch_types': 'Slider'}, {'velo': [1]}, 'x'):
+        assert _report(client, filters=bad).status_code == 400, bad
+    assert _report(client, view='3d').status_code == 400
+    assert _report(client, color_by='framing').status_code == 400   # the catcher page's own color
+
+
+# --- single-card refresh ----------------------------------------------------
+
+def _card(client, **extra):
+    body = {'batter_id': BATTER_ID, 'target': 'own', **extra}
+    return client.post('/api/batting/hitter', json=body)
+
+
+def test_hitter_endpoint_rebuilds_one_card_for_new_filters(archived_games, client):
+    resp = _card(client, filters={'pitch_types': ['Slider']})
+
     assert resp.status_code == 200
-    assert resp.data.startswith(b'%PDF')
-
-    # The merged file must hold only the hitter reports. Page counts are the
-    # cheapest proof: sweeping the folder would pull the pitcher PDFs in too.
-    import pypdf
-    merged = os.path.join(reports_dir, f'{home_user.id}_merged_hitter_reports.pdf')
-    hitter_pages = sum(
-        len(pypdf.PdfReader(os.path.join(reports_dir, f'{home_user.id}_hitter_{b}_report.pdf')).pages)
-        for b in ids
-    )
-    assert len(pypdf.PdfReader(merged).pages) == hitter_pages
+    card = resp.get_json()
+    assert card['hitter_id'] == BATTER_ID and 'discipline_table' in card
 
 
-def test_regenerating_clears_the_previous_selection(archived_games, client, app, home_school, home_user):
-    """A stale PDF from a wider selection must not survive into a narrower one."""
-    ids = _all_own_ids(client)
-    _report_data(client, batter_ids=ids)
+def test_hitter_endpoint_charts_only_skips_the_tables(archived_games, client):
+    card = _card(client, charts_only=True, view='scatter', color_by='velo').get_json()
 
-    _report_data(client, batter_ids=[BATTER_ID])
+    assert 'figures' in card
+    assert 'discipline_table' not in card
 
-    reports_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'reports')
-    remaining = {f for f in os.listdir(reports_dir) if '_hitter_' in f and 'merged' not in f}
-    assert remaining == {
-        f'{home_user.id}_hitter_{BATTER_ID}_report.pdf',
-        f'{home_user.id}_hitter_{BATTER_ID}_pitch_by_pitch.pdf',
-    }
+
+def test_hitter_endpoint_scatter_view_draws_only_points(archived_games, client):
+    card = _card(client, charts_only=True, view='scatter').get_json()
+
+    for figure in card['figures'].values():
+        assert {t['type'] for t in figure['data']} <= {'scatter'}
+
+
+def test_hitter_endpoint_404s_for_a_hitter_outside_the_archive(archived_games, client):
+    assert _card(client, batter_id='999999').status_code == 404
+    assert _card(client, batter_id='').status_code == 400
 
 
 # --- export ----------------------------------------------------------------
 
-def test_export_streams_a_single_hitter_pdf(archived_games, client):
-    _report_data(client)
+PNG_1X1 = ('data:image/png;base64,'
+           'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==')
 
-    resp = client.get(f'/api/batting/export?batter_id={BATTER_ID}&target=own')
+
+def _export(client, hitters, **extra):
+    body = {'target': 'own', 'hitters': hitters, **extra}
+    return client.post('/api/batting/export', json=body)
+
+
+def test_export_builds_a_single_hitter_pdf(archived_games, client):
+    resp = _export(client, [{'batter_id': BATTER_ID, 'images': {'spray_left': PNG_1X1, 'spray_right': PNG_1X1}}])
 
     assert resp.status_code == 200
     assert resp.mimetype == 'application/pdf'
@@ -546,52 +736,101 @@ def test_export_streams_a_single_hitter_pdf(archived_games, client):
     assert 'attachment' in resp.headers['Content-Disposition']
 
 
-def test_export_before_generating_returns_404(archived_games, client):
-    resp = client.get(f'/api/batting/export?batter_id={BATTER_ID}&target=own')
+def test_export_without_images_still_builds_the_tables(archived_games, client):
+    assert _export(client, [{'batter_id': BATTER_ID}]).data.startswith(b'%PDF')
+
+
+def test_export_merges_several_hitters_into_one_pdf(archived_games, client):
+    import io as _io
+    import pypdf
+
+    ids = _all_own_ids(client)
+    assert len(ids) >= 2
+    singles = [len(pypdf.PdfReader(_io.BytesIO(_export(client, [{'batter_id': b}]).data)).pages) for b in ids]
+
+    merged = _export(client, [{'batter_id': b} for b in ids])
+
+    assert merged.status_code == 200
+    assert 'hitter_reports_' in merged.headers['Content-Disposition']
+    assert len(pypdf.PdfReader(_io.BytesIO(merged.data)).pages) == sum(singles)
+
+
+def test_export_applies_the_filters_to_the_pdf(archived_games, client):
+    resp = _export(client, [{'batter_id': BATTER_ID}], filters={'velo': [95, 99]})
 
     assert resp.status_code == 404
-    assert 'Generate it first' in resp.get_json()['error']
+    assert 'No pitches match' in resp.get_json()['error']
 
 
-def test_report_eagerly_builds_the_pitch_by_pitch_pdf_and_charts(archived_games, client, app, home_school, home_user):
-    """
-    The pitch-by-pitch PDF (and its per-AB charts) must exist on disk as soon as
-    /report finishes, not only after the download link is clicked -- building it
-    lazily on click was the multi-second lag this eager build replaces.
-    """
-    _report_data(client)
+def test_export_rejects_bad_images(archived_games, client):
+    for bad in ('data:image/png;base64,AAAA', 'data:image/svg+xml;base64,AAAA'):
+        assert _export(client, [{'batter_id': BATTER_ID, 'images': {'spray_left': bad}}]).status_code == 400
 
-    output_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'reports')
-    pdf_path = os.path.join(output_dir, f'{home_user.id}_hitter_{BATTER_ID}_pitch_by_pitch.pdf')
-    assert os.path.exists(pdf_path)
-    assert os.path.getsize(pdf_path) > 0
 
-    # The fixtures carry PlateLocSide/PlateLocHeight on every row, so every one of
-    # this batter's 8 at-bats (grouped by GameID/Inning/Top-Bottom/PAofInning) gets
-    # its own chart.
+def test_export_ignores_slots_it_does_not_know(archived_games, client, app, home_school):
+    resp = _export(client, [{'batter_id': BATTER_ID, 'images': {'../../evil': PNG_1X1}}])
+
+    assert resp.status_code == 200
     temp_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'temp')
-    for n in range(1, 9):
-        path = os.path.join(temp_dir, f'{home_user.id}_hitter_{BATTER_ID}_ab_chart_{n}.png')
-        assert os.path.exists(path), f'missing chart {n}'
-        assert os.path.getsize(path) > 0
+    assert not any('evil' in f for f in os.listdir(temp_dir))
 
 
-def test_pitch_by_pitch_download_serves_the_prebuilt_pdf(archived_games, client):
-    _report_data(client)
+def test_export_rejects_a_hitter_outside_the_archive_and_empty_requests(archived_games, client):
+    assert _export(client, [{'batter_id': '999999'}]).status_code == 404
+    assert _export(client, []).status_code == 400
+    assert _export(client, 'all').status_code == 400
 
+
+def test_export_leaves_no_working_files_behind(archived_games, client, app, home_school):
+    _export(client, [{'batter_id': BATTER_ID, 'images': {'spray_left': PNG_1X1}}])
+
+    temp_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'temp')
+    assert [f for f in os.listdir(temp_dir) if '_export_' in f or f.endswith(('.png', '.pdf'))] == []
+
+
+def test_a_pdf_that_fails_to_build_is_a_server_error_not_no_matches(archived_games, client, monkeypatch):
+    from app.services.report_lab_generator import PDF_Generator
+
+    def boom(self, data, output_path):
+        raise RuntimeError('layout blew up')
+
+    monkeypatch.setattr(PDF_Generator, 'generate_hitter_report', boom)
+
+    resp = _export(client, [{'batter_id': BATTER_ID}])
+
+    assert resp.status_code == 500
+    assert resp.get_json()['error'] == 'Could not build the PDF.'
+
+
+def test_old_get_export_is_gone(archived_games, client):
+    assert client.get(f'/api/batting/export?batter_id={BATTER_ID}&target=own').status_code == 405
+
+
+# --- pitch-by-pitch -------------------------------------------------------------
+
+def test_pitch_by_pitch_is_built_on_request(archived_games, client, app, home_school):
     resp = client.get(f'/api/batting/pitch-by-pitch?batter_id={BATTER_ID}&target=own')
 
     assert resp.status_code == 200
     assert resp.mimetype == 'application/pdf'
     assert resp.data.startswith(b'%PDF')
     assert 'attachment' in resp.headers['Content-Disposition']
+    reports_dir = os.path.join(app.config['STORAGE'], 'schools', str(home_school.id), 'reports')
+    assert [f for f in os.listdir(reports_dir) if f.endswith('.pdf')] == []
 
 
-def test_pitch_by_pitch_download_before_generating_returns_404(archived_games, client):
-    resp = client.get(f'/api/batting/pitch-by-pitch?batter_id={BATTER_ID}&target=own')
+def test_pitch_by_pitch_honors_the_filters(archived_games, client):
+    nothing = json.dumps({'velo': [95, 99]})
+
+    resp = client.get(f'/api/batting/pitch-by-pitch?batter_id={BATTER_ID}&target=own&filters={nothing}')
 
     assert resp.status_code == 404
-    assert 'Generate it first' in resp.get_json()['error']
+
+
+def test_pitch_by_pitch_rejects_malformed_filters_and_unknown_hitters(archived_games, client):
+    assert client.get(f'/api/batting/pitch-by-pitch?batter_id={BATTER_ID}&target=own&filters={{nope').status_code == 400
+    assert client.get('/api/batting/pitch-by-pitch?batter_id=999999&target=own').status_code == 404
+    assert client.get('/api/batting/pitch-by-pitch?target=own').status_code == 400
 
 
 def test_pitch_by_pitch_pdf_pairs_charts_and_tables_with_an_odd_at_bat_count(app, home_school, tmp_path):
@@ -600,7 +839,6 @@ def test_pitch_by_pitch_pdf_pairs_charts_and_tables_with_an_odd_at_bat_count(app
     its own table. An odd at-bat count leaves the last pair's second cell empty --
     this must not raise building the PDF.
     """
-    from app.services import hitter_report
     from app.services.branding_loader import BrandingLoader
     from app.services.hitter_stats import HitterPitchByPitchAtBat, HitterPitchByPitchReport
     from app.services.pitch_stats import PitchByPitchPitch
@@ -617,13 +855,8 @@ def test_pitch_by_pitch_pdf_pairs_charts_and_tables_with_an_odd_at_bat_count(app
         for n in range(1, 6)  # odd count -> last pair has only one AB
     ]
 
-    chart_dir = tmp_path / 'charts'
-    chart_dir.mkdir()
-    charted_at_bats = hitter_report.build_ab_pitch_charts(at_bats, '500', 1, str(chart_dir))
-    assert all(ab.chart_path and os.path.exists(ab.chart_path) for ab in charted_at_bats)
-
     pbp_report = HitterPitchByPitchReport(
-        hitter_name='Alpha, Adam', date_range='2026-01-01 - 2026-01-01', at_bats=charted_at_bats,
+        hitter_name='Alpha, Adam', date_range='2026-01-01 - 2026-01-01', at_bats=at_bats,
     )
     branding = BrandingLoader.get_branding(home_school.id)
     gen = PDF_Generator(school_id=home_school.id, branding=branding, ink_mode='full_color')

@@ -125,6 +125,15 @@ function updateSelectionCount() {
     label.textContent = n ? `${n} game${n === 1 ? '' : 's'} selected` : 'No games selected';
 }
 
+// ── Report generation ────────────────────────────────────────────────────────
+
+const reports = createReportCards({
+    idField: 'pitcher_id', nameField: 'pitcher_name', requestIdKey: 'pitcher_id',
+    cardUrl: '/api/pitching/pitcher', exportUrl: '/api/pitching/export', exportListKey: 'pitchers',
+    noun: 'pitcher',
+    fill: fillPitcherCard,
+});
+
 async function generatePitchingReports() {
     const hashes = selectedGameHashes();
     if (hashes.length === 0) {
@@ -140,12 +149,17 @@ async function generatePitchingReports() {
 
     const reportOutput = document.querySelector('#report-output');
     const summaryArea = document.getElementById('pitchingSummary');
+    const filterArea = document.getElementById('chartFilters');
     const button = document.getElementById('generateBtn');
     const spinnerStart = Date.now();
 
     if (reportOutput) reportOutput.innerHTML = SPINNER_SVG;
     if (summaryArea) summaryArea.innerHTML = '';
+    if (filterArea) { filterArea.hidden = true; filterArea.replaceChildren(); }
     if (button) button.disabled = true;
+
+    reports.start(payload);
+    updateDownloadLink(false);
 
     let reportCount = 0;
 
@@ -168,16 +182,17 @@ async function generatePitchingReports() {
 
         if (reportOutput) reportOutput.innerHTML = '';
 
-        // Server streams one NDJSON line per pitcher as their report finishes
-        // (built in parallel), plus a final 'done' line -- render each card as
-        // its line arrives instead of waiting for the whole staff.
+        // Server streams one NDJSON line per pitcher as their card finishes, preceded by
+        // a 'meta' line (what the filter bar is built from) and followed by 'done'.
         for await (const msg of readNdjson(response)) {
-            if (msg.type === 'report') {
+            if (msg.type === 'meta') {
+                if (filterArea) reports.setFilterBar(createChartFilterBar(filterArea, msg, reports.handleFilterChange));
+            } else if (msg.type === 'report') {
                 renderPitcherCard(msg);
                 reportCount++;
             } else if (msg.type === 'done') {
                 renderRunSummary({ ...msg, count: reportCount });
-                if (msg.merged_pdf_url) updateDownloadLink(true, msg.merged_pdf_url);
+                if (reportCount) updateDownloadLink(true, '#client');
                 if (msg.failed && msg.failed.length) {
                     toast(`${msg.failed.length} pitcher(s) could not be generated.`, 'error');
                 }
@@ -201,11 +216,11 @@ function renderRunSummary(result) {
     if (!area) return;
 
     const count = result.count ?? 0;
-    const mergedButton = result.merged_pdf_url
-        ? `<a href="${result.merged_pdf_url}" class="download-btn" download style="text-decoration: none;">Download All (${count})</a>`
+    const mergedButton = count
+        ? `<button type="button" class="download-btn" id="downloadAllBtn">Download All (${count})</button>`
         : '';
     const pitchByPitchButton = result.pitch_by_pitch_all_url
-        ? `<a href="${result.pitch_by_pitch_all_url}" class="download-btn" download style="text-decoration: none;">Download All Pitch-by-Pitch</a>`
+        ? `<a href="${result.pitch_by_pitch_all_url}" class="download-btn pbp-link" download style="text-decoration: none;">Download All Pitch-by-Pitch</a>`
         : '';
 
     area.innerHTML = `
@@ -216,25 +231,70 @@ function renderRunSummary(result) {
             </div>
             <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">${mergedButton}${pitchByPitchButton}</div>
         </div>`;
+
+    document.getElementById('downloadAllBtn')?.addEventListener('click', () => reports.downloadAll());
 }
 
-// Break map pitch-type key as its own element (colored swatch + abbreviation +
-// pitch count per type) instead of a legend drawn inside the chart image, so
-// it never sits on top of the break-point cloud it's labeling.
-function breakMapLegend(entries) {
-    const legend = document.createElement('div');
-    legend.className = 'breakmap-legend';
-    for (const { abbreviation, color, count } of entries) {
-        const item = document.createElement('span');
-        item.className = 'breakmap-legend-item';
-        const swatch = document.createElement('span');
-        swatch.className = 'breakmap-legend-swatch';
-        swatch.style.backgroundColor = color;
-        item.appendChild(swatch);
-        item.appendChild(document.createTextNode(`${abbreviation}: ${count}`));
-        legend.appendChild(item);
+// ── Cards ────────────────────────────────────────────────────────────────────
+
+// The pitcher-specific part of a card: stat tables, custom stats, chart containers + legend.
+// Runs for the first render and every refresh; a charts-only refresh has no tables in it.
+function fillPitcherCard(card, data) {
+    const root = card.el;
+
+    if (data.pitcher_table !== undefined) {
+        root.querySelector('.pitcher-table').innerHTML = data.pitcher_table || '';
+        root.querySelector('.left-usage').innerHTML = data.left_usage_table || '';
+        root.querySelector('.right-usage').innerHTML = data.right_usage_table || '';
+        renderCustomStats(root, data);
     }
-    return legend;
+
+    const heatmapContainer = root.querySelector('.pitcher-heatmap');
+    const breakmapContainer = root.querySelector('.pitcher-breakmap');
+    if (data.figures) {
+        if (!heatmapContainer.childElementCount) {
+            heatmapContainer.append(
+                plotBlock('vs Left-Handed Batters', 'heat_left'),
+                plotBlock('vs Right-Handed Batters', 'heat_right'));
+            breakmapContainer.append(plotBlock('Pitch Break', 'break'));
+            const legend = document.createElement('div');
+            legend.className = 'breakmap-legend-slot';
+            breakmapContainer.appendChild(legend);
+        }
+        const title = data.arm_angle ? `Pitch Break — Arm Angle: ${data.arm_angle}` : 'Pitch Break';
+        breakmapContainer.querySelector('.graph-title').textContent = title;
+        const slot = breakmapContainer.querySelector('.breakmap-legend-slot');
+        slot.replaceChildren();
+        if (data.legend && data.legend.length && reports.getFilterBar()?.getChartPrefs().color_by !== 'velo') {
+            slot.appendChild(pitchTypeLegend(data.legend));
+        }
+    } else if (!heatmapContainer.childElementCount) {
+        for (const container of [heatmapContainer, breakmapContainer]) {
+            const note = document.createElement('p');
+            note.className = 'chart-unavailable';
+            note.textContent = 'Not available on your plan';
+            container.appendChild(note);
+        }
+    }
+}
+
+function renderCustomStats(root, data) {
+    const hasCustom = data.custom_stats || (data.custom_pitch_type_stats_tables && data.custom_pitch_type_stats_tables.length);
+    const customSection = root.querySelector('.custom-stats-section');
+    customSection.hidden = !hasCustom;
+
+    const tiles = root.querySelector('.custom-stats');
+    tiles.replaceChildren();
+    if (data.custom_stats) renderStatTiles(tiles, data.custom_stats);
+
+    const pitchTypeContainer = root.querySelector('.custom-pitch-type-stats');
+    pitchTypeContainer.replaceChildren();
+    for (const { title, html } of data.custom_pitch_type_stats_tables || []) {
+        const section = document.createElement('div');
+        section.style.cssText = 'max-width:1200px; margin: 8px auto;';
+        section.innerHTML = `<p class="graph-title">${title}</p><div class="table-section"><div class="table-scroll">${html}</div></div>`;
+        pitchTypeContainer.appendChild(section);
+    }
 }
 
 // Stamps one pitcher's data into the hidden <template> and appends the clone
@@ -246,79 +306,42 @@ function renderPitcherCard(data) {
     }
 
     const clone = template.content.cloneNode(true);
-    clone.querySelector('.user-name').textContent = data.pitcher_name;
+    const el = clone.querySelector('.report-card');
 
     const downloadContainer = clone.querySelector('.download-container');
-    if (downloadContainer && data.pdf_url) {
-        downloadContainer.innerHTML = `
-            <a href="${data.pdf_url}" download class="download-btn-small">
-                ${_fileIcon()} Download PDF
-            </a>`;
-        if (data.pitch_by_pitch_url) {
-            downloadContainer.innerHTML += `
-                <a href="${data.pitch_by_pitch_url}" download class="download-btn-small">
-                    ${_listIcon()} Pitch-by-Pitch
-                </a>`;
-        }
+    const pdfButton = document.createElement('button');
+    pdfButton.type = 'button';
+    pdfButton.className = 'download-btn-small';
+    pdfButton.innerHTML = `${_fileIcon()} Download PDF`;
+    pdfButton.addEventListener('click', () => reports.download([data.pitcher_id], pdfButton));
+    downloadContainer.appendChild(pdfButton);
+
+    if (data.pitch_by_pitch_url) {
+        const pbp = document.createElement('a');
+        pbp.className = 'download-btn-small pbp-link';
+        pbp.href = data.pitch_by_pitch_url;
+        pbp.download = '';
+        pbp.innerHTML = `${_listIcon()} Pitch-by-Pitch`;
+        downloadContainer.appendChild(pbp);
     }
 
-    // data-light-src / data-dark-src let core.js _swapChartImages() react to the theme toggle
-    const currentTheme = document.documentElement.getAttribute('data-theme') ?? 'light';
-
-    const heatmapContainer = clone.querySelector('.pitcher-heatmap');
-    if (heatmapContainer) {
-        for (const [lightSrc, darkSrc, label] of [
-            [data.heatmap_left_url, data.heatmap_left_dark_url, 'vs Left-Handed Batters'],
-            [data.heatmap_right_url, data.heatmap_right_dark_url, 'vs Right-Handed Batters'],
-        ]) {
-            heatmapContainer.appendChild(
-                chartBlock(lightSrc, darkSrc, label, currentTheme,
-                           `${data.pitcher_name} Heat Map ${label}`, 'report-img-heatmap'));
-        }
-    }
-
-    const breakmapContainer = clone.querySelector('.pitcher-breakmap');
-    if (breakmapContainer) {
-        const title = data.arm_angle ? `Pitch Break — Arm Angle: ${data.arm_angle}` : 'Pitch Break';
-        breakmapContainer.appendChild(
-            chartBlock(data.breakmap_url, data.breakmap_dark_url, title, currentTheme,
-                       `${data.pitcher_name} Break Map`, 'report-img-breakmap'));
-        if (data.breakmap_legend && data.breakmap_legend.length) {
-            breakmapContainer.appendChild(breakMapLegend(data.breakmap_legend));
-        }
-    }
-
-    clone.querySelector('.pitcher-table').innerHTML = data.pitcher_table || '';
-    clone.querySelector('.left-usage').innerHTML = data.left_usage_table || '';
-    clone.querySelector('.right-usage').innerHTML = data.right_usage_table || '';
-
-    // Custom stats from the school's own uploaded report script, if any --
-    // most schools have none, so the section stays hidden.
-    const hasCustom = data.custom_stats || (data.custom_pitch_type_stats_tables && data.custom_pitch_type_stats_tables.length);
-    if (hasCustom) {
-        const customSection = clone.querySelector('.custom-stats-section');
-        if (customSection) customSection.hidden = false;
-        renderStatTiles(clone.querySelector('.custom-stats'), data.custom_stats);
-
-        const pitchTypeContainer = clone.querySelector('.custom-pitch-type-stats');
-        if (pitchTypeContainer && data.custom_pitch_type_stats_tables) {
-            for (const { title, html } of data.custom_pitch_type_stats_tables) {
-                const section = document.createElement('div');
-                section.style.cssText = 'max-width:1200px; margin: 8px auto;';
-                section.innerHTML = `<p class="graph-title">${title}</p><div class="table-section"><div class="table-scroll">${html}</div></div>`;
-                pitchTypeContainer.appendChild(section);
-            }
-        }
-    }
-
-    const header = clone.querySelector('.report-card-header');
-    const body = clone.querySelector('.report-card-body');
-    header.addEventListener('click', (event) => {
-        // The download link lives inside the header; don't toggle when it's clicked
-        if (event.target.closest('a')) return;
-        const isOpen = body.classList.toggle('open');
-        header.classList.toggle('open', isOpen);
-    });
-
+    reports.register(el, data);
     document.querySelector('#report-output')?.appendChild(clone);
 }
+
+// Pitch-by-pitch PDFs are still built from a link, so the links carry the filters as they
+// are at click time rather than as they were when the card was drawn.
+document.addEventListener('click', (event) => {
+    const link = event.target.closest('a.pbp-link');
+    if (!link) return;
+    const url = new URL(link.href, window.location.origin);
+    url.searchParams.delete('filters');
+    const filters = reports.getFilterBar()?.getFilters();
+    if (filters && (filters.pitch_types || filters.velo)) {
+        url.searchParams.set('filters', JSON.stringify(filters));
+    }
+    link.href = url.pathname + url.search;
+});
+
+// The navbar's download link.
+window.downloadAllReports = () => reports.downloadAll();

@@ -3,6 +3,7 @@ Typed value objects for hitter stat reports, replacing the DataFrames
 hitter_report.py used to build and report_lab_generator.py used to render.
 """
 from dataclasses import dataclass, field
+from typing import Any
 
 import pandas as pd
 
@@ -18,10 +19,6 @@ class HitterPitchByPitchAtBat:
     pitcher_throws: str
     result: str  # final PA outcome (PlayResult, or KorBB for a walk/strikeout)
     pitches: list[PitchByPitchPitch]
-    # Path to this AB's pitch-location chart PNG, filled in by
-    # hitter_report.build_ab_pitch_charts after this dataclass is built. None
-    # until then, or if the AB had no located pitches to plot.
-    chart_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -94,6 +91,21 @@ class CustomHitTypeStat:
     """One batted-ball bucket's row in a runtime-defined custom stats table."""
     hit_type: str
     stats: dict[str, str]  # stat name -> pre-formatted value; keys are whatever the custom module tracks
+
+
+@dataclass(frozen=True)
+class CustomChart:
+    """
+    One chart a school's custom_hitter_report.py `get_charts` returns: a title and a Plotly
+    figure, {'data': [...], 'layout': {...}}.
+
+    The browser draws it (and re-colors it for dark mode) and renders the PNG the PDF uses, so a
+    script never touches an image file. Build the layout with plotly_charts.base_layout so it
+    picks up the app's fonts, grid and theme handling; shapes named 'ink' or 'muted' follow the
+    theme, any other shape keeps its own color.
+    """
+    title: str
+    figure: dict[str, Any]
 
 
 class CustomHitTypeStatsTable(StatTable[CustomHitTypeStat]):

@@ -19,6 +19,7 @@ import os
 import json
 import shutil
 import tempfile
+from functools import lru_cache
 from typing import Any
 
 import pandas as pd
@@ -441,6 +442,39 @@ def load_games(games_dir: str, content_hashes: list[str]) -> pd.DataFrame:
         return pd.DataFrame()
 
     return pd.concat(frames, ignore_index=True, sort=False)
+
+
+@lru_cache(maxsize=2)
+def _load_games_memo(games_dir: str, content_hashes: tuple[str, ...]) -> pd.DataFrame:
+    return load_games(games_dir, list(content_hashes))
+
+
+def load_games_cached(games_dir: str, content_hashes: list[str]) -> pd.DataFrame:
+    """
+    load_games, remembering the last couple of selections.
+
+    The report pages re-request the same selection on every filter or chart-mode change;
+    re-reading and concatenating every CSV each time is the slow part of that. Keyed on
+    the school's own games_dir plus the content hashes (a hash names fixed file content),
+    so one school can never be served another's frame. Callers MUST treat the returned
+    frame as read-only -- it is shared across requests.
+    """
+    return _load_games_memo(games_dir, tuple(sorted(content_hashes)))
+
+
+def load_range_cached(games_dir: str, start_date: str, end_date: str) -> pd.DataFrame:
+    """
+    load_range, remembering the last couple of selections (see load_games_cached).
+
+    The range is resolved to the content hashes of the games inside it first, so the cache
+    key names fixed file content: saving a new game into the range changes the key instead
+    of serving a stale frame. Callers MUST treat the returned frame as read-only.
+    """
+    hashes = [
+        e['content_hash'] for e in read_manifest(games_dir)
+        if e.get('content_hash') and e.get('date') and start_date <= e['date'] <= end_date
+    ]
+    return load_games_cached(games_dir, hashes) if hashes else pd.DataFrame()
 
 
 def list_games(

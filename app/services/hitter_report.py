@@ -6,19 +6,17 @@ incoming frame usually spans several games. Nothing here assumes a single game; 
 only per-row requirement is the TrackMan schema below.
 '''
 
-import dataclasses
-import inspect
-import os
+import json
 from typing import Protocol, TypeVar, overload
 
 import numpy as np
 import pandas as pd
-import matplotlib
 
 from app.services.custom_report_loader import load_custom_module
 from app.services.hitter_stats import (
     BattedBallStat,
     BattedBallTable,
+    CustomChart,
     CustomHitTypeStat,
     CustomHitTypeStatsTable,
     HitterDisciplineStat,
@@ -28,27 +26,10 @@ from app.services.hitter_stats import (
 )
 from app.services.pitch_stats import CustomStat, CustomStatsTable, CustomPitchTypeStatsTable, PitchByPitchPitch
 from app.services.report_theme import (
-    EV_MAX_MPH,
-    EV_MIN_MPH,
-    VELO_MAX_MPH,
-    VELO_MIN_MPH,
-    THEME_COLORS,
-    ev_colormap,
     format_result,
     in_zone,
-    make_homeplate,
-    make_shadow_zone,
-    make_strike_zone,
     pitch_order,
-    velo_colormap,
 )
-
-from matplotlib import pyplot as plt
-from matplotlib.axes import Axes
-from matplotlib.cm import ScalarMappable
-from matplotlib.colors import Normalize
-from matplotlib.lines import Line2D
-from matplotlib.patches import Rectangle
 
 # Launch-angle ceilings, in order, defining batted-ball buckets
 hit_types = {
@@ -242,129 +223,6 @@ def build_pitch_by_pitch_report(source: pd.DataFrame, batter_id: str | int, date
     except Exception as e:
         print(f"Error building pitch-by-pitch report for batter ID {batter_id}: {e}")
         return None
-
-
-# AB pitch-location chart bounds, in plate-location feet -- shared by the plot's
-# own axis limits, its solid outer frame, and _clamp_to_plot_bounds below.
-_AB_CHART_XLIM = (-2.5, 2.5)
-_AB_CHART_YLIM = (0.0, 5.0)
-# Half the marker's rendered diameter (in the same feet units), so a point
-# clamped to sit just inside the frame still draws as a full circle rather
-# than one edge of it poking back out past the frame.
-_AB_CHART_MARKER_MARGIN = 0.22
-
-
-def _clamp_to_plot_bounds(
-    x: float, y: float, xlim: tuple[float, float], ylim: tuple[float, float],
-) -> tuple[float, float]:
-    """Pin a point just inside [xlim, ylim] (padded by _AB_CHART_MARKER_MARGIN)
-    rather than at its true coordinate -- a pitch tracked well outside the
-    chart's own bounds would otherwise plot off-canvas and get clipped by the
-    axes into an unreadable half-circle with no visible number."""
-    x = min(max(x, xlim[0] + _AB_CHART_MARKER_MARGIN), xlim[1] - _AB_CHART_MARKER_MARGIN)
-    y = min(max(y, ylim[0] + _AB_CHART_MARKER_MARGIN), ylim[1] - _AB_CHART_MARKER_MARGIN)
-    return x, y
-
-
-def build_ab_pitch_charts(
-    at_bats: list[HitterPitchByPitchAtBat],
-    batter_id: str | int,
-    user_id: int,
-    output_dir: str,
-    theme: str = 'light',
-) -> list[HitterPitchByPitchAtBat]:
-    """
-    Render one small strike-zone panel per at-bat: every pitch as a numbered dot,
-    colored by release velocity -- mirrors report.build_ab_pitch_charts (the
-    pitcher-side pitch-by-pitch AB chart), styled like the app's other zone
-    charts (make_strike_zone/make_shadow_zone/make_homeplate). Requested by
-    Winthrop for the hitter pitch-by-pitch PDF, where report_lab_generator
-    places each chart directly above its own AB's table.
-
-    Returns a new list with chart_path filled in on each AB that had at least one
-    located pitch; an AB with no location data (or that fails to render) keeps
-    chart_path=None, which report_lab_generator treats as "no chart for this AB"
-    rather than an error.
-    """
-    matplotlib.rcParams.update(THEME_COLORS.get(theme, THEME_COLORS['light']))
-
-    charted: list[HitterPitchByPitchAtBat] = []
-    for n, ab in enumerate(at_bats, start=1):
-        located = [p for p in ab.pitches if p.plate_loc_side is not None and p.plate_loc_height is not None]
-        if not located:
-            charted.append(ab)
-            continue
-
-        fig = None
-        try:
-            fig, ax = plt.subplots(1, 1, figsize=(3.2, 4.0))
-            ax.set_xlim(*_AB_CHART_XLIM)
-            ax.set_ylim(*_AB_CHART_YLIM)
-            ax.set_aspect('equal', adjustable='box')
-            ax.axis('off')
-
-            edge = matplotlib.rcParams['axes.edgecolor']
-            # Solid frame at the plot's own data bounds -- separate from the
-            # strike/shadow zone dashes -- so a pitch plotted right at the edge
-            # reads as "at the edge of what this chart tracks" rather than
-            # looking like it could be centered just outside an unmarked canvas.
-            ax.add_patch(Rectangle(
-                (_AB_CHART_XLIM[0], _AB_CHART_YLIM[0]),
-                _AB_CHART_XLIM[1] - _AB_CHART_XLIM[0], _AB_CHART_YLIM[1] - _AB_CHART_YLIM[0],
-                linewidth=1.2, edgecolor=edge, facecolor='none', zorder=1,
-            ))
-            ax.add_patch(make_strike_zone())
-            ax.add_patch(make_shadow_zone())
-            ax.add_patch(make_homeplate())
-
-            # A pitch with a located spot but no tracked velo still gets plotted
-            # -- masked rather than dropped -- so it doesn't silently vanish from
-            # the panel; set_bad on velo_colormap renders it neutral gray.
-            velos = np.ma.masked_invalid(np.array(
-                [p.velo if p.velo is not None else np.nan for p in located], dtype=float))
-            # A pitch tracked well outside the plot's own bounds (a badly missed
-            # target, or a bad location read) plots at its true coordinate,
-            # clipped by the axes -- half a marker with no visible number,
-            # rather than a legible dot. Pin it just inside the frame instead:
-            # still off in the right direction, but fully drawn and readable.
-            plot_points: list[tuple[float, float]] = []
-            for p in located:
-                # located's filter already guarantees these aren't None;
-                # re-narrow into locals since mypy doesn't carry that through
-                # the list it was built from.
-                side, height = p.plate_loc_side, p.plate_loc_height
-                assert side is not None and height is not None
-                plot_points.append(_clamp_to_plot_bounds(side, height, _AB_CHART_XLIM, _AB_CHART_YLIM))
-            plot_sides = [x for x, _ in plot_points]
-            plot_heights = [y for _, y in plot_points]
-
-            scatter = ax.scatter(
-                plot_sides, plot_heights,
-                c=velos, cmap=velo_colormap(theme), norm=Normalize(vmin=VELO_MIN_MPH, vmax=VELO_MAX_MPH),
-                s=150, edgecolors=edge, linewidth=0.8, zorder=5,
-            )
-            for pitch, (x, y) in zip(located, plot_points):
-                ax.annotate(
-                    str(pitch.number), (x, y),
-                    ha='center', va='center', fontsize=9, fontweight='bold', color='black', zorder=6,
-                )
-
-            bar = fig.colorbar(scatter, ax=ax, fraction=0.045, pad=0.03, shrink=0.6)
-            bar.set_label('Velo (mph)', fontsize=12, fontweight='bold')
-            bar.ax.tick_params(labelsize=10)
-            bar.outline.set_edgecolor(edge)  # type: ignore[operator]  # matplotlib stub mistypes Colorbar.outline as callable
-
-            path = os.path.join(output_dir, f'{user_id}_hitter_{batter_id}_ab_chart_{n}.png')
-            fig.savefig(path, dpi=300, bbox_inches='tight', transparent=True)
-            charted.append(dataclasses.replace(ab, chart_path=path))
-        except Exception as e:
-            print(f"Error generating AB chart {n} for batter ID {batter_id}: {e}")
-            charted.append(ab)
-        finally:
-            if fig is not None:
-                plt.close(fig)
-
-    return charted
 
 
 def _swings(pitch_calls: pd.Series) -> pd.Series:
@@ -561,205 +419,6 @@ def build_batted_ball_table(source: pd.DataFrame, batter_id: str | int) -> Batte
     return BattedBallTable(stats)
 
 
-def _draw_field(ax: Axes) -> None:
-    """Foul lines, outfield arc and infield diamond, for orientation."""
-    edge = matplotlib.rcParams['axes.edgecolor']
-
-    foul_x, foul_y = calculate_x_y_coordinates(400, 45)
-    ax.plot([0, -foul_x], [0, foul_y], color=edge, linewidth=1, alpha=0.5)
-    ax.plot([0, foul_x], [0, foul_y], color=edge, linewidth=1, alpha=0.5)
-
-    arc_angles = np.linspace(-45, 45, 120)
-    arc_x, arc_y = calculate_x_y_coordinates(400, arc_angles)
-    ax.plot(arc_x, arc_y, color=edge, linewidth=1, alpha=0.5)
-
-    base_x, base_y = calculate_x_y_coordinates(90, 45)
-    ax.plot(
-        [0, base_x, 0, -base_x, 0],
-        [0, base_y, base_y * 2, base_y, 0],
-        color=edge, linewidth=1, alpha=0.35,
-    )
-
-    _draw_distance_markers(ax, edge)
-
-
-# Every 100 ft out to the 400 ft arc the field already draws.
-DISTANCE_MARKERS_FT = (100, 200, 300, 400)
-
-
-def _draw_distance_markers(ax: Axes, edge: str) -> None:
-    """
-    Distance rings across fair territory, ticked and labelled on the first-base line.
-
-    Without them a landing spot reads as a direction only -- the axes carry no
-    ticks, so nothing else in the chart states a scale. The labels go on the
-    first-base line because that side is clear: the batted-ball legend sits upper
-    right but well above the arc, and the exit-velocity colorbar is outside the axes.
-
-    Ticks straddle the line and labels sit just off it along the outward normal,
-    which puts them in foul ground where no batted ball can plot, so they never
-    collide with the markers.
-    """
-    along = np.array(calculate_x_y_coordinates(1, 45))   # unit vector up the line
-    normal = np.array([along[1], -along[0]])             # 90 deg out into foul ground
-
-    # Same span as the outfield arc, so the rings stop dead on the foul lines
-    # instead of trailing off into foul ground.
-    arc_angles = np.linspace(-45, 45, 120)
-
-    for feet in DISTANCE_MARKERS_FT:
-        point = np.array(calculate_x_y_coordinates(feet, 45))
-
-        # The outermost ring is the outfield arc _draw_field already drew solid;
-        # a dotted one on top of it would just fight with it.
-        if feet != DISTANCE_MARKERS_FT[-1]:
-            arc_x, arc_y = calculate_x_y_coordinates(feet, arc_angles)
-            # Dotted and fainter than the field outline: these are a background
-            # reference, and at full weight four of them read as the field itself.
-            ax.plot(arc_x, arc_y, color=edge, linewidth=0.9,
-                    linestyle=':', alpha=0.3, zorder=1)
-
-        tick_start, tick_end = point - normal * 9, point + normal * 9
-        ax.plot([tick_start[0], tick_end[0]], [tick_start[1], tick_end[1]],
-                color=edge, linewidth=1, alpha=0.5)
-
-        # 'ft' on the outermost label only -- repeating it on all four is noise
-        # once the unit is established. The offset clears the longer tick and the
-        # taller text; at 26 ft the label still reads as belonging to its tick.
-        label_at = point + normal * 26
-        ax.text(label_at[0], label_at[1],
-                f'{feet} ft' if feet == DISTANCE_MARKERS_FT[-1] else f'{feet}',
-                color=edge, fontsize=13, alpha=0.85,
-                ha='center', va='center',
-                rotation=45, rotation_mode='anchor')
-
-
-def hitter_spray_chart_by_pitcher_side(
-    source: pd.DataFrame,
-    id: int,
-    output_path: str,
-    batter_id: str | int,
-    theme: str = 'light',
-) -> None:
-    """
-    Batted-ball spray charts for one hitter, split by the handedness of the pitcher.
-
-    Landing spots come from Bearing and Distance. PitchLastMeasuredX/Z look like the
-    obvious choice but TrackMan leaves them empty, which plots as nothing at all.
-
-    Writes {id}_hitter_{batter_id}_spray_{side}_{theme}.png into output_path, matching
-    the naming the pitcher charts use.
-    """
-    try:
-        matplotlib.rcParams.update(THEME_COLORS.get(theme, THEME_COLORS['light']))
-
-        batter_data = batter_rows(source, batter_id)
-
-        for pitcher_side in ['Left', 'Right']:
-            fig = None
-            try:
-                fig, ax = plt.subplots(figsize=(8, 8))
-                ax.set_xlim(-350, 350)
-                ax.set_ylim(-20, 450)
-                ax.set_aspect('equal')
-                ax.set_xticks([])
-                ax.set_yticks([])
-                for spine in ax.spines.values():
-                    spine.set_visible(False)
-
-                _draw_field(ax)
-
-                side_data = batter_data[_text(batter_data, 'PitcherThrows') == pitcher_side].copy()
-
-                # Only balls in play carry a landing spot; takes and whiffs have none
-                side_data['_Bearing'] = _numeric(side_data, 'Bearing')
-                side_data['_Distance'] = _numeric(side_data, 'Distance')
-                side_data['_ExitSpeed'] = _numeric(side_data, 'ExitSpeed')
-                side_data['_Angle'] = _numeric(side_data, 'Angle')
-                side_data = side_data.dropna(subset=['_Bearing', '_Distance'])
-
-                if side_data.empty:
-                    ax.text(0, 215, f'No batted balls vs {pitcher_side}-handed pitching',
-                            ha='center', va='center', fontsize=14)
-                else:
-                    x_coords, y_coords = calculate_x_y_coordinates(
-                        side_data['_Distance'], side_data['_Bearing'])
-                    # Color by exit velocity. Values outside the ramp's range clamp
-                    # to its ends rather than dropping out.
-                    colors = side_data['_ExitSpeed'].clip(EV_MIN_MPH, EV_MAX_MPH)
-
-                    hit_type = classify_hit_type(side_data['_Angle'])
-
-                    # Charts save transparent, so a marker's only separation from
-                    # whatever sits behind it is its outline. The theme's own edge
-                    # colour is by definition the high-contrast choice there, and it
-                    # keeps the pale end of the ramp locatable on a light page.
-                    edge = matplotlib.rcParams['axes.edgecolor']
-                    cmap = ev_colormap(theme)
-                    norm = Normalize(vmin=EV_MIN_MPH, vmax=EV_MAX_MPH)
-
-                    # One scatter per marker shape -- matplotlib takes a single marker
-                    # per call, so grouping here avoids a per-point plotting loop.
-                    # Every call shares one norm; left to themselves each would
-                    # rescale to its own group and the same speed would land on a
-                    # different colour in each.
-                    for label, marker in hit_types_markers.items():
-                        mask = (hit_type == label).to_numpy()
-                        if not mask.any():
-                            continue
-                        ax.scatter(
-                            x_coords[mask],
-                            y_coords[mask],
-                            c=colors[mask],
-                            cmap=cmap,
-                            norm=norm,
-                            marker=marker,
-                            s=100,
-                            edgecolors=edge,
-                            linewidths=0.9,
-                            alpha=0.9,
-                            zorder=3,
-                        )
-
-                    # Colour now carries a measurement, so it needs a scale to be
-                    # readable at all. Built from a standalone mappable rather than
-                    # a scatter handle, so it renders the full range even when only
-                    # some batted-ball types are present.
-                    bar = fig.colorbar(
-                        ScalarMappable(norm=norm, cmap=cmap), ax=ax,
-                        fraction=0.030, pad=0.01, shrink=0.55,
-                    )
-                    bar.set_label('Exit Velocity (mph)', fontsize=9)
-                    bar.ax.tick_params(labelsize=8)
-                    bar.outline.set_edgecolor(edge)  # type: ignore[operator]  # matplotlib stub mistypes Colorbar.outline as callable
-
-                    # Marker shape still encodes batted-ball type, so that key stays.
-                    # The pitch-type key is gone -- colour means exit velocity now.
-                    ax.legend(
-                        handles=[Line2D([], [], marker=marker, linestyle='none',
-                                        color=matplotlib.rcParams['text.color'], label=label)
-                                 for label, marker in hit_types_markers.items()],
-                        loc='upper right', fontsize=9, frameon=False,
-                    )
-
-                # No axes title -- both the PDF section header and the page's
-                # graph-subtitle already name the split, so one here reads as a duplicate
-
-                fig.savefig(
-                    os.path.join(output_path,
-                                 f'{id}_hitter_{batter_id}_spray_{pitcher_side.lower()}_{theme}.png'),
-                    pad_inches=0.3, dpi=300, bbox_inches='tight', transparent=True)
-
-            except Exception as e:
-                print(f"Error generating spray chart ({pitcher_side}) for batter ID {batter_id}: {e}")
-            finally:
-                if fig is not None:
-                    plt.close(fig)
-
-    except Exception as e:
-        print(f"Error generating spray chart for batter ID {batter_id}: {e}")
-
-
 def custom_stats_table(source: pd.DataFrame, batter_id: str | int, school_id: int) -> CustomStatsTable | None:
     """Custom statistics table for one hitter, built by the school's custom_hitter_report.py (tier 3)."""
     try:
@@ -814,26 +473,42 @@ def custom_pitch_type_stats_table(source: pd.DataFrame, batter_id: str | int, sc
         return None
 
 
-def custom_charts(
-    source: pd.DataFrame, batter_id: str | int, school_id: int, user_id: int, output_dir: str,
-    theme: str = 'light',
-) -> list[tuple[str, str]] | None:
+MAX_CUSTOM_CHARTS = 6
+MAX_CUSTOM_FIGURE_BYTES = 1_000_000
+
+
+def _valid_custom_chart(chart: object) -> CustomChart | None:
+    """A chart a school's script returned, if it is one the page can safely draw: a title and a
+    Plotly {'data': [...], 'layout': {...}} that is strict JSON (a bare NaN would break the
+    stream the page reads) and not enormous. Anything else is logged and skipped."""
+    if not isinstance(chart, CustomChart):
+        print(f"Skipping custom chart: expected a CustomChart, got {type(chart).__name__} "
+              "(a script still returning image paths needs updating)")
+        return None
+    figure = chart.figure
+    if not (isinstance(chart.title, str) and chart.title and isinstance(figure, dict)
+            and isinstance(figure.get('data'), list) and isinstance(figure.get('layout'), dict)):
+        print(f"Skipping custom chart {chart.title!r}: figure must be {{'data': [...], 'layout': {{...}}}}")
+        return None
+    try:
+        size = len(json.dumps(figure, allow_nan=False))
+    except (TypeError, ValueError) as e:
+        print(f"Skipping custom chart {chart.title!r}: figure is not strict JSON ({e})")
+        return None
+    if size > MAX_CUSTOM_FIGURE_BYTES:
+        print(f"Skipping custom chart {chart.title!r}: figure is {size} bytes")
+        return None
+    return chart
+
+
+def custom_charts(source: pd.DataFrame, batter_id: str | int, school_id: int) -> list[CustomChart] | None:
     """
-    Custom chart image(s) for one hitter, rendered by the school's own
-    custom_hitter_report.py (tier 3) and saved into output_dir.
+    Custom charts for one hitter, built by the school's own custom_hitter_report.py (tier 3).
 
-    user_id is passed through to get_charts (not just batter_id) so the school's
-    script can namespace its own filenames the same way hitter_spray_chart_by_pitcher_side
-    above does -- every temp file in this app is prefixed by the requesting user's id,
-    not just the batter's, so two coaches at the same school generating reports for the
-    same batter at the same time can't clobber each other's output.
-
-    Returns (title, path) pairs. The school's script has full freedom to do its
-    own matplotlib rendering from the raw source rows -- same primitives
-    hitter_spray_chart_by_pitcher_side above already uses (report_theme.THEME_COLORS,
-    ev_colormap, classify_hit_type). theme is only passed to scripts whose
-    get_charts declares a theme parameter -- older scripts without one keep
-    rendering whatever single theme they always have, rather than raising.
+    The script's `get_charts(source, batter_id)` returns CustomChart(title, figure) -- a Plotly
+    figure the browser draws and exports (see hitter_stats.CustomChart). Anything it returns that
+    isn't a valid chart is logged and skipped, and so is a script that raises, so one bad chart
+    degrades that chart only.
     """
     try:
         custom_module = load_custom_module(school_id, 'custom_hitter_report.py')
@@ -844,10 +519,8 @@ def custom_charts(
         if get_charts is None:
             return None
 
-        if 'theme' in inspect.signature(get_charts).parameters:
-            charts: list[tuple[str, str]] = get_charts(source, batter_id, user_id, output_dir, theme=theme) or []
-        else:
-            charts = get_charts(source, batter_id, user_id, output_dir) or []
+        returned = get_charts(source, batter_id) or []
+        charts = [c for c in (_valid_custom_chart(item) for item in returned[:MAX_CUSTOM_CHARTS]) if c is not None]
         return charts or None
     except Exception as e:
         print(f"Error generating custom charts for batter ID {batter_id}: {e}")

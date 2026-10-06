@@ -2,33 +2,36 @@
 
 Flask blueprints. School-scoping and auth live here — see root CLAUDE.md's Key Rules.
 
-## Streamed, parallel report building (pitching.py, batting.py)
+## Report pages: filtered, Plotly-drawn reports (pitching.py, batting.py, catching.py)
 
-`/api/pitching/report` and `/api/batting/report` build every pitcher's/hitter's report
-in a `ProcessPoolExecutor` and stream results back as newline-delimited JSON (one
-`{"type": "report", ...}` line per pitcher/hitter as their report finishes, then one
-`{"type": "done", ...}` line with the merged-PDF URL and run summary) via
-`Response(stream_with_context(...), mimetype='application/x-ndjson')`.
+All three pages follow one shape, built in-process (no worker pool anywhere):
 
-The per-pitcher/per-hitter worker (`_build_one_pitcher_report` / `_build_one_hitter_report`)
-runs in a **separate process** — it must be a module-level function (picklable, importable
-by the spawned/forked child) and must not touch `current_user`, `db.session`, `session`,
-`request`, or anything else tied to Flask's app/request context. Resolve everything the
-worker needs (ids, folder paths, the user's `chart_style`/`ink_mode`, branding dict,
-pre-fetched DB lookups like pitcher height/weight/age) in the view function first, and
-hand it over as a plain dict via `executor.submit(worker_fn, task_dict)`. If a future
-change needs something from the DB per-pitcher, fetch it for every pitcher up front in
-the view function (see `pitcher_meta_by_id` in `pitching.py`) rather than querying inside
-the worker.
+- `POST /api/<page>/report` streams NDJSON: a `meta` line (filter-bar contents + the chart
+  defaults), one `report` card per pitcher/hitter/catcher, then `done`. Cards carry stat-table
+  HTML and Plotly *figure specs* -- no chart PNGs, no PDFs are built there.
+- `POST /api/<page>/pitcher|hitter|catcher` rebuilds one card for new filters/chart options
+  (`charts_only` skips the tables).
+- `POST /api/<page>/export` builds the PDF on demand: it recomputes every number from the
+  school's archive and takes only the filters (validated by `PitchFilters.from_request`) and the
+  browser-rendered chart PNGs (validated by `chart_images.save_chart_image`) from the client.
+  Each export works in its own `utils.export_workdir` and returns the PDF from memory.
+- Pitch-by-pitch PDFs are GET links built on request (vector at-bat panels, so they are cheap);
+  they carry the filters as a JSON `filters` query param (`utils.filters_from_args`).
 
-`source` (the full multi-pitcher/both-teams DataFrame) is passed whole to every task
-rather than pre-filtered to one pitcher's rows, deliberately matching what the
-old sequential loop passed into these same `report.py`/`hitter_report.py` functions —
-some of them read from unfiltered `source` (e.g. `build_table`'s `source['BatterTeam'].iloc[0]`),
-so filtering down without auditing every callee first would risk silently changing
-behavior. This does mean `source` gets pickled once per task; if that ever becomes a real
-bottleneck, that's the place to optimize, not by guessing at which rows are safe to drop.
+Every route that reads games applies `PitchFilters.apply(source)` once, right after loading, so
+tables, charts, custom scripts and the pitch-by-pitch PDFs all see the same pitches. Games load
+through `game_archive.load_games_cached` / `load_range_cached` (last 2 selections; the frame is
+shared, so never mutate it). Account defaults and shared helpers live in `routes/utils.py`
+(`chart_prefs`, `charts_enabled`, `export_workdir`).
 
-Frontend side: `readNdjson(response)` in `core.js` is the shared async generator both
-`pitching.js` and `batting.js` use to read the streamed body — reuse it rather than
+Don't read `current_user` inside `app/services` -- `_card_payload` and the export views read it in
+the view layer and pass plain values down.
+
+Colors: hitter spray charts color "velocity" by *exit* velocity; the catcher page adds `framing`
+and defaults to it regardless of the account's pitch-type/velocity setting.
+
+Frontend side: `report_cards.js` (`createReportCards`) owns the cards on all three pages --
+filter refresh, Plotly drawing, client-side PNG export -- and each page supplies only its own
+endpoints and how a card's tables are filled in. `readNdjson(response)` in `core.js` is the shared
+async generator the pages use to read the streamed body — reuse it rather than
 writing another NDJSON reader if a third route ever streams results the same way.
