@@ -144,16 +144,23 @@ def save_game() -> ResponseReturnValue:
 
     filepath = matches[0]
 
+    # Parsed once and shared: the database write and the archive used to each re-read the file.
+    try:
+        source = _read_source(filepath)
+    except Exception as e:
+        return jsonify({'error': f'Could not read the file: {e}'}), 400
+
     if not practice:
         with open(filepath, 'rb') as f:
             add_report(
                 school_id=current_user.school_id,
                 trackman_id=current_user.school.trackman_id,
                 file=f,
+                source=source,
             )
 
     entry = game_archive.archive_game(
-        get_school_games_directory(), filepath, practice=practice)
+        get_school_games_directory(), filepath, practice=practice, source=source)
 
     if entry is None:
         return jsonify({'message': 'Game was already saved.', 'duplicate': True})

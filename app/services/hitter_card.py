@@ -70,13 +70,17 @@ def build_hitter_charts(
 
 def build_hitter_data(
     source: pd.DataFrame, batter_id: str | int, filters: PitchFilters, *, school_id: int, is_active: bool,
+    filtered: pd.DataFrame | None = None,
 ) -> HitterData | None:
     """
     Stat tables and custom stats for one hitter over the filtered pitches.
 
     Returns None when no pitch he saw passes the filters (the page shows an empty card).
+    `filtered` is filters.apply(source) when the caller is building several hitters from the
+    same source and has already done it once.
     """
-    filtered = filters.apply(source)
+    if filtered is None:
+        filtered = filters.apply(source)
     rows = hitter_report.batter_rows(filtered, batter_id)
     if rows.empty:
         return None

@@ -239,6 +239,11 @@
     margin-bottom: 16px;
 }
 
+/* display:flex above would otherwise beat the hidden attribute */
+.chart-filters[hidden] {
+    display: none;
+}
+
 .chart-filter-group {
     display: flex;
     flex-direction: column;

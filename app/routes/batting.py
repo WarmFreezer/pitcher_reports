@@ -4,6 +4,7 @@ import os
 import traceback
 from collections.abc import Generator, Mapping
 from dataclasses import dataclass
+from functools import cached_property
 from datetime import datetime
 from typing import Any
 
@@ -86,6 +87,11 @@ class _Selection:
     def date_range(self) -> str:
         return f'{_display_date(self.start_date)} - {_display_date(self.end_date)}'
 
+    @cached_property
+    def filtered(self) -> pd.DataFrame:
+        """filters.apply(source), made at most once per request however many hitters it builds."""
+        return self.filters.apply(self.source)
+
 
 def _selection(params: Mapping[str, Any]) -> tuple[_Selection | None, ResponseReturnValue | None]:
     games_dir, start_date, end_date, error = _resolve_range(params)
@@ -125,7 +131,8 @@ def _card_payload(sel: _Selection, batter_id: str, *, charts_only: bool = False)
     if not charts_only:
         data = hitter_card.build_hitter_data(
             sel.source, batter_id, sel.filters,
-            school_id=current_user.school_id, is_active=current_user.school.is_active)
+            school_id=current_user.school_id, is_active=current_user.school.is_active,
+            filtered=sel.filtered)
         if data is None:
             payload['hitter_name'] = hitter_report.batter_name(sel.source, batter_id)
             payload['empty'] = True
@@ -341,7 +348,8 @@ def batting_export() -> ResponseReturnValue:
         for batter_id in batter_ids:
             data = hitter_card.build_hitter_data(
                 sel.source, batter_id, sel.filters,
-                school_id=current_user.school_id, is_active=current_user.school.is_active)
+                school_id=current_user.school_id, is_active=current_user.school.is_active,
+                filtered=sel.filtered)
             if data is None:
                 continue  # nothing passes the filters for this hitter
 

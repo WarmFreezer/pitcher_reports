@@ -41,9 +41,11 @@ def _native(val: Any) -> Any:
 def hash_file(file: BinaryIO) -> str:
     """MD5 checksum of a file's contents, leaving the read position unchanged."""
     file.seek(0)  # Ensure we're at the start of the file
-    h = hashlib.md5(file.read()).hexdigest()[:128]
+    h = hashlib.md5()
+    for chunk in iter(lambda: file.read(1024 * 1024), b''):  # chunked: never hold the whole file
+        h.update(chunk)
     file.seek(0)  # Reset file pointer after reading
-    return h
+    return h.hexdigest()[:128]
 
 def add_pitcher(school_id: int, trackman_id: str | int, name: str) -> int:
     """Find or create a Pitcher for this school by TrackMan id; returns its db id."""
@@ -165,11 +167,17 @@ def update_outing_pitch_stats(pitcher_id: int, outing_id: int, source: pd.DataFr
     add_outing_pitch_stats(pitcher_id, outing_id, source)
     db.session.commit()
 
-def add_report(school_id: int, trackman_id: str, file: BinaryIO) -> None:
-    """Parse a TrackMan file and persist an Outing + pitch stats per pitcher, skipping duplicates by content hash."""
+def add_report(school_id: int, trackman_id: str, file: BinaryIO, source: pd.DataFrame | None = None) -> None:
+    """
+    Parse a TrackMan file and persist an Outing + pitch stats per pitcher, skipping duplicates by content hash.
+
+    Pass `source` (the already-parsed file) to skip re-reading it.
+    """
     content_hash = hash_file(file)
     filepath = file.name
-    if filepath.endswith(('.xlsx', '.xls')):
+    if source is not None:
+        pass
+    elif filepath.endswith(('.xlsx', '.xls')):
         source = pd.read_excel(filepath)
     else:
         source = pd.read_csv(filepath)

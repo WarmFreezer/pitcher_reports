@@ -245,3 +245,51 @@ def test_remove_game_then_rebuild_stays_consistent(games_dir):
     count = game_archive.rebuild_manifest(games_dir)
 
     assert count == 1
+
+
+# --- load_games_cached: one selection, freed on change ---------------------
+
+@pytest.fixture(autouse=True)
+def _fresh_frame_cache():
+    game_archive.clear_frame_cache()
+    yield
+    game_archive.clear_frame_cache()
+
+
+def test_cached_load_reuses_the_frame_for_the_same_selection(games_dir):
+    hashes = [g['content_hash'] for g in game_archive.list_games(games_dir, HOME)]
+
+    first = game_archive.load_games_cached(games_dir, hashes)
+    second = game_archive.load_games_cached(games_dir, list(reversed(hashes)))
+
+    assert second is first
+
+
+def test_cached_load_keeps_only_the_latest_selection(games_dir):
+    games = game_archive.list_games(games_dir, HOME)
+    one, both = [games[0]['content_hash']], [g['content_hash'] for g in games]
+
+    first = game_archive.load_games_cached(games_dir, one)
+    game_archive.load_games_cached(games_dir, both)
+    again = game_archive.load_games_cached(games_dir, one)
+
+    assert again is not first
+
+
+def test_removing_a_game_drops_the_cached_frame(games_dir):
+    games = game_archive.list_games(games_dir, HOME)
+    hashes = [g['content_hash'] for g in games]
+    cached = game_archive.load_games_cached(games_dir, hashes)
+
+    game_archive.remove_game(games_dir, hashes[0])
+
+    assert game_archive.load_games_cached(games_dir, hashes[1:]) is not cached
+
+
+def test_cache_entry_expires(games_dir):
+    hashes = [g['content_hash'] for g in game_archive.list_games(games_dir, HOME)]
+    first = game_archive.load_games_cached(games_dir, hashes)
+
+    game_archive._expire((games_dir, tuple(sorted(hashes))))
+
+    assert game_archive.load_games_cached(games_dir, hashes) is not first

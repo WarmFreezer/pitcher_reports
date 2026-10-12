@@ -166,28 +166,33 @@ def _team_pitchers(source: pd.DataFrame, target: str) -> pd.DataFrame:
     """The Own/Opponent switch filters which arms get reports, not which games were
     selected -- both teams pitched in every game on the list."""
     trackman_id = current_user.school.trackman_id
+    # Only the three columns the callers read (ids, pitch types, velo bounds) -- not a
+    # copy of the whole wide frame just to learn who pitched.
+    columns = ['PitcherId', 'TaggedPitchType', 'RelSpeed']
     if target == 'opponent':
-        return source[source['PitcherTeam'] != trackman_id]
-    return source[source['PitcherTeam'] == trackman_id]
+        return source.loc[source['PitcherTeam'] != trackman_id, columns]
+    return source.loc[source['PitcherTeam'] == trackman_id, columns]
 
 
 def _card_payload(
     source: pd.DataFrame, pitcher_id: int, filters: PitchFilters, prefs: ChartPrefs,
-    *, charts_only: bool = False,
+    *, charts_only: bool = False, filtered: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
     """
     One pitcher's JSON card for the current filters. Built in-process; current_user is
     read here, in the view layer, and never inside the services it calls.
 
     charts_only skips the stat tables -- a color-by or scatter/heatmap change redraws the
-    charts but can't change a single number.
+    charts but can't change a single number. `filtered` is filters.apply(source) when the
+    caller is building many cards and has already done it once.
     """
     payload: dict[str, Any] = {'ok': True, 'pitcher_id': str(pitcher_id)}
 
     if not charts_only:
         data = pitcher_card.build_pitcher_data(
             source, pitcher_id, filters,
-            school_id=current_user.school_id, is_active=current_user.school.is_active)
+            school_id=current_user.school_id, is_active=current_user.school.is_active,
+            filtered=filtered)
         if data is None:
             payload['pitcher_name'] = pitcher_card.pitcher_name_in(source, pitcher_id) or str(pitcher_id)
             payload['empty'] = True
@@ -276,9 +281,11 @@ def pitching_report() -> ResponseReturnValue:
 
         reports_built = 0
         failed: list[str] = []
+        # Filter once for the whole staff instead of rebuilding a filtered copy per pitcher.
+        filtered = filters.apply(source)
         for pid in pitcher_ids:
             try:
-                card = _card_payload(source, pid, filters, prefs)
+                card = _card_payload(source, pid, filters, prefs, filtered=filtered)
             except Exception as e:
                 failed.append(str(pid))
                 print(f"Error processing pitcher ID {pid}: {e}")
@@ -405,10 +412,12 @@ def pitching_export() -> ResponseReturnValue:
         gen = PDF_Generator(school_id=current_user.school_id, branding=branding, ink_mode=current_user.ink_mode)
         built: list[int] = []
         failed = 0
+        filtered = filters.apply(source)  # once, not once per pitcher
         for pid in pitcher_ids:
             data = pitcher_card.build_pitcher_data(
                 source, pid, filters,
-                school_id=current_user.school_id, is_active=current_user.school.is_active)
+                school_id=current_user.school_id, is_active=current_user.school.is_active,
+                filtered=filtered)
             if data is None:
                 continue  # nothing passes the filters for this arm
 
@@ -567,9 +576,9 @@ def pitching_pitch_by_pitch_all() -> ResponseReturnValue:
     source = filters.apply(source)
 
     if target == 'opponent':
-        matching = source[source['PitcherTeam'] != trackman_id]
+        matching = source.loc[source['PitcherTeam'] != trackman_id, 'PitcherId']
     else:
-        matching = source[source['PitcherTeam'] == trackman_id]
+        matching = source.loc[source['PitcherTeam'] == trackman_id, 'PitcherId']
 
     if matching.empty:
         side = 'opponent' if target == 'opponent' else 'your team'
@@ -592,7 +601,7 @@ def pitching_pitch_by_pitch_all() -> ResponseReturnValue:
         except OSError as e:
             print(f"Error deleting stale pitch-by-pitch output: {path} - {e}")
 
-    pitcher_ids = list(matching['PitcherId'].unique())
+    pitcher_ids = list(matching.unique())
     tasks = [{
         'pitcher_id': pid,
         'source': source,

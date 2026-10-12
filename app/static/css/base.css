@@ -79,6 +79,13 @@
     scrollbar-color: var(--bg-hover) var(--bg-card);
 }
 
+/* Text selection in the school's accent. Translucent so the text keeps its own color
+   and stays readable in both themes. */
+::selection {
+    background: color-mix(in srgb, var(--accent) 35%, transparent);
+    color: inherit;
+}
+
 ::-webkit-scrollbar {
     width: 8px;
     height: 8px;

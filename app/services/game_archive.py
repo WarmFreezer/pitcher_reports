@@ -19,11 +19,12 @@ import os
 import json
 import shutil
 import tempfile
-from functools import lru_cache
+import threading
 from typing import Any
 
 import pandas as pd
 
+from app.services import memory_log
 from app.services.team_stats import hash_file
 
 MANIFEST_NAME = 'index.json'
@@ -191,12 +192,15 @@ def _pitchers(source: pd.DataFrame) -> list[GameEntry]:
         for pitcher_id, row in grouped.iterrows()
     ]
 
-def archive_game(games_dir: str, filepath: str, practice: bool = False) -> GameEntry | None:
+def archive_game(
+    games_dir: str, filepath: str, practice: bool = False, source: pd.DataFrame | None = None,
+) -> GameEntry | None:
     """
     Copy a saved TrackMan file into the school's game archive and index it.
 
     Returns the manifest entry, or None when the game is already archived or the
     file has no usable date. Mirrors the content-hash dedup in team_stats.add_report.
+    Pass `source` (the already-parsed file) to skip re-reading it.
     """
     with open(filepath, 'rb') as f:
         content_hash = hash_file(f)
@@ -206,7 +210,8 @@ def archive_game(games_dir: str, filepath: str, practice: bool = False) -> GameE
         print("Game already archived. No new file added.")
         return None
 
-    source = _read_source(filepath)
+    if source is None:
+        source = _read_source(filepath)
 
     date = _game_date(source)
     if date is None:
@@ -228,6 +233,7 @@ def archive_game(games_dir: str, filepath: str, practice: bool = False) -> GameE
     entries.append(entry)
     entries.sort(key=lambda e: e.get('date', ''))
     _write_manifest(games_dir, entries)
+    clear_frame_cache()
 
     return entry
 
@@ -256,6 +262,7 @@ def remove_game(games_dir: str, content_hash: str) -> bool:
             break
 
     _write_manifest(games_dir, new_entries)
+    clear_frame_cache()
     print(f"Game with content hash {content_hash} removed from archive.")
     return True
 
@@ -406,18 +413,20 @@ def list_catchers(
     return sorted(catchers.values(), key=lambda c: c['name'])
 
 
-def load_games(games_dir: str, content_hashes: list[str]) -> pd.DataFrame:
+def _concat_games(games_dir: str, entries: list[GameEntry]) -> pd.DataFrame:
     """
-    Concatenate every archived game whose content hash is in content_hashes.
+    Read and concatenate the given manifest entries, tagging each row with its game's
+    manifest date as GameDate.
 
-    Returns an empty DataFrame when nothing is in range.
+    .copy() before assigning, not after: a freshly-read CSV/XLSX frame with many
+    mixed-dtype columns can already be block-fragmented, and adding a column via
+    item-assignment on top of that triggers pandas' fragmentation warning. Copying first
+    consolidates it into one block. (Setting GameDate once on the combined frame instead
+    was measured: higher peak memory and the same warning, so don't.)
     """
-    frames = []
+    frames: list[pd.DataFrame] = []
 
-    for entry in read_manifest(games_dir):
-        if entry.get('content_hash') not in content_hashes:
-            continue
-
+    for entry in entries:
         path = os.path.join(games_dir, entry['file'])
         if not os.path.exists(path):
             print(f"Archived game missing from disk, skipping: {path}")
@@ -429,11 +438,6 @@ def load_games(games_dir: str, content_hashes: list[str]) -> pd.DataFrame:
             print(f"Could not read archived game {path}: {e}")
             continue
 
-        # .copy() before assigning, not after: a freshly-read CSV/XLSX frame with many
-        # mixed-dtype columns can already be block-fragmented, and adding a column
-        # via item-assignment on top of that is what triggers pandas' fragmentation
-        # warning. Copying first consolidates it into one block, so the new column
-        # is a single clean insert.
         frame = frame.copy()
         frame['GameDate'] = entry.get('date')
         frames.append(frame)
@@ -444,27 +448,81 @@ def load_games(games_dir: str, content_hashes: list[str]) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True, sort=False)
 
 
-@lru_cache(maxsize=2)
-def _load_games_memo(games_dir: str, content_hashes: tuple[str, ...]) -> pd.DataFrame:
-    return load_games(games_dir, list(content_hashes))
+def load_games(games_dir: str, content_hashes: list[str]) -> pd.DataFrame:
+    """
+    Concatenate every archived game whose content hash is in content_hashes.
+
+    Returns an empty DataFrame when nothing is in range.
+    """
+    wanted = set(content_hashes)
+    entries = [e for e in read_manifest(games_dir) if e.get('content_hash') in wanted]
+    with memory_log.track(f'load_games n={len(entries)}'):
+        frame = _concat_games(games_dir, entries)
+    memory_log.log_frame('load_games result', frame)
+    return frame
+
+
+# One selection, for a few minutes. The report pages re-request the same selection on every
+# filter or chart-mode change, so re-reading every CSV each time is the slow part; but the
+# frame is wide and a long range is many files, so more than one -- or one that outlives
+# the session that wanted it -- is what this deliberately does not keep.
+FRAME_CACHE_TTL_SECONDS = 300.0
+
+_cache_lock = threading.Lock()
+_cache_key: tuple[str, tuple[str, ...]] | None = None
+_cache_frame: pd.DataFrame | None = None
+_cache_timer: threading.Timer | None = None
+
+
+def clear_frame_cache() -> None:
+    """Drop the cached selection (and its expiry timer), freeing the frame."""
+    global _cache_key, _cache_frame, _cache_timer
+    with _cache_lock:
+        if _cache_timer is not None:
+            _cache_timer.cancel()
+        _cache_key = _cache_frame = _cache_timer = None
+
+
+def _expire(key: tuple[str, tuple[str, ...]]) -> None:
+    global _cache_key, _cache_frame, _cache_timer
+    with _cache_lock:
+        if _cache_key == key:
+            _cache_key = _cache_frame = _cache_timer = None
 
 
 def load_games_cached(games_dir: str, content_hashes: list[str]) -> pd.DataFrame:
     """
-    load_games, remembering the last couple of selections.
+    load_games, remembering the last selection for FRAME_CACHE_TTL_SECONDS.
 
-    The report pages re-request the same selection on every filter or chart-mode change;
-    re-reading and concatenating every CSV each time is the slow part of that. Keyed on
-    the school's own games_dir plus the content hashes (a hash names fixed file content),
-    so one school can never be served another's frame. Callers MUST treat the returned
-    frame as read-only -- it is shared across requests.
+    Keyed on the school's own games_dir plus the content hashes (a hash names fixed file
+    content), so one school can never be served another's frame. A timer frees the frame
+    when the TTL passes, so an idle worker does not sit on it. Callers MUST treat the
+    returned frame as read-only -- it is shared across requests.
     """
-    return _load_games_memo(games_dir, tuple(sorted(content_hashes)))
+    global _cache_key, _cache_frame, _cache_timer
+    key = (games_dir, tuple(sorted(content_hashes)))
+
+    with _cache_lock:
+        if _cache_key == key and _cache_frame is not None:
+            return _cache_frame
+
+    frame = load_games(games_dir, list(key[1]))
+
+    with _cache_lock:
+        if _cache_timer is not None:
+            _cache_timer.cancel()
+        # Replace the old selection before holding the new one, never both for long.
+        _cache_key, _cache_frame = key, frame
+        timer = threading.Timer(FRAME_CACHE_TTL_SECONDS, _expire, args=(key,))
+        timer.daemon = True
+        timer.start()
+        _cache_timer = timer
+    return frame
 
 
 def load_range_cached(games_dir: str, start_date: str, end_date: str) -> pd.DataFrame:
     """
-    load_range, remembering the last couple of selections (see load_games_cached).
+    load_range, remembering the last selection (see load_games_cached).
 
     The range is resolved to the content hashes of the games inside it first, so the cache
     key names fixed file content: saving a new game into the range changes the key instead
@@ -537,32 +595,11 @@ def load_range(games_dir: str, start_date: str, end_date: str) -> pd.DataFrame:
 
     Returns an empty DataFrame when nothing is in range.
     """
-    frames = []
-
-    for entry in read_manifest(games_dir):
-        date = entry.get('date')
-        if not date or date < start_date or date > end_date:
-            continue
-
-        path = os.path.join(games_dir, entry['file'])
-        if not os.path.exists(path):
-            print(f"Archived game missing from disk, skipping: {path}")
-            continue
-
-        try:
-            frame = _read_source(path)
-        except Exception as e:
-            print(f"Could not read archived game {path}: {e}")
-            continue
-
-        # See load_games' identical .copy()-before-assign for why: a freshly-read
-        # frame can already be block-fragmented, and this avoids the pandas
-        # PerformanceWarning that item-assignment on top of that triggers.
-        frame = frame.copy()
-        frame['GameDate'] = date
-        frames.append(frame)
-
-    if not frames:
-        return pd.DataFrame()
-
-    return pd.concat(frames, ignore_index=True, sort=False)
+    entries = [
+        e for e in read_manifest(games_dir)
+        if e.get('date') and start_date <= e['date'] <= end_date
+    ]
+    with memory_log.track(f'load_range n={len(entries)}'):
+        frame = _concat_games(games_dir, entries)
+    memory_log.log_frame('load_range result', frame)
+    return frame

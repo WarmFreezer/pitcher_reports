@@ -181,8 +181,8 @@ function createReportCards(cfg) {
             toast('The chart library did not load, so PDFs with charts are unavailable. Check your connection and reload.', 'error');
             return;
         }
-        const original = button?.innerHTML;
-        if (button) { button.disabled = true; button.textContent = 'Building…'; }
+        // Label stays put (so the button keeps its size); the wait cursor shows it's working.
+        if (button) { button.disabled = true; button.style.cursor = 'wait'; }
 
         try {
             const chosen = ids.map(id => cards.get(String(id))).filter(Boolean);
@@ -231,7 +231,7 @@ function createReportCards(cfg) {
             console.error('Error building PDF:', error);
             toast('Could not build the PDF: ' + error.message, 'error');
         } finally {
-            if (button) { button.disabled = false; button.innerHTML = original; }
+            if (button) { button.disabled = false; button.style.cursor = ''; }
         }
     }
 

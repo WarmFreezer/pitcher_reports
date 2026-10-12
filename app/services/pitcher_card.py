@@ -75,14 +75,19 @@ def build_pitcher_charts(
 
 def build_pitcher_data(
     source: pd.DataFrame, pitcher_id: int, filters: PitchFilters, *, school_id: int, is_active: bool,
+    filtered: pd.DataFrame | None = None,
 ) -> PitcherData | None:
     """
     Stat tables and custom stats for one pitcher over the filtered pitches.
 
     Returns None when no pitch passes the filters (the page shows an empty card).
     Raises ValueError if the tables can't be built from rows that do exist.
+
+    `filtered` is filters.apply(source) when the caller is building several pitchers from the
+    same source and has already done it once, so each doesn't make its own copy.
     """
-    filtered = filters.apply(source)
+    if filtered is None:
+        filtered = filters.apply(source)
     if not (filtered['PitcherId'] == pitcher_id).any():
         return None
 

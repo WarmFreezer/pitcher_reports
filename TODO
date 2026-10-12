@@ -92,3 +92,19 @@ Accepted risks / known limits:
     left over from before ReportLab and safe to drop to shrink the image -- verify on a Railway build first.
   - A heatmap needs HEATMAP_MIN_PITCHES (8) points per group; a hitter with fewer batted balls, or a catcher
     with few taken pitches, silently shows points in heatmap view.
+
+------ Deferred from the memory audit ------
+Measured (real school archives, Windows dev box): the process sits at ~150 MB right after
+  imports (pandas+numpy ~58, flask/sqlalchemy/migrate ~43, pypdf ~10, openpyxl ~7, reportlab ~6);
+  loading a school's whole archive (8 games) adds ~6 MB and 12 pitcher charts ~5 MB. Request-time
+  data is NOT the cost driver at current archive sizes -- the always-on baseline is. Re-measure with
+  `python scripts/measure_memory.py` and MEMORY_LOG=1 before spending effort on dtypes/usecols.
+Railway confirmed (7 days): memory flat at ~150 MB, never below 100 -- matches the import baseline, so
+  the cost is the always-on process, not requests or growth. Levers left: app sleeping (idle time),
+  lazy-importing reportlab/openpyxl/alembic (~10-20 MB, reclaimed only until first use).
+Dtype/usecols loader (category dtypes, float32, usecols with custom scripts declaring
+  REQUIRED_COLUMNS) -- deferred: wins only matter once archives reach hundreds of games.
+Export PDF is read fully into BytesIO before the work dir is deleted (pitching/batting/catching
+  export routes) -- fine for one report, transient tens of MB for a 100-player merge. Accepted.
+--max-requests 20 in the Dockerfile recycles the worker; it may be masking growth rather than
+  fixing it. Revisit once a Railway memory graph shows whether the baseline climbs between recycles.
