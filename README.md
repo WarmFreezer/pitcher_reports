@@ -262,7 +262,7 @@ University logos, seals, and trademarks are the property of their respective ins
 
 ## Contact
 
-Thomas Eubank — [thomas.eubank516@gmail.com](mailto:thomas.eubank516@gmail.com)
+Thomas Eubank — [thomas@stat-line.app](mailto:thomas@stat-line.app)
 
 Project Link: [https://github.com/WarmFreezer/pitcher_reports](https://github.com/WarmFreezer/pitcher_reports)
 

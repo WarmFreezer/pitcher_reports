@@ -49,16 +49,6 @@
     background: linear-gradient(135deg, rgba(4,32,38,.65), rgba(166,127,93,.35));
 }
 
-.auth-wordmark {
-    position: absolute;
-    inset: 0;
-    margin: auto;
-    width: 60%;
-    max-width: 320px;
-    height: fit-content;
-    z-index: 1;
-}
-
 /* Dark mode: show dark logo, hide light logo (default) */
 .auth-logo-light { display: none; }
 .auth-logo-dark  { display: block; }

@@ -19,33 +19,15 @@ from app.services.chart_prefs import ChartPrefs
 from app.services.pitch_filters import PitchFilters
 from app.services.report_lab_generator import PDF_Generator, merge_pdfs
 from app.routes.utils import (
+    MAX_EXPORT_BYTES, parse_date as _parse_date, display_date as _display_date,
     chart_prefs, charts_enabled, export_workdir, flash_toast, get_school_directories,
     get_school_games_directory,
 )
 
 catching_bp = Blueprint('catching', __name__)
 
-DATE_FORMAT = '%Y-%m-%d'
 CHART_SLOTS = ('heat_map', 'pitch_location')
-MAX_EXPORT_BYTES = 40 * 1024 * 1024
 MAX_EXPORT_CATCHERS = 100
-
-
-def _parse_date(value: str | None, fallback: str | None) -> str | None:
-    """ISO date string, or the fallback when absent/malformed."""
-    if not value:
-        return fallback
-    try:
-        return datetime.strptime(value, DATE_FORMAT).date().isoformat()
-    except ValueError:
-        return fallback
-
-
-def _display_date(iso_date: str | None) -> str:
-    try:
-        return datetime.strptime(iso_date or '', DATE_FORMAT).strftime('%m/%d/%Y')
-    except (ValueError, TypeError):
-        return iso_date or ''
 
 
 def _resolve_range(params: Mapping[str, Any]) -> tuple[str | None, str | None, str | None, ResponseReturnValue | None]:

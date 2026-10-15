@@ -554,6 +554,10 @@ def test_school_2s_exit_velocity_chart_is_a_plotly_figure():
     from app.services.hitter_stats import CustomChart
 
     path = Path(__file__).parent.parent / 'app' / 'storage' / 'schools' / '2' / 'assets' / 'custom_hitter_report.py'
+    # Master-uploaded school scripts are gitignored (app/storage/schools/*/assets/*), so this
+    # only exists on a machine that has school 2's script -- not in CI.
+    if not path.exists():
+        pytest.skip("school 2's custom_hitter_report.py is not in this checkout")
     spec = importlib.util.spec_from_file_location('school2_hitter', path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

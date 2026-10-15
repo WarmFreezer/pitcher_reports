@@ -13,26 +13,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tables.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/reports.css') }}">
 
-    {% if branding %}
-    <style>
-        :root {
-            --primary: {{branding.colors.primary}};
-            --secondary: {{branding.colors.secondary}};
-            --tertiary: {{branding.colors.tertiary}};
-            --dark: {{branding.colors.dark}};
-            --light: {{branding.colors.light}};
-            --accent: {{branding.colors.accent}};
-            --text-on-primary: {{ branding_text.primary }};
-            --text-on-secondary: {{ branding_text.secondary }};
-            --text-on-tertiary: {{ branding_text.tertiary }};
-            --text-on-accent: {{ branding_text.accent }};
-            --text-on-primary-rgb: {{ branding_text_rgb.primary }};
-            --text-on-secondary-rgb: {{ branding_text_rgb.secondary }};
-            --text-on-tertiary-rgb: {{ branding_text_rgb.tertiary }};
-            --text-on-accent-rgb: {{ branding_text_rgb.accent }};
-        }
-    </style>
-    {% endif %}
+    {% include '_branding.html' %}
 </head>
 <body onload="loadNavbar('{{ logo_path }}'); loadFooter();">
     <!-- Navbar Placeholder -->

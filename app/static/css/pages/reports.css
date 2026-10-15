@@ -202,14 +202,7 @@
 
 /* ------------------------------------------------------------ spray charts */
 
-.hitter-spray {
-    display: flex;
-    justify-content: center;
-    gap: 16px;
-    flex-wrap: wrap;
-    width: 100%;
-}
-
+.hitter-spray,
 .custom-charts {
     display: flex;
     justify-content: center;

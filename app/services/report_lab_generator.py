@@ -924,7 +924,10 @@ class PDF_Generator:
             for custom_pitch_table in data.custom_pitch_type_stats:
                 elements.extend(self.generate_data_table(custom_pitch_table, custom_pitch_table.title or "Custom Pitch Type Stats"))
 
-        # Build PDF
+        return self._build_pdf(pdf_file, elements, output_path, 'PDF')
+
+    def _build_pdf(self, pdf_file: Any, elements: list[Any], output_path: str, label: str) -> str:
+        """Wrap-check every element (logging the ones that fail), then build the PDF."""
         try:
             for i, el in enumerate(elements):
                 # KeepTogether.wrap() needs a live canvas (set during the real build
@@ -939,10 +942,10 @@ class PDF_Generator:
                     print(f"Element {i} failed: {type(el).__name__} — {e}")
 
             pdf_file.build(elements)
-            print(f"[PDF] PDF built successfully!")
+            print(f"[PDF] {label} built successfully!")
             return output_path
         except Exception as e:
-            print(f"Error generating PDF: {str(e)}")
+            print(f"Error generating {label}: {str(e)}")
             raise
 
     def _load_custom_elements(self, custom_module: Any, data: PitcherReportRequest) -> list[Any]:
@@ -1446,25 +1449,7 @@ class PDF_Generator:
         for custom_pitch_table in pitch_type_tables:
             elements.extend(self.generate_data_table(custom_pitch_table, custom_pitch_table.title or "Custom Pitch Type Stats"))
 
-        try:
-            for i, el in enumerate(elements):
-                # KeepTogether.wrap() needs a live canvas (set during the real build
-                # below), so it always raises here regardless of whether its content
-                # is fine -- skip it rather than log a false "failed" for every
-                # section header+table pairing.
-                if isinstance(el, KeepTogether):
-                    continue
-                try:
-                    el.wrap(self.PAGE_W - 2 * self.MARGIN, self.PAGE_H)
-                except Exception as e:
-                    print(f"Element {i} failed: {type(el).__name__} — {e}")
-
-            pdf_file.build(elements)
-            print(f"[PDF] Hitter PDF built successfully!")
-            return output_path
-        except Exception as e:
-            print(f"Error generating hitter PDF: {str(e)}")
-            raise
+        return self._build_pdf(pdf_file, elements, output_path, 'Hitter PDF')
 
     def _load_custom_hitter_elements(self, custom_module: Any, data: HitterReportRequest) -> list[Any]:
         get_elements = getattr(custom_module, "get_elements", None)
@@ -1524,21 +1509,7 @@ class PDF_Generator:
 
         elements.extend(self.generate_data_table(data.framing_table, "Framing"))
 
-        try:
-            for i, el in enumerate(elements):
-                if isinstance(el, KeepTogether):
-                    continue
-                try:
-                    el.wrap(self.PAGE_W - 2 * self.MARGIN, self.PAGE_H)
-                except Exception as e:
-                    print(f"Element {i} failed: {type(el).__name__} — {e}")
-
-            pdf_file.build(elements)
-            print(f"[PDF] Catcher PDF built successfully!")
-            return output_path
-        except Exception as e:
-            print(f"Error generating catcher PDF: {str(e)}")
-            raise
+        return self._build_pdf(pdf_file, elements, output_path, 'Catcher PDF')
 
     def generate_color_preview(self, output_path: str) -> str:
         """

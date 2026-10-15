@@ -233,20 +233,10 @@
    REPORT IMAGES & LAYOUT
    ============================================================================ */
 
-.report-img {
-    max-width: 100%;
-    height: auto;
-    display: block;
-}
-
-.report-img-heatmap { width: 100%; max-width: 400px; }
-
 .graph-block { display: flex; flex-direction: column; align-items: center; }
 .graph-title { margin: 0 0 4px; font-weight: bold; text-align: center; }
 .graph-subtitle { margin: 8px 0 4px; font-weight: bold; text-align: center; color: var(--text-secondary); font-size: 0.85rem; letter-spacing: 0.06em; text-transform: uppercase; }
 .chart-unavailable { color: var(--text-muted); font-size: 0.85rem; font-style: italic; text-align: center; margin: 8px 0; }
-.report-img-breakmap { width: 100%; max-width: 400px; }
-
 /* Generic centered flex row -- also used by catching.html (.catcher-heatmap +
    .catcher-pitch-location) and batting.html (.hitter-spray). The pitcher
    report's own two-row chart section uses .pitcher-charts-grid below instead,
@@ -346,17 +336,7 @@
     flex: 1 1 320px;
 }
 
-.report-img-catcher {
-    width: 100%;
-    max-width: 420px;
-}
-
 @media (max-width: 900px) {
-    .report-img-heatmap,
-    .report-img-breakmap {
-        width: 100%;
-    }
-
     /* Collapse to a single column -- .pitcher-heatmap's two chart blocks and
        .pitcher-breakmap/.pitcher-usage-panel all just stack in DOM order. */
     .pitcher-charts-grid {

@@ -22,29 +22,13 @@ from app.services.pitch_stats import PitcherReportRequest
 from app.services.chart_prefs import ChartPrefs
 from app.services.report_lab_generator import PDF_Generator, merge_pdfs
 from app.routes.utils import (
+    MAX_EXPORT_BYTES, parse_date as _parse_date, display_date as _display_date,
     chart_prefs, charts_enabled, export_workdir, filters_from_args, flash_toast,
     get_school_directories, get_school_games_directory,
 )
 
 pitching_bp = Blueprint('pitching', __name__)
 
-DATE_FORMAT = '%Y-%m-%d'
-
-
-def _parse_date(value: str | None, fallback: str | None = None) -> str | None:
-    if not value:
-        return fallback
-    try:
-        return datetime.strptime(value, DATE_FORMAT).date().isoformat()
-    except ValueError:
-        return fallback
-
-
-def _display_date(iso_date: str | None) -> str:
-    try:
-        return datetime.strptime(iso_date or '', DATE_FORMAT).strftime('%m/%d/%Y')
-    except (ValueError, TypeError):
-        return iso_date or ''
 
 
 def calculate_age(birthdate: date | None) -> int | None:
@@ -354,7 +338,6 @@ def pitching_pitcher() -> ResponseReturnValue:
     return jsonify(card)
 
 
-MAX_EXPORT_BYTES = 40 * 1024 * 1024
 MAX_EXPORT_PITCHERS = 100
 CHART_SLOTS = ('heat_left', 'heat_right', 'break')
 

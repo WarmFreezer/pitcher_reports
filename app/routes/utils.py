@@ -4,6 +4,7 @@ import os
 import shutil
 import tempfile
 import time
+from datetime import datetime
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -137,3 +138,24 @@ def export_workdir(temp_folder: str, user_id: int, max_age_seconds: int = 3600) 
         yield work_dir
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
+
+
+DATE_FORMAT = '%Y-%m-%d'
+MAX_EXPORT_BYTES = 40 * 1024 * 1024
+
+
+def parse_date(value: str | None, fallback: str | None = None) -> str | None:
+    """ISO date string, or the fallback when absent/malformed."""
+    if not value:
+        return fallback
+    try:
+        return datetime.strptime(value, DATE_FORMAT).date().isoformat()
+    except ValueError:
+        return fallback
+
+
+def display_date(iso_date: str | None) -> str:
+    try:
+        return datetime.strptime(iso_date or '', DATE_FORMAT).strftime('%m/%d/%Y')
+    except (ValueError, TypeError):
+        return iso_date or ''

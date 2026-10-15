@@ -13,26 +13,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tables.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/subscription.css') }}">
 
-    {% if branding %}
-    <style>
-        :root {
-            --primary: {{branding.colors.primary}};
-            --secondary: {{branding.colors.secondary}};
-            --tertiary: {{branding.colors.tertiary}};
-            --dark: {{branding.colors.dark}};
-            --light: {{branding.colors.light}};
-            --accent: {{branding.colors.accent}};
-            --text-on-primary: {{ branding_text.primary }};
-            --text-on-secondary: {{ branding_text.secondary }};
-            --text-on-tertiary: {{ branding_text.tertiary }};
-            --text-on-accent: {{ branding_text.accent }};
-            --text-on-primary-rgb: {{ branding_text_rgb.primary }};
-            --text-on-secondary-rgb: {{ branding_text_rgb.secondary }};
-            --text-on-tertiary-rgb: {{ branding_text_rgb.tertiary }};
-            --text-on-accent-rgb: {{ branding_text_rgb.accent }};
-        }
-    </style>
-    {% endif %}
+    {% include '_branding.html' %}
 
     <style>
         .modal-overlay {
@@ -79,18 +60,20 @@
             <p>These colors are used as a fallback for any organization that hasn't set its own branding yet.</p>
             <div class="color-grid">
                 {% for token in ['primary', 'secondary', 'tertiary', 'accent'] %}
+                {# default.json may lack a token (the raw editor allows it); show gray rather than crash #}
+                {% set color = default_branding.colors.get(token) or '#808080' %}
                 <div class="color-card" id="default-color-card-{{ token }}"
-                     style="background-color: {{ default_branding.colors[token] }};"
+                     style="background-color: {{ color }};"
                      onclick="document.getElementById('default-color-{{ token }}').click()">
                     <input type="color" class="color-picker" id="default-color-{{ token }}"
-                           value="{{ default_branding.colors[token] }}"
+                           value="{{ color }}"
                            oninput="syncDefaultColor('{{ token }}', this.value)">
                     <div class="color-card-footer">
                         <span class="color-card-label" id="default-color-label-{{ token }}"
-                              style="color: {{ default_branding.colors[token] | contrast_text }};">{{ token | capitalize }}</span>
+                              style="color: {{ color | contrast_text }};">{{ token | capitalize }}</span>
                         <input type="text" class="color-card-hex" id="default-color-{{ token }}-text"
-                               style="color: {{ default_branding.colors[token] | contrast_text }};"
-                               value="{{ default_branding.colors[token] }}" maxlength="7" placeholder="#000000"
+                               style="color: {{ color | contrast_text }};"
+                               value="{{ color }}" maxlength="7" placeholder="#000000"
                                oninput="syncDefaultColorText('{{ token }}', this.value)"
                                onclick="event.stopPropagation()">
                     </div>

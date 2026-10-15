@@ -14,6 +14,17 @@
     transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
+/* A text field styled as a card-colored input inside a .bubble form. Two classes so it
+   beats single-class rules in later stylesheets, as the inline style it replaces did. */
+.bubble.bubble-field {
+    color: var(--text-primary);
+    margin: 8px 0;
+    background-color: var(--bg-card);
+    border: 2px solid var(--accent);
+    font-size: 16px;
+    padding: 16px;
+}
+
 @media (max-width: 768px) {
     .bubble:not(input) {
         margin: 0;

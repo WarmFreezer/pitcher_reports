@@ -21,14 +21,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
-function currentFilters() {
-    return {
-        target: document.getElementById('targetToggle')?.checked ? 'opponent' : 'own',
-        start_date: document.getElementById('startDate')?.value || '',
-        end_date: document.getElementById('endDate')?.value || '',
-    };
-}
-
 async function loadHitters({ seedDates = false } = {}) {
     const list = document.getElementById('hitterList');
     const info = document.getElementById('archiveInfo');
@@ -49,7 +41,7 @@ async function loadHitters({ seedDates = false } = {}) {
 
         if (seedDates) {
             archiveBounds = { first: data.first_date, last: data.last_date };
-            seedDateInputs();
+            seedDateInputs(archiveBounds);
             if (info) {
                 info.textContent = data.game_count
                     ? `${data.game_count} game${data.game_count === 1 ? '' : 's'} saved, ${data.first_date} through ${data.last_date}.`
@@ -66,21 +58,6 @@ async function loadHitters({ seedDates = false } = {}) {
         if (list) list.innerHTML = '<p class="filter-note">Unavailable.</p>';
         updateSelectionCount();
     }
-}
-
-function seedDateInputs() {
-    const start = document.getElementById('startDate');
-    const end = document.getElementById('endDate');
-    if (!archiveBounds.first || !archiveBounds.last) return;
-
-    // Bound the pickers to what the archive actually holds
-    for (const input of [start, end]) {
-        if (!input) continue;
-        input.min = archiveBounds.first;
-        input.max = archiveBounds.last;
-    }
-    if (start && !start.value) start.value = archiveBounds.first;
-    if (end && !end.value) end.value = archiveBounds.last;
 }
 
 function renderHitterList(hitters) {

@@ -13,26 +13,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tables.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pages/subscription.css') }}">
 
-    {% if branding %}
-    <style>
-        :root {
-            --primary: {{branding.colors.primary}};
-            --secondary: {{branding.colors.secondary}};
-            --tertiary: {{branding.colors.tertiary}};
-            --dark: {{branding.colors.dark}};
-            --light: {{branding.colors.light}};
-            --accent: {{branding.colors.accent}};
-            --text-on-primary: {{ branding_text.primary }};
-            --text-on-secondary: {{ branding_text.secondary }};
-            --text-on-tertiary: {{ branding_text.tertiary }};
-            --text-on-accent: {{ branding_text.accent }};
-            --text-on-primary-rgb: {{ branding_text_rgb.primary }};
-            --text-on-secondary-rgb: {{ branding_text_rgb.secondary }};
-            --text-on-tertiary-rgb: {{ branding_text_rgb.tertiary }};
-            --text-on-accent-rgb: {{ branding_text_rgb.accent }};
-        }
-    </style>
-    {% endif %}
+    {% include '_branding.html' %}
 </head>
 <body data-school-id="{{ active_school.id }}" onload="loadFooter(); loadNavbar('{{ logo_path }}');">
     <div id="navbar-placeholder"></div>
@@ -52,7 +33,7 @@
             <h2>Subscription Status</h2>
             <p>Current Plan: Tier {{ active_school.tier }} ({{ active_school.stripe_subscription_status }})</p>
             <p>Admin Email:</p>
-            <input id="admin-email" type="email" class="bubble" value="{{ active_school.admin_email }}" style="color: var(--text-primary); margin: 8px 0; background-color: var(--bg-card); border: 2px solid var(--accent); font-size: 16px; padding: 16px">
+            <input id="admin-email" type="email" class="bubble bubble-field" value="{{ active_school.admin_email }}">
         </div>
 
         <div class="bubble">
@@ -174,7 +155,7 @@
         <div class="bubble">
             <h2>Support</h2>
             <p style="margin: 8px 0;">For billing issues, account questions, or general help, reach out directly:</p>
-            <p style="margin: 8px 0; display: flex; align-items: center; gap: 8px;"><img src="{{ url_for('static', filename='resources/icons/mail.svg') }}" data-light-src="{{ url_for('static', filename='resources/icons/mail.svg') }}" data-dark-src="{{ url_for('static', filename='resources/icons/mail-dark.svg') }}" alt="" width="16" height="16"> <a href="mailto:thomas.eubank516@gmail.com" style="color: var(--text-accent);">thomas.eubank516@gmail.com</a></p>
+            <p style="margin: 8px 0; display: flex; align-items: center; gap: 8px;"><img src="{{ url_for('static', filename='resources/icons/mail.svg') }}" data-light-src="{{ url_for('static', filename='resources/icons/mail.svg') }}" data-dark-src="{{ url_for('static', filename='resources/icons/mail-dark.svg') }}" alt="" width="16" height="16"> <a href="mailto:thomas@stat-line.app" style="color: var(--text-accent);">thomas@stat-line.app</a></p>
             <p style="margin: 8px 0; display: flex; align-items: center; gap: 8px;"><img src="{{ url_for('static', filename='resources/icons/phone.svg') }}" data-light-src="{{ url_for('static', filename='resources/icons/phone.svg') }}" data-dark-src="{{ url_for('static', filename='resources/icons/phone-dark.svg') }}" alt="" width="16" height="16"> <a href="tel:+16063034052" style="color: var(--text-accent);">606-303-4052</a></p>
         </div>
 
@@ -203,8 +184,7 @@
             </div>
             <div id="cancel-subscription-form" class="collapsible">
                 <p style="margin: 8px 0;">Access continues until the end of the current billing period. Type <strong>CANCEL</strong> to confirm.</p>
-                <input id="cancel-confirm-input" class="bubble" type="text" placeholder="CANCEL"
-                       style="color: var(--text-primary); margin: 8px 0; background-color: var(--bg-card); border: 2px solid var(--accent); font-size: 16px; padding: 16px">
+                <input id="cancel-confirm-input" class="bubble bubble-field" type="text" placeholder="CANCEL">
                 <div style="display: flex; gap: 8px; margin-top: 8px;">
                     <button class="download-btn btn-danger" onclick="cancelSubscription()">Confirm Cancel</button>
                     <button class="download-btn" onclick="hideCancelForm()">Back</button>

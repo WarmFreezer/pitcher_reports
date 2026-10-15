@@ -39,6 +39,30 @@ function pitchTypeLegend(entries) {
     return legend;
 }
 
+// The games filter bar's current values, as the games/report endpoints expect them.
+function currentFilters() {
+    return {
+        target: document.getElementById('targetToggle')?.checked ? 'opponent' : 'own',
+        start_date: document.getElementById('startDate')?.value || '',
+        end_date: document.getElementById('endDate')?.value || '',
+    };
+}
+
+// Bound the date pickers to what the archive holds and fill any that are still empty.
+function seedDateInputs(bounds) {
+    const start = document.getElementById('startDate');
+    const end = document.getElementById('endDate');
+    if (!bounds.first || !bounds.last) return;
+
+    for (const input of [start, end]) {
+        if (!input) continue;
+        input.min = bounds.first;
+        input.max = bounds.last;
+    }
+    if (start && !start.value) start.value = bounds.first;
+    if (end && !end.value) end.value = bounds.last;
+}
+
 // Runs `worker` over `items`, at most `limit` at a time.
 async function runLimited(items, limit, worker) {
     const queue = [...items];

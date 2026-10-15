@@ -5,7 +5,7 @@ Licensed for non-commercial use only. See LICENSE file.
 author:
 Thomas Eubank
 606-303-4052
-thomas.eubank516@gmail.com
+thomas@stat-line.app
 
 Purpose: Generates pitcher performance reports from game datasets exported from TrackMan.
 '''

@@ -132,10 +132,6 @@
     background-color: var(--bg-hover);
 }
 
-.dropdown-divider {
-    border-top: 1px solid var(--border);
-}
-
 /* ============================================================================
    NAV RIGHT
    ============================================================================ */
@@ -251,6 +247,10 @@
     color: var(--text-on-primary);
     text-align: center;
     padding: 20px;
+}
+
+.site-footer a {
+    text-decoration: none;
 }
 
 [data-theme="dark"] .site-footer {
