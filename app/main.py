@@ -1,5 +1,5 @@
 '''
-Copyright (c) 2026 Thomas Eubank
+Copyright (c) 2026 Gold Node LLC
 Licensed for non-commercial use only. See LICENSE file.
 
 author:
@@ -57,6 +57,9 @@ def create_app(config_overrides: dict | None = None) -> Flask:
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     app.config['STORAGE'] = STORAGE_FOLDER
+    app.config['NEWS_DIR'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'news')
+    # Public origin used to build absolute links in emails (e.g. https://stat-line.app)
+    app.config['APP_BASE_URL'] = os.environ.get('APP_BASE_URL', '').rstrip('/')
 
     if config_overrides:
         app.config.update(config_overrides)

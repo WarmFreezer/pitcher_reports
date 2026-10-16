@@ -13,3 +13,4 @@ instance/pitcher_reports.db-shm
 instance/pitcher_reports.db-wal
 .pytest_cache/
 .coverage
+instance/*.bak

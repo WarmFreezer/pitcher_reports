@@ -5,6 +5,7 @@ from flask_login import login_required, logout_user, current_user
 from app.db.models import db
 from app.services.auth import Auth
 from app.services.branding_loader import BrandingLoader
+from app.services.notifications import send_verification_email
 
 account_bp = Blueprint('account', __name__)
 
@@ -61,11 +62,23 @@ def update_information() -> ResponseReturnValue:
         # Only call update methods when values actually changed
         if email != current_user.email:
             Auth.update_email(current_user, email)
+            send_verification_email(current_user)
         if first_name != current_user.first_name or last_name != current_user.last_name:
             Auth.update_name(current_user, first_name, last_name)
         return jsonify({'message': 'Information updated successfully.'}), 200
     except Exception:
         return jsonify({'error': 'Failed to update information.'}), 500
+
+
+@account_bp.route('/api/account/verify-email', methods=['POST'])
+@login_required
+def request_email_verification() -> ResponseReturnValue:
+    """Email the current user a verification link."""
+    if current_user.email_verified:
+        return jsonify({'message': 'Your email is already verified.'}), 200
+    if not send_verification_email(current_user):
+        return jsonify({'error': 'Could not send the verification email. Please try again.'}), 500
+    return jsonify({'message': 'Verification email sent. Check your inbox.'}), 200
 
 
 # ── Report display preferences ──────────────────────────────────────────────
@@ -101,6 +114,11 @@ def update_preferences() -> ResponseReturnValue:
         if not isinstance(data['show_break_arrows'], bool):
             return jsonify({'error': 'Invalid show break arrows setting.'}), 400
         current_user.show_break_arrows = data['show_break_arrows']
+
+    if 'newsletter_opt_in' in data:
+        if not isinstance(data['newsletter_opt_in'], bool):
+            return jsonify({'error': 'Invalid newsletter setting.'}), 400
+        current_user.newsletter_opt_in = data['newsletter_opt_in']
 
     try:
         db.session.commit()

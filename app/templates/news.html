@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en" style="height: 100%;">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>News &amp; Updates - Stat_Line</title>
+        <meta name="description" content="News and product updates from Stat_Line.">
+        <link rel="icon" href="{{ url_for('static', filename='resources/favicon.ico') }}" type="image/x-icon">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/layout.css') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+
+        <style>
+            h1, h2, h3 {
+                margin-top: 0.5rem;
+                font-family: 'Graduate';
+                color: var(--text-primary)
+            }
+
+            p {
+                color: var(--text-secondary);
+                font-family: 'Cambria', monospace;
+                line-height: 1.6;
+                text-indent: 0;
+            }
+
+            ul {
+                padding-left: 1.5rem;
+            }
+
+            li {
+                margin-bottom: 0.5rem;
+                font-family: 'Cambria', monospace;
+                color: var(--text-secondary);
+            }
+        </style>
+    </head>
+    <body onload="loadNavbar(); loadFooter();">
+        <div id="navbar-placeholder"></div>
+
+        <main class="main-content">
+            <div class="bubble">
+                {% if post %}
+                <p><a href="{{ url_for('pages.news') }}" style="color: var(--secondary);">&larr; All updates</a> &nbsp; {{ post.date }}</p>
+                {{ post.html | safe }}
+                {% else %}
+                <h2>News &amp; Updates</h2>
+                {% for p in posts %}
+                <p><span>{{ p.date }}</span> &mdash; <a href="{{ url_for('pages.news_post', post_id=p.id) }}" style="color: var(--secondary);">{{ p.title }}</a></p>
+                {% else %}
+                <p>No updates yet.</p>
+                {% endfor %}
+                {% endif %}
+            </div>
+        </main>
+
+        <div id="footer-placeholder"></div>
+
+        <script src="{{ url_for('static', filename='js/core.js') }}"></script>
+    </body>
+</html>

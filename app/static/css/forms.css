@@ -15,6 +15,20 @@ select {
     transition: 0.3s;
 }
 
+/* Checkbox + label on one line; the global input rule would otherwise stretch the box full width. */
+.checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 0;
+}
+
+.checkbox-row input {
+    width: auto;
+    padding: 0;
+    border: none;
+}
+
 input.bubble {
     width: 100%;
     max-width: none;

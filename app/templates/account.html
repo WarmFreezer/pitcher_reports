@@ -23,6 +23,13 @@
             <input id="update-name-input" class="bubble bubble-field" type="text" value="{% if current_user.first_name %}{{ current_user.first_name }}{% endif %} {{ current_user.last_name }}" placeholder="First Last">
             <input id="update-email-input" class="bubble bubble-field" type="email" value="{% if current_user.email %}{{ current_user.email }}{% endif %}" placeholder="email@domain.com">
             <p>Created at: {{ current_user.created_at }}</p>
+            {% if current_user.email_verified %}
+            <p>Email verified &#10003;</p>
+            {% else %}
+            <p>Email not verified.</p>
+            <button class="download-btn" onclick="sendVerification()">Send Verification Email</button>
+            {% endif %}
+            <label class="checkbox-row"><input type="checkbox" id="newsletter-toggle" onchange="updateNewsletter()" {% if current_user.newsletter_opt_in %}checked{% endif %}> Email me news and updates</label>
             <button class="download-btn btn-warn" onclick="updateInformation()">Update Information</button>
         </div>
 

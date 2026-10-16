@@ -340,3 +340,17 @@ def test_custom_report_upload_rejects_syntax_error(client, login_as, make_school
     )
 
     assert not custom_report_path(target_school.id, 'custom_hitter_report.py').exists()
+
+
+def test_stats_guide_upload_saves_html_and_rejects_other_extensions(client, login_as, make_school, make_user):
+    target_school = make_school()
+    login_as(client, make_user(make_school(), role='master'))
+    url = f'/master/schools/{target_school.id}/custom-report'
+
+    client.post(url, data={'report_type': 'guide', 'file': (io.BytesIO(b'<p>x ( not python</p>'), 'whatever.py')},
+                content_type='multipart/form-data')
+    assert not custom_report_path(target_school.id, 'custom_stats_guide.html').exists()
+
+    client.post(url, data={'report_type': 'guide', 'file': (io.BytesIO(b'<p>x ( not python</p>'), 'guide.html')},
+                content_type='multipart/form-data')
+    assert custom_report_path(target_school.id, 'custom_stats_guide.html').read_text() == '<p>x ( not python</p>'

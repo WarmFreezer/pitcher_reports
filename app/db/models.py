@@ -79,6 +79,17 @@ class User(UserMixin, BaseModel):
     school_id: Mapped[int] = mapped_column(db.ForeignKey('schools.id'))
     role: Mapped[str] = mapped_column(db.String(20), default='student')
     is_active: Mapped[bool | None] = mapped_column(default=True)
+    # Proven mailbox ownership. Required to log in.
+    email_verified: Mapped[bool] = mapped_column(default=False)
+    # Newsletter consent (off by default) and the id of the last campaign sent to this user,
+    # which lets send-newsletter resume across days without re-mailing anyone.
+    newsletter_opt_in: Mapped[bool] = mapped_column(default=False)
+    newsletter_last_sent: Mapped[str | None] = mapped_column(db.String(50))
+    # Password-reset code: HMAC of the emailed 6-digit code (never the code itself), its expiry,
+    # and wrong guesses so far -- the code space is small, so guesses are capped.
+    reset_code_hash: Mapped[str | None] = mapped_column(db.String(64))
+    reset_code_expires: Mapped[datetime | None] = mapped_column()
+    reset_attempts: Mapped[int] = mapped_column(default=0)
     # Default view for the pitch charts on this user's reports: 'auto' (heatmap, with
     # scatter points for any pitch type too sparse to trust a density) or 'pitch_point'
     # for scatter throughout. The page's own toggle starts from this. No "always heatmap" -- it would

@@ -16,6 +16,7 @@ CUSTOM_REPORT_MAX_BYTES = 1 * 1024 * 1024
 CUSTOM_REPORT_FILENAMES = {
     'pitcher': 'custom_pitcher_report.py',
     'hitter': 'custom_hitter_report.py',
+    'guide': 'custom_stats_guide.html',  # the school's own stats-guide page; HTML, not code
 }
 
 P = ParamSpec('P')
@@ -166,7 +167,8 @@ def exit_masquerade() -> ResponseReturnValue:
 @login_required
 @master_required
 def upload_custom_report(school_id: int) -> ResponseReturnValue:
-    """Upload/replace a school's custom_pitcher_report.py or custom_hitter_report.py.
+    """Upload/replace a school's custom_pitcher_report.py, custom_hitter_report.py or
+    custom_stats_guide.html.
 
     The uploaded filename is ignored entirely — the server picks the on-disk name from
     report_type, so the uploader never controls the path. Syntax-checked before saving;
@@ -186,8 +188,9 @@ def upload_custom_report(school_id: int) -> ResponseReturnValue:
     if not file or not file.filename:
         flash('No file selected.', 'danger')
         return redirect(url_for('master.schools_list'))
-    if not file.filename.lower().endswith('.py'):
-        flash('Custom report files must be a .py file.', 'danger')
+    extension = os.path.splitext(filename)[1]
+    if not file.filename.lower().endswith(extension):
+        flash(f'That upload must be a {extension} file.', 'danger')
         return redirect(url_for('master.schools_list'))
 
     file.seek(0, os.SEEK_END)
@@ -198,11 +201,12 @@ def upload_custom_report(school_id: int) -> ResponseReturnValue:
         return redirect(url_for('master.schools_list'))
 
     source = file.read().decode('utf-8', errors='replace')
-    try:
-        compile(source, filename, 'exec')
-    except SyntaxError as e:
-        flash(f'File has a syntax error and was not saved: {e}', 'danger')
-        return redirect(url_for('master.schools_list'))
+    if extension == '.py':
+        try:
+            compile(source, filename, 'exec')
+        except SyntaxError as e:
+            flash(f'File has a syntax error and was not saved: {e}', 'danger')
+            return redirect(url_for('master.schools_list'))
 
     target_path = custom_report_path(school_id, filename)
     target_path.parent.mkdir(parents=True, exist_ok=True)

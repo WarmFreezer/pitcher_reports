@@ -2,7 +2,7 @@ import io
 import re
 from datetime import date
 from pathlib import Path
-from flask import Blueprint, render_template, redirect, url_for, jsonify, session, request, make_response
+from flask import Blueprint, abort, current_app, render_template, redirect, url_for, jsonify, session, request, make_response
 from flask.typing import ResponseReturnValue
 from flask_login import login_required, current_user
 from openpyxl import Workbook
@@ -290,25 +290,28 @@ def about() -> ResponseReturnValue:
     return render_template('about.html', readme_html=_marketing_readme_html())
 
 
+def _custom_guide_html(school_id: int) -> str | None:
+    """The school's own custom_stats_guide.html from its assets folder, or None. Written by
+    hand alongside the school's custom report script (same operator-provisioned trust), so it is
+    rendered unescaped."""
+    path = custom_report_path(school_id, 'custom_stats_guide.html')
+    return path.read_text(encoding='utf-8') if path.exists() else None
+
+
 @pages_bp.route('/stats-guide')
 def stats_guide() -> ResponseReturnValue:
     """Reference page for how the default (non-custom) report stats are calculated."""
-    has_custom_report = (
-        current_user.is_authenticated
-        and custom_report_path(current_user.school_id, 'custom_pitcher_report.py').exists()
-    )
-    return render_template('stats_guide.html', has_custom_report=has_custom_report)
+    has_custom_guide = current_user.is_authenticated and _custom_guide_html(current_user.school_id) is not None
+    return render_template('stats_guide.html', has_custom_report=has_custom_guide)
 
 
 @pages_bp.route('/stats-guide/custom')
 @login_required
 def custom_stats_guide() -> ResponseReturnValue:
-    """Reference page for the pitcher custom-report stats, which are defined by that
-    school's own uploaded custom_pitcher_report.py and can change if it's re-uploaded --
-    unlike stats_guide.html, this one isn't a fixed contract, just current documentation
-    of whatever formulas are live for the logged-in user's school today."""
-    has_custom_report = custom_report_path(current_user.school_id, 'custom_pitcher_report.py').exists()
-    return render_template('custom_stats_guide.html', has_custom_report=has_custom_report)
+    """A school's own documentation of its custom pitcher stats, served from that school's
+    assets/custom_stats_guide.html. Different schools run different scripts, so the formulas are
+    never shared -- a school with no guide file just sees the "nothing to document" notice."""
+    return render_template('custom_stats_guide.html', guide_html=_custom_guide_html(current_user.school_id))
 
 
 @pages_bp.route('/terms')
@@ -319,6 +322,41 @@ def terms() -> ResponseReturnValue:
 @pages_bp.route('/privacy')
 def privacy() -> ResponseReturnValue:
     return render_template('privacy.html')
+
+
+# News posts are hand-written HTML files in NEWS_DIR named YYYY-MM-DD-slug.html -- the same
+# files `flask send-newsletter` mails out. Trusted content (only we can add files), so it is
+# rendered unescaped.
+NEWS_FILE = re.compile(r'^(\d{4}-\d{2}-\d{2})-([a-z0-9-]+)\.html$')
+
+
+def _news_posts() -> list[dict]:
+    """Posts newest first. shortcut: re-reads every file per request, fine for dozens of posts,
+    cache it if the list ever grows large."""
+    posts = []
+    for f in Path(current_app.config['NEWS_DIR']).glob('*.html'):
+        m = NEWS_FILE.match(f.name)
+        if not m:
+            continue
+        html = f.read_text(encoding='utf-8')
+        h1 = re.search(r'<h1[^>]*>(.*?)</h1>', html, re.S | re.I)
+        title = re.sub(r'<[^>]+>', '', h1.group(1)).strip() if h1 else m.group(2).replace('-', ' ').title()
+        posts.append({'id': f.stem, 'date': m.group(1), 'title': title, 'html': html})
+    return sorted(posts, key=lambda p: p['id'], reverse=True)
+
+
+@pages_bp.route('/news')
+def news() -> ResponseReturnValue:
+    return render_template('news.html', posts=_news_posts(), post=None)
+
+
+@pages_bp.route('/news/<post_id>')
+def news_post(post_id: str) -> ResponseReturnValue:
+    # Matched against the listing, never used to build a file path.
+    post = next((p for p in _news_posts() if p['id'] == post_id), None)
+    if post is None:
+        abort(404)
+    return render_template('news.html', posts=[], post=post)
 
 
 @pages_bp.route('/sitemap.xml')

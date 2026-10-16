@@ -3,7 +3,8 @@ Strikeouts - Skip for now
 Share Page?? - Skip for now
 
 In addition to spin, map trajectory on a 'break map' following each section of trajectory -- BLOCKED: waiting on Trackman trajectory column names before starting
-Email Confirmations, newsletters - high priority
+Newsletters - high priority (email verification is done: required for all accounts)
+Rate-limit login-triggered verification emails and /api/account/verify-email (accepted risk: an attacker with an admin's password can spam them)
 DB/Accounts change - Look into different method for verifying school email - med priority (discuss with me)
 
 Team Overview reworked since same stats can be found in a pitcher/hitter report (later)

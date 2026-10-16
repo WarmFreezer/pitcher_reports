@@ -122,11 +122,24 @@ APP_SECRET_KEY=your-secret-key
 # Database (omit to use SQLite locally)
 DATABASE_URL=postgresql://user:pass@localhost/pitcher_reports
 
+# Email verification (Resend; sends from no-reply@stat-line.app)
+RESEND_API_KEY=re_...
+APP_BASE_URL=https://stat-line.app
+NEWSLETTER_ADDRESS=Gold Node LLC, 123 Main St, City, ST 00000  # required footer address; send-newsletter refuses without it
+
 # Stripe
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_PUBLISHABLE_KEY=pk_test_...
 STRIPE_PRICE_ID=price_...
 STRIPE_WHSEC=whsec_...
+```
+
+### News & newsletter
+
+Put each update in `app/news/YYYY-MM-DD-slug.html` (start it with an `<h1>` for the title). It appears on `/news` after a deploy, and the same file is the newsletter body:
+
+```
+flask --app app.main send-newsletter 2026-10-15-slug "Subject" app/news/2026-10-15-slug.html [--limit 50] [--dry-run]
 ```
 
 Run the test suite with `pytest`.

@@ -165,6 +165,44 @@ def register_cli_commands(app: Flask) -> None:
         Auth.create_user(email, password, first_name, last_name, school.id, role)
         print(f"User '{email}' created successfully with role '{role}'.")
 
+    @app.cli.command("send-newsletter")
+    @click.argument("campaign_id")
+    @click.argument("subject")
+    @click.argument("html_file", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--limit", default=50, show_default=True, help="Max emails this run (Resend's free tier caps daily sends).")
+    @click.option("--dry-run", is_flag=True, help="Show who would be emailed; send nothing.")
+    @with_appcontext
+    def send_newsletter(campaign_id: str, subject: str, html_file: str, limit: int, dry_run: bool) -> None:
+        """Send a newsletter to opted-in, verified users, at most --limit per run.
+
+        Re-run daily with the same CAMPAIGN_ID until it reports 0 remaining: users already
+        sent this campaign are skipped, so nobody is mailed twice."""
+        from app.services.notifications import send_newsletter_email
+
+        # CAN-SPAM: commercial email must carry a postal address, so refuse to send without one.
+        if not os.environ.get('NEWSLETTER_ADDRESS') and not dry_run:
+            raise click.ClickException("Set NEWSLETTER_ADDRESS (postal address for the email footer) first.")
+
+        User = models.User
+        pending = User.query.filter(
+            User.is_active, User.email_verified, User.newsletter_opt_in,
+            (User.newsletter_last_sent.is_(None)) | (User.newsletter_last_sent != campaign_id),
+        )
+        total = pending.count()
+        batch = pending.order_by(User.id).limit(limit).all()
+        if dry_run:
+            click.echo(f"Would send to {len(batch)} of {total} pending recipients.")
+            return
+        with open(html_file, encoding='utf-8') as f:
+            html = f.read()
+        sent = 0
+        for user in batch:
+            if send_newsletter_email(user, subject, html):
+                user.newsletter_last_sent = campaign_id
+                models.db.session.commit()
+                sent += 1
+        click.echo(f"Sent {sent}/{len(batch)}. {total - sent} remaining for campaign '{campaign_id}'.")
+
     @app.cli.command()
     def rebuild_game_index() -> None:
         """Rebuild the game index for all schools."""

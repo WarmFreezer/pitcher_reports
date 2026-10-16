@@ -44,6 +44,33 @@ async function updatePassword() {
     }
 }
 
+// ── Email verification ───────────────────────────────────────────────────────
+
+async function sendVerification() {
+    try {
+        const response = await fetch('/api/account/verify-email', { method: 'POST' });
+        const data = await response.json();
+        toast(data.message || data.error, response.ok ? 'success' : 'error');
+    } catch {
+        toast('An error occurred. Please try again.', 'error');
+    }
+}
+
+async function updateNewsletter() {
+    const optIn = document.getElementById('newsletter-toggle').checked;
+    try {
+        const response = await fetch('/api/account/preferences', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ newsletter_opt_in: optIn })
+        });
+        const data = await response.json();
+        toast(data.message || data.error, response.ok ? 'success' : 'error');
+    } catch {
+        toast('An error occurred. Please try again.', 'error');
+    }
+}
+
 // ── Report Settings ──────────────────────────────────────────────────────────
 
 async function updateReportSettings() {

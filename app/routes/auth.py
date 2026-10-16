@@ -6,7 +6,7 @@ from flask_login import login_user, logout_user, login_required, current_user
 
 from app.db.models import db, User, School, TierThreeRequest
 from app.services.auth import Auth, bcrypt
-from app.services.notifications import notify_tier3_interest
+from app.services.notifications import notify_tier3_interest, send_password_reset_email, send_verification_email
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -64,15 +64,19 @@ def register() -> ResponseReturnValue:
             email=email,
             password_hash=bcrypt.generate_password_hash(password).decode('utf-8'),
             school_id=school.id,
-            role=role
+            role=role,
+            newsletter_opt_in=bool(request.form.get('newsletter_opt_in'))
         )
         db.session.add(new_user)
+        session.pop('newsletter_opt_in', None)
         db.session.commit()
 
-        flash('Account created successfully! Please log in.', 'success')
+        send_verification_email(new_user)
+        flash('Account created! Check your email for a verification link, then log in.', 'success')
         return redirect(url_for('auth.login'))
 
-    return render_template('create_account.html', schools=schools)
+    return render_template('create_account.html', schools=schools,
+                           newsletter_checked=session.get('newsletter_opt_in', False))
 
 
 @auth_bp.route('/schools', methods=['GET'])
@@ -117,6 +121,9 @@ def schools_org() -> ResponseReturnValue:
             'trackman_id': trackman_id,
             'tier': tier
         }
+        # Kept apart from pending_school: that dict is sent to Stripe as metadata. Consumed by
+        # register() to pre-check the admin's own signup checkbox once payment completes.
+        session['newsletter_opt_in'] = bool(request.form.get('newsletter_opt_in'))
 
         try:
             checkout_session = stripe.checkout.Session.create(
@@ -174,6 +181,10 @@ def login() -> ResponseReturnValue:
         if user and Auth.verify_password(user, password):
             if not user.is_active:
                 flash('This account has been deactivated. Contact your school admin.', 'danger')
+            elif not user.email_verified:
+                # Re-send on each correct-password attempt -- doubles as the "resend" flow
+                send_verification_email(user)
+                flash('Please verify your email before logging in. We just sent you a new link.', 'warning')
             else:
                 login_user(user, remember=request.form.get('remember'))
                 # Honour the ?next= redirect param set by @login_required
@@ -183,6 +194,68 @@ def login() -> ResponseReturnValue:
             flash('Invalid email or password', 'danger')
 
     return render_template('login.html')
+
+
+@auth_bp.route('/reset-password', methods=['GET', 'POST'])
+def reset_password() -> ResponseReturnValue:
+    """Step 1: email a 6-digit reset code. Replies identically whether or not the account exists."""
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip()
+        user = Auth.get_user_by_email(email)
+        if user and user.is_active:
+            code = Auth.start_password_reset(user)
+            if code:
+                send_password_reset_email(user, code)
+        session['reset_email'] = email
+        flash('If that email has an account, we sent it a reset code.', 'info')
+        return redirect(url_for('auth.reset_password_confirm'))
+    return render_template('reset_password.html', step='request')
+
+
+@auth_bp.route('/reset-password/confirm', methods=['GET', 'POST'])
+def reset_password_confirm() -> ResponseReturnValue:
+    """Step 2: exchange the emailed code for a new password."""
+    email = session.get('reset_email')
+    if not email:
+        return redirect(url_for('auth.reset_password'))
+
+    if request.method == 'POST':
+        password = request.form.get('password', '')
+        if len(password) < 8:
+            flash('New password must be at least 8 characters.', 'danger')
+        elif password != request.form.get('confirm_password'):
+            flash('Passwords do not match.', 'danger')
+        elif Auth.finish_password_reset(email, request.form.get('code', ''), password):
+            session.pop('reset_email', None)
+            flash('Password updated. Please log in.', 'success')
+            return redirect(url_for('auth.login'))
+        else:
+            flash('That code is invalid or has expired.', 'danger')
+        return redirect(url_for('auth.reset_password_confirm'))
+    return render_template('reset_password.html', step='confirm')
+
+
+@auth_bp.route('/verify/<token>')
+def verify_email(token: str) -> ResponseReturnValue:
+    """Landing page for the emailed verification link."""
+    if Auth.confirm_email(token):
+        flash('Email verified. You can now log in.', 'success')
+    else:
+        flash('That verification link is invalid or has expired. Log in to get a new one.', 'danger')
+    return redirect(url_for('auth.login'))
+
+
+@auth_bp.route('/unsubscribe/<token>', methods=['GET', 'POST'])
+def unsubscribe(token: str) -> ResponseReturnValue:
+    """One-click newsletter unsubscribe from the link in every newsletter email. POST is the
+    mail-client one-click (RFC 8058) form and needs a bare 200, not a redirect."""
+    if request.method == 'POST':
+        return ('', 200) if Auth.unsubscribe(token) else ('', 400)
+    if Auth.unsubscribe(token):
+        flash('You have been unsubscribed from the newsletter.', 'success')
+    else:
+        flash('That unsubscribe link is invalid. You can change this in your account settings.', 'danger')
+    return redirect(url_for('auth.login'))
 
 
 @auth_bp.route('/logout')

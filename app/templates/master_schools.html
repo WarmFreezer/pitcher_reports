@@ -92,7 +92,7 @@
 
         <div class="bubble">
             <h2>Master Panel — Organizations</h2>
-            <p>Act as an organization to manage its subscription page, or upload its custom report scripts directly.</p>
+            <p>Act as an organization to manage its subscription page, or upload its custom report scripts and stats guide directly.</p>
 
             {% set upload_icon %}<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M5 21h14"/></svg>{% endset %}
             {% set save_icon %}<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>{% endset %}
@@ -113,6 +113,7 @@
                             <th style="white-space: nowrap;"></th>
                             <th style="white-space: nowrap;">Pitch Rep</th>
                             <th style="white-space: nowrap;">Hit Rep</th>
+                            <th style="white-space: nowrap;">Stats Guide</th>
                             <th style="white-space: nowrap;">Branding</th>
                         </tr>
                     </thead>
@@ -162,6 +163,15 @@
                                     <label class="download-btn-small" style="margin: 0; padding: 8px 10px;" title="Upload custom hitter report" aria-label="Upload custom hitter report">
                                         {{ upload_icon }}
                                         <input type="file" name="file" accept=".py" required style="display:none" onchange="this.form.submit()">
+                                    </label>
+                                </form>
+                            </td>
+                            <td style="white-space: nowrap;">
+                                <form action="{{ url_for('master.upload_custom_report', school_id=school.id) }}" method="POST" enctype="multipart/form-data" style="margin: 0;">
+                                    <input type="hidden" name="report_type" value="guide">
+                                    <label class="download-btn-small" style="margin: 0; padding: 8px 10px;" title="Upload custom stats guide" aria-label="Upload custom stats guide">
+                                        {{ upload_icon }}
+                                        <input type="file" name="file" accept=".html" required style="display:none" onchange="this.form.submit()">
                                     </label>
                                 </form>
                             </td>

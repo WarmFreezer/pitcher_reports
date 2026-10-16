@@ -13,7 +13,7 @@ from PIL import Image
 # ── Public / static pages ──────────────────────────────────────────────────────
 
 @pytest.mark.parametrize('path', [
-    '/about', '/terms', '/privacy', '/sitemap.xml', '/robots.txt', '/favicon.ico',
+    '/about', '/news', '/terms', '/privacy', '/sitemap.xml', '/robots.txt', '/favicon.ico',
     '/schools', '/schools/org?tier=1', '/schools/org?tier=2',
 ])
 def test_public_pages_load(client, path):
@@ -261,3 +261,45 @@ def test_webhook_rejects_bad_signature(client, monkeypatch):
 
     resp = client.post('/webhook', data=b'{}', headers={'Stripe-Signature': 'bad'})
     assert resp.status_code == 400
+
+
+# ── News ────────────────────────────────────────────────────────────────────
+
+def test_news_lists_and_renders_posts_and_ignores_other_files(app, client, tmp_path):
+    (tmp_path / '2026-10-01-old.html').write_text('<h1>Old Post</h1><p>old body</p>')
+    (tmp_path / '2026-10-15-new-feature.html').write_text('<h1>New <b>Feature</b></h1><p>new body</p>')
+    (tmp_path / 'notes.html').write_text('<h1>Not a post</h1>')
+    app.config['NEWS_DIR'] = str(tmp_path)
+
+    body = client.get('/news').get_data(as_text=True)
+    assert body.index('New Feature') < body.index('Old Post')  # newest first, tags stripped from title
+    assert 'Not a post' not in body
+
+    assert 'new body' in client.get('/news/2026-10-15-new-feature').get_data(as_text=True)
+    assert client.get('/news/notes').status_code == 404
+    assert client.get('/news/..%2Fmain').status_code == 404
+
+
+def test_news_empty_dir(app, client, tmp_path):
+    app.config['NEWS_DIR'] = str(tmp_path)
+    assert 'No updates yet' in client.get('/news').get_data(as_text=True)
+
+
+# ── Per-school custom stats guide ───────────────────────────────────────────
+
+def test_custom_stats_guide_is_per_school(app, client, make_school, make_user, login_as, tmp_path, monkeypatch):
+    from app.routes import pages
+    monkeypatch.setattr(pages, 'custom_report_path', lambda sid, name: tmp_path / str(sid) / name)
+    with_guide, without_guide = make_school(), make_school()
+    (tmp_path / str(with_guide.id)).mkdir()
+    (tmp_path / str(with_guide.id) / 'custom_stats_guide.html').write_text('<p>OUR-FORMULAS</p>')
+
+    login_as(client, make_user(with_guide))
+    assert 'OUR-FORMULAS' in client.get('/stats-guide/custom').get_data(as_text=True)
+    assert '/stats-guide/custom' in client.get('/stats-guide').get_data(as_text=True)
+    client.get('/logout')
+
+    login_as(client, make_user(without_guide))
+    body = client.get('/stats-guide/custom').get_data(as_text=True)
+    assert 'OUR-FORMULAS' not in body and 'nothing to document' in body
+    assert '/stats-guide/custom' not in client.get('/stats-guide').get_data(as_text=True)
