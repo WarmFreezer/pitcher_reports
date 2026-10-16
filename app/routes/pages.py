@@ -305,6 +305,12 @@ def stats_guide() -> ResponseReturnValue:
     return render_template('stats_guide.html', has_custom_report=has_custom_guide)
 
 
+@pages_bp.route('/api/custom-guide-available')
+def custom_guide_available() -> ResponseReturnValue:
+    """Whether the logged-in user's school has a custom stats guide (drives the navbar link)."""
+    return jsonify(available=current_user.is_authenticated and _custom_guide_html(current_user.school_id) is not None)
+
+
 @pages_bp.route('/stats-guide/custom')
 @login_required
 def custom_stats_guide() -> ResponseReturnValue:

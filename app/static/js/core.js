@@ -114,6 +114,7 @@ function loadNavbar(logo = '') {
                             <a href="/batting">Batting Report</a>
                             <a href="/catching">Catching Report</a>
                             <a href="/stats-guide">Stats Guide</a>
+                            <a href="/stats-guide/custom" id="nav-custom-guide" style="display: none;">Custom Stats Guide</a>
                         </div>
                     </div>
                     <div class="nav-dropdown">
@@ -138,6 +139,11 @@ function loadNavbar(logo = '') {
             </div>
         </header>
     `;
+
+    // Only schools with their own guide get the link; the nav is static, so ask the server.
+    fetch('/api/custom-guide-available').then(r => r.json()).then(d => {
+        if (d.available) document.getElementById('nav-custom-guide').style.display = '';
+    }).catch(() => {});
 
     // Theme toggle
     document.getElementById('theme-toggle').addEventListener('click', () => {

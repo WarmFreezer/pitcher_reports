@@ -294,7 +294,9 @@ def test_custom_stats_guide_is_per_school(app, client, make_school, make_user, l
     (tmp_path / str(with_guide.id)).mkdir()
     (tmp_path / str(with_guide.id) / 'custom_stats_guide.html').write_text('<p>OUR-FORMULAS</p>')
 
+    assert client.get('/api/custom-guide-available').get_json() == {'available': False}  # logged out
     login_as(client, make_user(with_guide))
+    assert client.get('/api/custom-guide-available').get_json() == {'available': True}
     assert 'OUR-FORMULAS' in client.get('/stats-guide/custom').get_data(as_text=True)
     assert '/stats-guide/custom' in client.get('/stats-guide').get_data(as_text=True)
     client.get('/logout')
@@ -302,4 +304,5 @@ def test_custom_stats_guide_is_per_school(app, client, make_school, make_user, l
     login_as(client, make_user(without_guide))
     body = client.get('/stats-guide/custom').get_data(as_text=True)
     assert 'OUR-FORMULAS' not in body and 'nothing to document' in body
+    assert client.get('/api/custom-guide-available').get_json() == {'available': False}
     assert '/stats-guide/custom' not in client.get('/stats-guide').get_data(as_text=True)
