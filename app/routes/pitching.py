@@ -4,6 +4,7 @@ import gc
 import glob
 import json
 import traceback
+from dataclasses import asdict
 from datetime import date, datetime
 from typing import Any, Generator
 from urllib.parse import quote
@@ -18,7 +19,7 @@ from app.db import models
 from app.services import chart_images, game_archive, pitch_filters, pitcher_card, report
 from app.services.branding_loader import BrandingLoader
 from app.services.pitch_filters import PitchFilters
-from app.services.pitch_stats import PitcherReportRequest
+from app.services.pitch_stats import PitcherReportRequest, PitchByPitchReport
 from app.services.chart_prefs import ChartPrefs
 from app.services.report_lab_generator import PDF_Generator, merge_pdfs
 from app.routes.utils import (
@@ -467,6 +468,57 @@ def pitching_export() -> ResponseReturnValue:
                      as_attachment=True, download_name=download_name)
 
 
+def _pbp_from_args() -> tuple[int, PitchByPitchReport | None, ResponseReturnValue | None]:
+    """
+    Validate the pitch-by-pitch query string (pitcher_id, content_hash list, target,
+    filters) against this school's archive and build the report. Shared by the PDF
+    route and the in-page preview. Returns (pitcher_id, report, error_response).
+    """
+    pitcher_id_param = request.args.get('pitcher_id')
+    if not pitcher_id_param:
+        return 0, None, (jsonify({'error': 'No pitcher selected.'}), 400)
+    try:
+        pitcher_id = int(pitcher_id_param)
+    except ValueError:
+        return 0, None, (jsonify({'error': 'Invalid pitcher ID.'}), 400)
+
+    params = {
+        'content_hashes': request.args.getlist('content_hash'),
+        'target': request.args.get('target', 'own'),
+    }
+    games_dir, selected, error = _selected_games(params)
+    if error:
+        return pitcher_id, None, error
+    assert games_dir is not None and selected is not None
+
+    filters = filters_from_args()
+    if filters is None:
+        return pitcher_id, None, (jsonify({'error': 'Invalid filters.'}), 400)
+
+    source = game_archive.load_games_cached(games_dir, [g['content_hash'] for g in selected])
+    if source.empty:
+        return pitcher_id, None, (jsonify({'error': 'No data in the selected games.'}), 404)
+    source = filters.apply(source)
+
+    if source[source['PitcherId'] == pitcher_id].empty:
+        return pitcher_id, None, (jsonify({'error': 'No data for that pitcher in the selected games.'}), 404)
+
+    pbp_report = report.build_pitch_by_pitch_report(source, pitcher_id)
+    if pbp_report is None:
+        return pitcher_id, None, (jsonify({'error': 'Could not build the pitch-by-pitch report.'}), 500)
+    return pitcher_id, pbp_report, None
+
+
+@pitching_bp.route('/api/pitching/pitch-by-pitch/preview')
+@login_required
+def pitching_pitch_by_pitch_preview() -> ResponseReturnValue:
+    """The pitch-by-pitch report as JSON, for the card's "Pitch by Pitch" tab."""
+    _, pbp_report, error = _pbp_from_args()
+    if error:
+        return error
+    return jsonify(asdict(pbp_report))
+
+
 @pitching_bp.route('/api/pitching/pitch-by-pitch')
 @login_required
 def pitching_pitch_by_pitch() -> ResponseReturnValue:
@@ -477,40 +529,11 @@ def pitching_pitch_by_pitch() -> ResponseReturnValue:
     selection carried in pitch_by_pitch_url (built alongside pdf_url in /report,
     from that same request's content_hashes/target).
     """
-    pitcher_id_param = request.args.get('pitcher_id')
-    if not pitcher_id_param:
-        return jsonify({'error': 'No pitcher selected.'}), 400
-    try:
-        pitcher_id = int(pitcher_id_param)
-    except ValueError:
-        return jsonify({'error': 'Invalid pitcher ID.'}), 400
-
-    params = {
-        'content_hashes': request.args.getlist('content_hash'),
-        'target': request.args.get('target', 'own'),
-    }
-    games_dir, selected, error = _selected_games(params)
+    pitcher_id, pbp_report, error = _pbp_from_args()
     if error:
         return error
-    assert games_dir is not None and selected is not None
-
-    filters = filters_from_args()
-    if filters is None:
-        return jsonify({'error': 'Invalid filters.'}), 400
-
-    source = game_archive.load_games_cached(games_dir, [g['content_hash'] for g in selected])
-    if source.empty:
-        return jsonify({'error': 'No data in the selected games.'}), 404
-    source = filters.apply(source)
-
-    pitcher_rows = source[source['PitcherId'] == pitcher_id]
-    if pitcher_rows.empty:
-        return jsonify({'error': 'No data for that pitcher in the selected games.'}), 404
-    pitcher_name = str(pitcher_rows['Pitcher'].iloc[0])
-
-    pbp_report = report.build_pitch_by_pitch_report(source, pitcher_id)
-    if pbp_report is None:
-        return jsonify({'error': 'Could not build the pitch-by-pitch report.'}), 500
+    assert pbp_report is not None
+    pitcher_name = pbp_report.pitcher_name
 
     branding = BrandingLoader.get_branding(current_user.school_id)
     gen = PDF_Generator(school_id=current_user.school_id, branding=branding, ink_mode=current_user.ink_mode)

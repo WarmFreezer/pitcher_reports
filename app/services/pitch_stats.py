@@ -130,6 +130,7 @@ class PitchUsageStat:
 
 class PitchUsageTable(StatTable[PitchUsageStat]):
     """The pitch-usage-by-count table shown for one batter side on a pitcher report."""
+    summary = ''  # "N PA · BB% x · K% y" for this batter side; set by report.usage_table
     columns = [
         Column('pitch_type', 'Pitch', ColumnFormat.TEXT),
         Column('count', 'Count', ColumnFormat.INT),

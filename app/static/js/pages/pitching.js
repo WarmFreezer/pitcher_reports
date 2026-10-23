@@ -163,7 +163,7 @@ async function generatePitchingReports() {
         // a 'meta' line (what the filter bar is built from) and followed by 'done'.
         for await (const msg of readNdjson(response)) {
             if (msg.type === 'meta') {
-                if (filterArea) reports.setFilterBar(createChartFilterBar(filterArea, msg, reports.handleFilterChange));
+                if (filterArea) reports.setFilterBar(createChartFilterBar(filterArea, msg, reports.handleFilterChange, { breakChartToggle: true }));
             } else if (msg.type === 'report') {
                 renderPitcherCard(msg);
                 reportCount++;
@@ -223,6 +223,8 @@ function fillPitcherCard(card, data) {
         root.querySelector('.pitcher-table').innerHTML = data.pitcher_table || '';
         root.querySelector('.left-usage').innerHTML = data.left_usage_table || '';
         root.querySelector('.right-usage').innerHTML = data.right_usage_table || '';
+        root.querySelector('.left-usage-summary').textContent = data.left_usage_summary || '';
+        root.querySelector('.right-usage-summary').textContent = data.right_usage_summary || '';
         renderCustomStats(root, data);
     }
 
@@ -238,11 +240,15 @@ function fillPitcherCard(card, data) {
             legend.className = 'breakmap-legend-slot';
             breakmapContainer.appendChild(legend);
         }
-        const title = data.arm_angle ? `Pitch Break — Arm Angle: ${data.arm_angle}` : 'Pitch Break';
+        const prefs = reports.getFilterBar()?.getChartPrefs() ?? {};
+        const overTime = prefs.break_chart === 'time';
+        const title = overTime ? "Flight Path — Pitcher's View (beta)"
+            : data.arm_angle ? `Pitch Break — Arm Angle: ${data.arm_angle}` : 'Pitch Break';
         breakmapContainer.querySelector('.graph-title').textContent = title;
         const slot = breakmapContainer.querySelector('.breakmap-legend-slot');
         slot.replaceChildren();
-        if (data.legend && data.legend.length && reports.getFilterBar()?.getChartPrefs().color_by !== 'velo') {
+        // The over-time chart is always colored by pitch type, so it always needs the legend.
+        if (data.legend && data.legend.length && (overTime || prefs.color_by !== 'velo')) {
             slot.appendChild(pitchTypeLegend(data.legend));
         }
     } else if (!heatmapContainer.childElementCount) {
@@ -302,23 +308,113 @@ function renderPitcherCard(data) {
         downloadContainer.appendChild(pbp);
     }
 
+    el.querySelectorAll('.card-tab').forEach(tab => tab.addEventListener('click', () => selectTab(el, tab.dataset.tab, data)));
+
     reports.register(el, data);
     document.querySelector('#report-output')?.appendChild(clone);
 }
 
-// Pitch-by-pitch PDFs are still built from a link, so the links carry the filters as they
-// are at click time rather than as they were when the card was drawn.
-document.addEventListener('click', (event) => {
-    const link = event.target.closest('a.pbp-link');
-    if (!link) return;
-    const url = new URL(link.href, window.location.origin);
+// The pitch-by-pitch URLs carry the filters as they are at click time rather than as they
+// were when the card was drawn.
+function withCurrentFilters(href) {
+    const url = new URL(href, window.location.origin);
     url.searchParams.delete('filters');
     const filters = reports.getFilterBar()?.getFilters();
     if (filters && (filters.pitch_types || filters.velo)) {
         url.searchParams.set('filters', JSON.stringify(filters));
     }
-    link.href = url.pathname + url.search;
+    return url.pathname + url.search;
+}
+
+document.addEventListener('click', (event) => {
+    const link = event.target.closest('a.pbp-link');
+    if (link) link.href = withCurrentFilters(link.href);
 });
+
+// ── Pitch-by-pitch tab ───────────────────────────────────────────────────────
+
+async function selectTab(root, tab, data) {
+    root.querySelectorAll('.card-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+    const panel = root.querySelector('.pbp-panel');
+    root.querySelector('.overall-panel').hidden = tab !== 'pbp';
+    panel.hidden = tab !== 'pbp';
+    if (tab !== 'pbp') return;
+
+    // Fetched on every switch so the tab always matches the current filters.
+    panel.textContent = 'Loading…';
+    try {
+        const response = await fetch(withCurrentFilters(data.pitch_by_pitch_url.replace('/pitch-by-pitch?', '/pitch-by-pitch/preview?')));
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || 'Could not load pitch-by-pitch.');
+        renderPitchByPitch(panel, body);
+    } catch (error) {
+        panel.textContent = error.message;
+    }
+}
+
+function h(tag, text, className) {
+    const node = document.createElement(tag);
+    if (text !== undefined) node.textContent = text;
+    if (className) node.className = className;
+    return node;
+}
+
+function renderPitchByPitch(panel, report) {
+    panel.replaceChildren();
+    if (!report.at_bats.length) {
+        panel.append(h('p', 'No pitches found for the selected games.'));
+        return;
+    }
+    for (const ab of report.at_bats) {
+        const block = h('div', undefined, 'graph-block');
+        block.append(h('p', `${ab.inning} · vs ${ab.batter_name} (${ab.batter_side})${ab.result ? ' — ' + ab.result : ''}`, 'graph-title'));
+
+        const table = h('table');
+        const head = table.createTHead().insertRow();
+        for (const col of ['#', 'Pitch', 'Velo', 'Count', 'Result']) head.append(h('th', col));
+        for (const p of ab.pitches) {
+            const row = table.insertRow();
+            for (const v of [p.number, p.pitch_type, p.velo == null ? '' : p.velo.toFixed(1), `${p.balls}-${p.strikes}`, p.result]) {
+                row.insertCell().textContent = v;
+            }
+        }
+        const tableWrap = h('div', undefined, 'table-scroll');
+        tableWrap.append(table);
+
+        const layout = h('div');
+        layout.style.cssText = 'display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;';
+        layout.append(zoneSvg(ab.pitches), tableWrap);
+        block.append(layout);
+        panel.append(block);
+    }
+}
+
+// Strike-zone panel: numbered dots at plate location (catcher's view), 5 ft square.
+// shortcut: dots are one color, not velo-scaled like the PDF; add the scale if coaches ask.
+function zoneSvg(pitches) {
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '-2.5 0 5 5');
+    svg.setAttribute('width', 180);
+    svg.setAttribute('height', 180);
+    const add = (tag, attrs, text) => {
+        const node = document.createElementNS(ns, tag);
+        for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+        if (text !== undefined) node.textContent = text;
+        svg.append(node);
+    };
+    // Frame, then the zone (17in plate = ±0.708ft, 1.5-3.5ft), y flipped so up is up.
+    add('rect', { x: -2.5, y: 0, width: 5, height: 5, fill: 'none', stroke: 'currentColor', 'stroke-width': 0.03 });
+    add('rect', { x: -0.708, y: 5 - 3.5, width: 1.417, height: 2, fill: 'none', stroke: 'currentColor', 'stroke-width': 0.03, 'stroke-dasharray': '0.12 0.08' });
+    for (const p of pitches) {
+        if (p.plate_loc_side == null || p.plate_loc_height == null) continue;
+        const x = Math.min(Math.max(p.plate_loc_side, -2.3), 2.3);
+        const y = 5 - Math.min(Math.max(p.plate_loc_height, 0.2), 4.8);
+        add('circle', { cx: x, cy: y, r: 0.17, fill: 'var(--accent)', stroke: 'currentColor', 'stroke-width': 0.02 });
+        add('text', { x, y: y + 0.07, 'text-anchor': 'middle', 'font-size': 0.2, 'font-weight': 700, fill: 'var(--text-on-accent)' }, p.number);
+    }
+    return svg;
+}
 
 // The navbar's download link.
 window.downloadAllReports = () => reports.downloadAll();

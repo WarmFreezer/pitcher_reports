@@ -489,6 +489,94 @@ def break_figure(
     return {'data': data, 'layout': layout}, arm_angle
 
 
+FLIGHT_COLUMNS = ('x0', 'y0', 'z0', 'vx0', 'vy0', 'vz0', 'ax0', 'ay0', 'az0')
+_PLATE_FRONT_FT = 17 / 12
+_GRAVITY = 32.174
+_TIME_STEPS = 31
+
+
+def flight_path_figure(
+    rows: pd.DataFrame, show_pitch_paths: bool = True, show_no_spin: bool = True,
+) -> dict[str, Any]:
+    """
+    Experimental: the pitcher's-eye view of each pitch type's flight -- where the ball is,
+    left/right and up/down, from release to the front of the plate. Solid is the actual path
+    (averaged over the pitches of that type); dotted is the path the same release would take
+    with no spin (a straight line, bent only by gravity), so the gap between them is the
+    movement. It needs no spin data, only TrackMan's fitted trajectory: with constant
+    acceleration, position = p0 + v0*t + a*t^2/2 (checked against PlateLocSide/PlateLocHeight,
+    r > 0.999).
+
+    TrackMan's x is already the pitcher's view (positive = the pitcher's right; it is
+    PlateLocSide, the catcher's view, negated), so it is plotted as is.
+    """
+    layout = _layout('Horizontal position, pitcher\'s view (ft)', 'Height (ft)', (-3, 3), (0, 8),
+                     _zone_shapes())
+    rows = rows[rows['TaggedPitchType'] != 'n/a']
+    if not set(FLIGHT_COLUMNS) <= set(rows.columns):
+        _empty_note(layout, 'No trajectory data', 0, 4)
+        return {'data': [], 'layout': layout}
+    rows = rows.assign(**{c: pd.to_numeric(rows[c], errors='coerce') for c in FLIGHT_COLUMNS})
+
+    steps = np.linspace(0, 1, _TIME_STEPS)
+    marker_size = [7] + [0] * (_TIME_STEPS - 2) + [9]  # release point and arrival at the plate
+    traces: list[dict[str, Any]] = []
+    for pitch_type in _pitch_types(rows):
+        subset = rows[rows['TaggedPitchType'] == pitch_type].dropna(subset=list(FLIGHT_COLUMNS))
+        # Flight time: the earlier root of y0 + vy0*t + ay0*t^2/2 = front of the plate.
+        disc = subset['vy0'] ** 2 - 2 * subset['ay0'] * (subset['y0'] - _PLATE_FRONT_FT)
+        subset = subset[disc >= 0]
+        if subset.empty:
+            continue
+        flight = (-subset['vy0'] - np.sqrt(disc[disc >= 0])) / subset['ay0']
+        t = flight.to_numpy()[:, None] * steps[None, :]
+        col = lambda name: subset[name].to_numpy()[:, None]  # noqa: E731
+        x = col('x0') + col('vx0') * t + col('ax0') * t ** 2 / 2
+        z = col('z0') + col('vz0') * t + col('az0') * t ** 2 / 2
+        x_ref = col('x0') + col('vx0') * t
+        z_ref = col('z0') + col('vz0') * t - _GRAVITY * t ** 2 / 2
+        distance = -(col('vy0') * t + col('ay0') * t ** 2 / 2)
+        style = _style(pitch_type)
+        # Every pitch behind the average, as one trace (NaN column = gap between pitches).
+        # The fewer the pitches, the more opaque each line, so a lone pitch isn't a ghost.
+        if show_pitch_paths:
+            gap = np.full((len(subset), 1), np.nan)
+            traces.append({
+                'type': 'scatter', 'mode': 'lines', 'name': f"{style['abbr']} each pitch",
+                'x': _floats(np.hstack([x, gap]).ravel(), 3), 'y': _floats(np.hstack([z, gap]).ravel(), 3),
+                'line': {'color': style['color'], 'width': 1},
+                'opacity': round(min(0.4, max(0.06, 3 / len(subset))), 2), 'hoverinfo': 'skip',
+            })
+        for label, xs, zs, line, size in (
+            ('actual', x, z, {'width': 2.5}, marker_size),
+            ('no spin', x_ref, z_ref, {'width': 1.5, 'dash': 'dot'}, [0] * _TIME_STEPS),
+        ):
+            if label == 'no spin' and not show_no_spin:
+                continue
+            traces.append({
+                'type': 'scatter', 'mode': 'lines+markers', 'name': f"{style['abbr']} {label}",
+                'x': _floats(xs.mean(axis=0), 3), 'y': _floats(zs.mean(axis=0), 3),
+                'customdata': _floats(distance.mean(axis=0), 1),
+                'line': {'color': style['color'], **line},
+                'marker': {'color': style['color'], 'size': size},
+                'hovertemplate': '%{fullData.name}<br>%{customdata:.0f} ft from release<extra></extra>',
+            })
+    if not traces:
+        _empty_note(layout, 'No trajectory data', 0, 4)
+        return {'data': [], 'layout': layout}
+
+    xs_all = [v for tr in traces for v in tr['x'] if v is not None]
+    zs_all = [v for tr in traces for v in tr['y'] if v is not None]
+    reach = max(2.5, math.ceil(max(abs(min(xs_all)), abs(max(xs_all))) * 2) / 2)
+    layout['xaxis']['range'] = [-reach, reach]
+    layout['yaxis']['range'] = [0, max(7.5, math.ceil(max(zs_all)) + 0.5)]
+    layout['annotations'].append(
+        {'xref': 'paper', 'yref': 'paper', 'x': 0.01, 'y': 0.99, 'xanchor': 'left', 'yanchor': 'top',
+         'text': 'Solid: actual path · Dotted: no-spin path' if show_no_spin else 'Solid: actual path',
+         'showarrow': False, 'font': {'size': 11}})
+    return {'data': traces, 'layout': layout}
+
+
 def _arrow(x: float, y: float, color: str, width: float, name: str = '') -> dict[str, Any]:
     return {
         'name': name, 'x': round(float(x), 3), 'y': round(float(y), 3), 'ax': 0, 'ay': 0,

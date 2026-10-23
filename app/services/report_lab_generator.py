@@ -450,6 +450,7 @@ class PDF_Generator:
         # KeepInFrame can't honor and crashes on with "no attribute 'draw'").
         return [
             Paragraph(f"Pitch Usage vs {batter_side}-Handed Batters", self.styles["section_header"]),
+            *([Paragraph(usage.summary, self.styles["body"])] if usage.summary else []),
             usage_table,
             Spacer(1, 0.05 * inch),
         ]

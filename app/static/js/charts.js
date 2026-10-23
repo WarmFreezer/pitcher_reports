@@ -101,6 +101,7 @@ function _switch(leftText, rightText, isRight, onPick) {
 // color_modes lists what the charts can be colored by (default pitch type / velocity; the
 // catcher page adds framing). options.veloLabel names the velocity slider and
 // options.veloColorLabel the velocity color mode (a hitter's spray chart colors by exit velocity).
+// options.breakChartToggle adds the pitcher page's movement / flight-path break chart switch.
 // onChange('filters' | 'charts') fires when the user commits a change -- 'filters' alters
 // which pitches count (so numbers and charts both need a refetch), 'charts' only how the
 // charts are drawn. Returns { getFilters(), getChartPrefs() } for building requests.
@@ -110,6 +111,9 @@ function createChartFilterBar(container, meta, onChange, options = {}) {
         velo: [meta.velo_min, meta.velo_max],
         colorBy: meta.defaults.color_by,
         view: meta.defaults.view,
+        breakChart: 'movement',
+        showPitchPaths: true,
+        showNoSpin: true,
     };
     container.replaceChildren();
     container.hidden = false;
@@ -229,6 +233,28 @@ function createChartFilterBar(container, meta, onChange, options = {}) {
             onChange('charts');
         }));
         container.appendChild(viewGroup);
+
+        if (options.breakChartToggle) {
+            const breakGroup = _filterGroup('Break chart (beta)');
+            const pathsGroup = _filterGroup('Each pitch line');
+            pathsGroup.hidden = state.breakChart !== 'time';
+            pathsGroup.appendChild(_switch('Off', 'On', state.showPitchPaths, isOn => {
+                state.showPitchPaths = isOn;
+                onChange('charts');
+            }));
+            const noSpinGroup = _filterGroup('No-spin path');
+            noSpinGroup.hidden = state.breakChart !== 'time';
+            noSpinGroup.appendChild(_switch('Off', 'On', state.showNoSpin, isOn => {
+                state.showNoSpin = isOn;
+                onChange('charts');
+            }));
+            breakGroup.appendChild(_switch('Movement', 'Flight path', state.breakChart === 'time', isTime => {
+                state.breakChart = isTime ? 'time' : 'movement';
+                pathsGroup.hidden = noSpinGroup.hidden = !isTime;
+                onChange('charts');
+            }));
+            container.append(breakGroup, pathsGroup, noSpinGroup);
+        }
     }
 
     return {
@@ -242,7 +268,10 @@ function createChartFilterBar(container, meta, onChange, options = {}) {
             };
         },
         getChartPrefs() {
-            return { color_by: state.colorBy, view: state.view };
+            return {
+                color_by: state.colorBy, view: state.view,
+                ...(options.breakChartToggle ? { break_chart: state.breakChart, show_pitch_paths: state.showPitchPaths, show_no_spin: state.showNoSpin } : {}),
+            };
         },
     };
 }

@@ -17,6 +17,12 @@ class ChartPrefs:
     color_by: str = 'pitch_type'
     view: str = 'heatmap'
     show_arrows: bool = True
+    # Pitcher page only: 'movement' (HB vs IVB) or the experimental 'time' (flight path, pitcher's view).
+    break_chart: str = 'movement'
+    # Flight path only: draw every pitch as a faint line behind each type's average.
+    show_pitch_paths: bool = True
+    # Flight path only: draw the dotted gravity-only (no-spin) path beside the actual one.
+    show_no_spin: bool = True
 
     @classmethod
     def from_request(
@@ -28,6 +34,12 @@ class ChartPrefs:
         raw = raw if isinstance(raw, dict) else {}
         color_by = raw.get('color_by', 'pitch_type')
         view = raw.get('view', 'heatmap')
-        if color_by not in allowed_colors or view not in plotly_charts.VIEWS:
+        break_chart = raw.get('break_chart', 'movement')
+        show_pitch_paths = raw.get('show_pitch_paths', True)
+        show_no_spin = raw.get('show_no_spin', True)
+        if (color_by not in allowed_colors or view not in plotly_charts.VIEWS
+                or break_chart not in ('movement', 'time')
+                or not isinstance(show_pitch_paths, bool) or not isinstance(show_no_spin, bool)):
             raise ValueError('Invalid chart options.')
-        return cls(color_by=color_by, view=view, show_arrows=show_arrows)
+        return cls(color_by=color_by, view=view, show_arrows=show_arrows, break_chart=break_chart,
+                   show_pitch_paths=show_pitch_paths, show_no_spin=show_no_spin)

@@ -218,7 +218,7 @@ def pitch_break_map_legend(source: pd.DataFrame, pitcher_id: int) -> list[BreakM
 def usage_table(source: pd.DataFrame, pitcher_id: int) -> PitchUsageSides | None:
     """Pitch-usage-by-count-situation tables for one pitcher, one per batter side (left, right)."""
     try:
-        table = source[['Pitcher', 'PitcherId', 'TaggedPitchType', 'PitchCall', 'BatterId', 'Inning', 'PAofInning', 'PitchofPA', 'BatterSide', 'Balls', 'Strikes']]
+        table = source[['Pitcher', 'PitcherId', 'TaggedPitchType', 'PitchCall', 'BatterId', 'Inning', 'PAofInning', 'PitchofPA', 'BatterSide', 'Balls', 'Strikes', 'KorBB', 'PlayResult']]
         pitcher_data = table[table['PitcherId'] == pitcher_id]
 
         sides: dict[str, PitchUsageTable] = {}
@@ -258,6 +258,17 @@ def usage_table(source: pd.DataFrame, pitcher_id: int) -> PitchUsageSides | None
             # Top 6 most-thrown pitches, then sorted into the canonical pitch_order
             stats = _top_pitches(stats, sort_key=lambda s: s.count)
             sides[batter_side] = PitchUsageTable(stats)
+
+            # A plate appearance ends on its last pitch: a walk/strikeout, a ball in play, or a HBP.
+            # shortcut: a pitch filter that hides the PA-ending pitch drops that PA from the denominator too.
+            ends_pa = (side_data['KorBB'].isin(['Walk', 'Strikeout'])
+                       | side_data['PlayResult'].notna() & (side_data['PlayResult'] != 'Undefined')
+                       | (side_data['PitchCall'] == 'HitByPitch'))
+            pa = int(ends_pa.sum())
+            if pa:
+                bb = int((side_data['KorBB'] == 'Walk').sum())
+                k = int((side_data['KorBB'] == 'Strikeout').sum())
+                sides[batter_side].summary = f"{pa} PA · BB% {bb / pa * 100:.1f} · K% {k / pa * 100:.1f}"
 
         return PitchUsageSides(left=sides['Left'], right=sides['Right'])
 

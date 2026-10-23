@@ -94,7 +94,7 @@ def chart_prefs(
     merged: dict[str, Any] = dict(default_chart_prefs())
     if default_color is not None:
         merged['color_by'] = default_color
-    merged.update({k: params[k] for k in ('view', 'color_by') if k in params})
+    merged.update({k: params[k] for k in ('view', 'color_by', 'break_chart', 'show_pitch_paths', 'show_no_spin') if k in params})
     return ChartPrefs.from_request(merged, show_arrows=current_user.show_break_arrows,
                                    allowed_colors=allowed_colors)
 

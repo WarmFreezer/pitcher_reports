@@ -417,3 +417,16 @@
     margin: 24px;
     text-align: center;
 }
+
+/* Overall / Pitch by Pitch tabs on a pitcher card */
+.card-tabs { display: flex; gap: 8px; margin: 0 0 12px; }
+.card-tab {
+    padding: 6px 14px;
+    border: 1px solid var(--bubble-border);
+    border-radius: 6px;
+    background: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+.card-tab:hover { background: var(--bg-hover); }
+.card-tab.active { background: var(--accent); border-color: var(--accent); color: var(--text-on-accent); }

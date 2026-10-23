@@ -59,8 +59,11 @@ def build_pitcher_charts(
     velo_lim = plotly_charts.velo_limits(full)
     rows = filters.apply(full)
 
-    break_fig, arm_angle = plotly_charts.break_figure(
-        rows, prefs.color_by, prefs.view, velo_lim, prefs.show_arrows)
+    if prefs.break_chart == 'time':
+        break_fig, arm_angle = plotly_charts.flight_path_figure(rows, prefs.show_pitch_paths, prefs.show_no_spin), None
+    else:
+        break_fig, arm_angle = plotly_charts.break_figure(
+            rows, prefs.color_by, prefs.view, velo_lim, prefs.show_arrows)
     return PitcherCharts(
         figures={
             'heat_left': plotly_charts.location_figure(rows, 'Left', prefs.color_by, prefs.view, velo_lim),
@@ -133,6 +136,8 @@ def tables_payload(data: PitcherData) -> dict[str, Any]:
         'pitcher_table': data.game_report.stats.to_html('pitcher-data-table'),
         'left_usage_table': data.usage_sides.left.to_html('pitch-usage-table'),
         'right_usage_table': data.usage_sides.right.to_html('pitch-usage-table'),
+        'left_usage_summary': data.usage_sides.left.summary,
+        'right_usage_summary': data.usage_sides.right.summary,
         # Rendered as tiles on the page (see .summary-grid), matching the PDF's
         # generate_stats_grid -- name/value pairs, not tabular data.
         'custom_stats': {row.name: row.value for row in custom_stats.rows} if custom_stats else None,

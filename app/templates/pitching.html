@@ -88,6 +88,12 @@
             <div class="report-card-body collapsible collapsible-lg">
                 <div class="report-card-inner">
                     <p class="card-empty filter-note" hidden>No pitches match the current filters.</p>
+                    <div class="card-tabs">
+                        <button type="button" class="card-tab active" data-tab="overall">Overall</button>
+                        <button type="button" class="card-tab" data-tab="pbp">Pitch by Pitch</button>
+                    </div>
+                    <div class="pbp-panel" hidden></div>
+                    <div class="overall-panel">
                     <div class="card-content">
                     <div class="pitcher-charts-grid">
                         <div class="pitcher-heatmap"></div>
@@ -95,10 +101,12 @@
                         <div class="pitcher-usage-panel">
                             <div class="graph-block">
                                 <p class="graph-title">Pitch Usage vs LHH</p>
+                                <p class="left-usage-summary"></p>
                                 <div class="table-section"><div class="left-usage table-scroll"></div></div>
                             </div>
                             <div class="graph-block">
                                 <p class="graph-title">Pitch Usage vs RHH</p>
+                                <p class="right-usage-summary"></p>
                                 <div class="table-section"><div class="right-usage table-scroll"></div></div>
                             </div>
                         </div>
@@ -110,6 +118,7 @@
                         <h2 class="graph-title">Custom Stats</h2>
                         <div class="custom-stats summary-grid" style="max-width:1200px; margin: 0 auto 8px;"></div>
                         <div class="custom-pitch-type-stats"></div>
+                    </div>
                     </div>
                     </div>
                 </div>
