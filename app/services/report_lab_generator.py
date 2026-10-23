@@ -450,7 +450,6 @@ class PDF_Generator:
         # KeepInFrame can't honor and crashes on with "no attribute 'draw'").
         return [
             Paragraph(f"Pitch Usage vs {batter_side}-Handed Batters", self.styles["section_header"]),
-            *([Paragraph(usage.summary, self.styles["body"])] if usage.summary else []),
             usage_table,
             Spacer(1, 0.05 * inch),
         ]
@@ -1055,7 +1054,7 @@ class PDF_Generator:
                     ('TOPPADDING', (0, 0), (-1, -1), 0),
                     ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
                 ]))
-                cell.append(chart_holder)
+                cell.extend([chart_holder, Spacer(1, 0.12 * inch)])
             cell.append(ab_table)
             return cell
 
@@ -1181,7 +1180,7 @@ class PDF_Generator:
                     ('TOPPADDING', (0, 0), (-1, -1), 0),
                     ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
                 ]))
-                cell.append(chart_holder)
+                cell.extend([chart_holder, Spacer(1, 0.12 * inch)])
             cell.append(ab_table)
             return cell
 

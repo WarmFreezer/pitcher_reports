@@ -126,11 +126,12 @@ class PitchUsageStat:
     pitcher_favorable_pct: float  # usage when strikes > balls
     two_strike_pct: float
     whiff_pct: float
+    bb_pct: float = 0.0  # walks / plate appearances that ended on this pitch type
+    k_pct: float = 0.0   # strikeouts / plate appearances that ended on this pitch type
 
 
 class PitchUsageTable(StatTable[PitchUsageStat]):
     """The pitch-usage-by-count table shown for one batter side on a pitcher report."""
-    summary = ''  # "N PA · BB% x · K% y" for this batter side; set by report.usage_table
     columns = [
         Column('pitch_type', 'Pitch', ColumnFormat.TEXT),
         Column('count', 'Count', ColumnFormat.INT),
@@ -140,6 +141,8 @@ class PitchUsageTable(StatTable[PitchUsageStat]):
         Column('pitcher_favorable_pct', "Pitcher's", ColumnFormat.PERCENT),
         Column('two_strike_pct', '2k', ColumnFormat.PERCENT),
         Column('whiff_pct', 'Whiff', ColumnFormat.PERCENT),
+        Column('bb_pct', 'BB', ColumnFormat.PERCENT),
+        Column('k_pct', 'K', ColumnFormat.PERCENT),
     ]
 
 

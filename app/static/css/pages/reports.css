@@ -430,3 +430,20 @@
 }
 .card-tab:hover { background: var(--bg-hover); }
 .card-tab.active { background: var(--accent); border-color: var(--accent); color: var(--text-on-accent); }
+
+/* Pitch-by-pitch tab: two at-bats per row; each has a fixed-width zone chart on the left so the
+   charts line up down the page, and the pitch table fills the rest. */
+.pbp-panel:not([hidden]) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    align-items: start;
+}
+.pbp-panel .graph-block { min-width: 0; align-items: stretch; }
+.pbp-panel .graph-title { text-align: left; }
+.pbp-ab { display: flex; gap: 16px; align-items: flex-start; }
+.pbp-ab > svg { flex: 0 0 180px; width: 180px; height: 180px; }
+.pbp-ab > .table-section { flex: 1 1 auto; min-width: 0; }
+@media (max-width: 900px) {
+    .pbp-panel:not([hidden]) { grid-template-columns: minmax(0, 1fr); }
+}

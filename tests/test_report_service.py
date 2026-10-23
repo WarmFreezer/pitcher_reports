@@ -108,6 +108,21 @@ def test_usage_table_splits_by_batter_side():
     assert sides.right.rows[0].whiff_pct == 100.0
 
 
+def test_usage_table_bb_and_k_pct_per_pitch_type():
+    # Fastballs end 2 PAs (1 K, 1 walk); the slider ends 1 PA (a strikeout).
+    rows = [
+        _row(TaggedPitchType='Fastball', KorBB='Strikeout'),
+        _row(TaggedPitchType='Fastball', KorBB='Walk'),
+        _row(TaggedPitchType='Fastball'),
+        _row(TaggedPitchType='Slider', KorBB='Strikeout'),
+    ]
+    sides = report.usage_table(pd.DataFrame(rows), 1001)
+    fastball, slider = sides.right.rows  # canonical pitch order
+
+    assert (fastball.k_pct, fastball.bb_pct) == (50.0, 50.0)
+    assert (slider.k_pct, slider.bb_pct) == (100.0, 0.0)
+
+
 def test_build_table_returns_none_for_missing_pitcher():
     df = pd.DataFrame([_row()])
     # PitcherId not present in the data — Auth: iloc[0] on an empty slice raises, caught internally

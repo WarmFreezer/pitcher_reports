@@ -136,8 +136,6 @@ def tables_payload(data: PitcherData) -> dict[str, Any]:
         'pitcher_table': data.game_report.stats.to_html('pitcher-data-table'),
         'left_usage_table': data.usage_sides.left.to_html('pitch-usage-table'),
         'right_usage_table': data.usage_sides.right.to_html('pitch-usage-table'),
-        'left_usage_summary': data.usage_sides.left.summary,
-        'right_usage_summary': data.usage_sides.right.summary,
         # Rendered as tiles on the page (see .summary-grid), matching the PDF's
         # generate_stats_grid -- name/value pairs, not tabular data.
         'custom_stats': {row.name: row.value for row in custom_stats.rows} if custom_stats else None,

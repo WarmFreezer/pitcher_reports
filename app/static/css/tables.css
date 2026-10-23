@@ -86,16 +86,13 @@
     vertical-align: middle;
 }
 
-/* Pitch (col 1) and Count (col 2) hold short content (e.g. "FB", "10") that
-   doesn't need the same horizontal padding as the percent columns -- trims
-   a little width off the table so it's less likely to need table-scroll's
-   fallback horizontal scrollbar inside .pitcher-usage-panel's grid column. */
-.pitch-usage-table th:nth-child(1),
-.pitch-usage-table td:nth-child(1),
-.pitch-usage-table th:nth-child(2),
-.pitch-usage-table td:nth-child(2) {
-    padding-left: 6px;
-    padding-right: 6px;
+/* Ten short columns (Pitch, Count, then percents) share half the card width,
+   so the cells get tight horizontal padding to avoid table-scroll's fallback
+   horizontal scrollbar inside .pitcher-usage-panel's grid column. */
+.pitch-usage-table th,
+.pitch-usage-table td {
+    padding-left: 4px;
+    padding-right: 4px;
 }
 
 .pitcher-data-table th,

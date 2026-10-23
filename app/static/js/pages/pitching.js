@@ -223,8 +223,6 @@ function fillPitcherCard(card, data) {
         root.querySelector('.pitcher-table').innerHTML = data.pitcher_table || '';
         root.querySelector('.left-usage').innerHTML = data.left_usage_table || '';
         root.querySelector('.right-usage').innerHTML = data.right_usage_table || '';
-        root.querySelector('.left-usage-summary').textContent = data.left_usage_summary || '';
-        root.querySelector('.right-usage-summary').textContent = data.right_usage_summary || '';
         renderCustomStats(root, data);
     }
 
@@ -336,7 +334,7 @@ document.addEventListener('click', (event) => {
 async function selectTab(root, tab, data) {
     root.querySelectorAll('.card-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
     const panel = root.querySelector('.pbp-panel');
-    root.querySelector('.overall-panel').hidden = tab !== 'pbp';
+    root.querySelector('.overall-panel').hidden = tab === 'pbp';
     panel.hidden = tab !== 'pbp';
     if (tab !== 'pbp') return;
 
@@ -369,7 +367,7 @@ function renderPitchByPitch(panel, report) {
         const block = h('div', undefined, 'graph-block');
         block.append(h('p', `${ab.inning} · vs ${ab.batter_name} (${ab.batter_side})${ab.result ? ' — ' + ab.result : ''}`, 'graph-title'));
 
-        const table = h('table');
+        const table = h('table', undefined, 'pitch-usage-table');
         const head = table.createTHead().insertRow();
         for (const col of ['#', 'Pitch', 'Velo', 'Count', 'Result']) head.append(h('th', col));
         for (const p of ab.pitches) {
@@ -378,11 +376,12 @@ function renderPitchByPitch(panel, report) {
                 row.insertCell().textContent = v;
             }
         }
-        const tableWrap = h('div', undefined, 'table-scroll');
-        tableWrap.append(table);
+        const scroll = h('div', undefined, 'table-scroll');
+        scroll.append(table);
+        const tableWrap = h('div', undefined, 'table-section');
+        tableWrap.append(scroll);
 
-        const layout = h('div');
-        layout.style.cssText = 'display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;';
+        const layout = h('div', undefined, 'pbp-ab');
         layout.append(zoneSvg(ab.pitches), tableWrap);
         block.append(layout);
         panel.append(block);

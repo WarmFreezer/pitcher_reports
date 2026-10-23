@@ -233,8 +233,16 @@ def usage_table(source: pd.DataFrame, pitcher_id: int) -> PitchUsageSides | None
 
             stats: list[PitchUsageStat] = []
 
+            # A plate appearance ends on its last pitch: a walk/strikeout, a ball in play, or a HBP.
+            # shortcut: a pitch filter that hides the PA-ending pitch drops that PA from the denominator too.
+            ends_pa = (side_data['KorBB'].isin(['Walk', 'Strikeout'])
+                       | side_data['PlayResult'].notna() & (side_data['PlayResult'] != 'Undefined')
+                       | (side_data['PitchCall'] == 'HitByPitch'))
+
             for pitch_type in side_data['TaggedPitchType'].unique():
-                pitch_type_data = side_data[side_data['TaggedPitchType'] == pitch_type]
+                is_type = side_data['TaggedPitchType'] == pitch_type
+                pitch_type_data = side_data[is_type]
+                type_pa = int((ends_pa & is_type).sum())
                 swing_data = pitch_type_data[pitch_type_data['PitchCall'].isin(['StrikeSwinging', 'FoulBallNotFieldable', 'InPlay'])]
 
                 strike_count = pitch_type_data['PitchCall'].isin(STRIKES).sum()
@@ -253,22 +261,13 @@ def usage_table(source: pd.DataFrame, pitcher_id: int) -> PitchUsageSides | None
                     pitcher_favorable_pct=pitcher_favorable_count / total_pitcher_favorable_count * 100 if total_pitcher_favorable_count else 0,
                     two_strike_pct=two_strike_count / total_two_strike_count * 100 if total_two_strike_count else 0,
                     whiff_pct=(whiff_count / len(swing_data) if len(swing_data) > 0 else 0) * 100,
+                    bb_pct=(side_data['KorBB'].eq('Walk') & is_type).sum() / type_pa * 100 if type_pa else 0,
+                    k_pct=(side_data['KorBB'].eq('Strikeout') & is_type).sum() / type_pa * 100 if type_pa else 0,
                 ))
 
             # Top 6 most-thrown pitches, then sorted into the canonical pitch_order
             stats = _top_pitches(stats, sort_key=lambda s: s.count)
             sides[batter_side] = PitchUsageTable(stats)
-
-            # A plate appearance ends on its last pitch: a walk/strikeout, a ball in play, or a HBP.
-            # shortcut: a pitch filter that hides the PA-ending pitch drops that PA from the denominator too.
-            ends_pa = (side_data['KorBB'].isin(['Walk', 'Strikeout'])
-                       | side_data['PlayResult'].notna() & (side_data['PlayResult'] != 'Undefined')
-                       | (side_data['PitchCall'] == 'HitByPitch'))
-            pa = int(ends_pa.sum())
-            if pa:
-                bb = int((side_data['KorBB'] == 'Walk').sum())
-                k = int((side_data['KorBB'] == 'Strikeout').sum())
-                sides[batter_side].summary = f"{pa} PA · BB% {bb / pa * 100:.1f} · K% {k / pa * 100:.1f}"
 
         return PitchUsageSides(left=sides['Left'], right=sides['Right'])
 
