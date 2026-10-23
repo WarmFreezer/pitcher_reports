@@ -516,6 +516,7 @@ def pitching_pitch_by_pitch_preview() -> ResponseReturnValue:
     _, pbp_report, error = _pbp_from_args()
     if error:
         return error
+    assert pbp_report is not None
     return jsonify(asdict(pbp_report))
 
 

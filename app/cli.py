@@ -185,7 +185,7 @@ def register_cli_commands(app: Flask) -> None:
 
         User = models.User
         pending = User.query.filter(
-            User.is_active, User.email_verified, User.newsletter_opt_in,
+            User.is_active.is_(True),User.email_verified, User.newsletter_opt_in,
             (User.newsletter_last_sent.is_(None)) | (User.newsletter_last_sent != campaign_id),
         )
         total = pending.count()

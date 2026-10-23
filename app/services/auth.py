@@ -108,7 +108,7 @@ class Auth:
         user = Auth.get_user_by_email(email)
         if not user or not user.reset_code_hash:
             return False
-        if user.reset_code_expires < datetime.now() or user.reset_attempts >= RESET_MAX_ATTEMPTS:
+        if user.reset_code_expires is None or user.reset_code_expires < datetime.now() or user.reset_attempts >= RESET_MAX_ATTEMPTS:
             user.reset_code_hash = None
             db.session.commit()
             return False

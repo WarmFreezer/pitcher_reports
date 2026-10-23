@@ -33,6 +33,8 @@ def _row(**overrides):
         'BatterId': 200,
         'Balls': 0,
         'Strikes': 0,
+        'KorBB': 'Undefined',
+        'PlayResult': 'Undefined',
     }
     defaults.update(overrides)
     return defaults
