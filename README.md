@@ -125,7 +125,7 @@ DATABASE_URL=postgresql://user:pass@localhost/pitcher_reports
 # Email verification (Resend; sends from no-reply@stat-line.app)
 RESEND_API_KEY=re_...
 APP_BASE_URL=https://stat-line.app
-NEWSLETTER_ADDRESS=Gold Node LLC, 123 Main St, City, ST 00000  # required footer address; send-newsletter refuses without it
+NEWSLETTER_ADDRESS=Eubank Technologies LLC, 123 Main St, City, ST 00000  # required footer address; send-newsletter refuses without it
 
 # Stripe
 STRIPE_SECRET_KEY=sk_test_...

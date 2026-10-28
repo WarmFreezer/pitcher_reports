@@ -247,7 +247,7 @@ function downloadPDFs() {
 function loadFooter() {
     const footerHTML = `
         <footer class="site-footer">
-            <a href="https://warmfreezer.github.io/about_me/" style="color: white; font-family: 'Cambria', serif;">&copy; 2026 Gold Node LLC</a>
+            <a href="https://warmfreezer.github.io/about_me/" style="color: white; font-family: 'Cambria', serif;">&copy; 2026 Eubank Technologies LLC</a>
             <br>
             <a href=/about style="color: white; font-family: 'Cambria', serif;">About</a>
             <a href=/stats-guide style="color: white; margin-left: 16px; font-family: 'Cambria', serif;">Stats Guide</a>

@@ -1,5 +1,5 @@
 '''
-Copyright (c) 2026 Gold Node LLC
+Copyright (c) 2026 Eubank Technologies LLC
 Licensed for non-commercial use only. See LICENSE file.
 
 author:
